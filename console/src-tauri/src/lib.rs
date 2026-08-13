@@ -23,6 +23,9 @@ fn open_devtools(window: WebviewWindow) {
 pub fn run() {
     let portable_runtime = portable::PortableRuntime::detect();
     let build_result = tauri::Builder::default()
+        .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
+            client::show_or_open(app);
+        }))
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_dialog::init())
         .plugin(

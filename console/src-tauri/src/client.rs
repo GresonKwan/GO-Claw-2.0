@@ -38,6 +38,10 @@ impl ClientState {
     fn set_port(&self, port: u16) {
         *self.port.lock().expect("client state poisoned") = Some(port);
     }
+
+    fn port(&self) -> Option<u16> {
+        *self.port.lock().expect("client state poisoned")
+    }
 }
 
 fn browser_console_url(port: u16) -> String {
@@ -46,6 +50,28 @@ fn browser_console_url(port: u16) -> String {
 
 pub(crate) fn open_browser(app: &tauri::AppHandle, port: u16) -> Result<(), String> {
     external_link::open_system_url(app, &browser_console_url(port))
+}
+
+/// Bring the active client forward without starting a second backend.
+pub(crate) fn show_or_open(app: &tauri::AppHandle) {
+    if let Some(window) = app.get_webview_window("main") {
+        let _ = window.show();
+        let _ = window.unminimize();
+        let _ = window.set_focus();
+        return;
+    }
+
+    if app.state::<PortableRuntime>().state().is_some() {
+        let port = app
+            .state::<ClientState>()
+            .port()
+            .or_else(|| app.state::<crate::backend::BackendState>().port());
+        if let Some(port) = port {
+            if let Err(error) = open_browser(app, port) {
+                log::warn!("[portable-client] failed to reopen browser: {error}");
+            }
+        }
+    }
 }
 
 fn try_open_webview(app: &tauri::AppHandle, data_dir: PathBuf) -> Result<(), String> {

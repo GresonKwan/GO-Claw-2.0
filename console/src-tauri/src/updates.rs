@@ -8,9 +8,9 @@ mod signature;
 mod version;
 
 use serde::Serialize;
-use tauri::AppHandle;
+use tauri::{AppHandle, Manager};
 
-use crate::backend;
+use crate::{backend, portable::PortableRuntime};
 
 use cache::{
     cached_artifact_path, cached_update_dir, ensure_current_platform, has_cached_update_meta,
@@ -24,6 +24,44 @@ use version::version_lte;
 
 pub(crate) use version::is_remote_update_newer;
 
+const PORTABLE_UPDATES_DISABLED: &str = "desktop installer updates are disabled in portable mode";
+
+fn updates_allowed(portable: bool) -> bool {
+    !portable
+}
+
+fn is_portable(app: &AppHandle) -> bool {
+    app.state::<PortableRuntime>().state().is_some()
+}
+
+fn ensure_installer_updates_allowed(portable: bool) -> Result<(), String> {
+    if updates_allowed(portable) {
+        Ok(())
+    } else {
+        Err(PORTABLE_UPDATES_DISABLED.to_string())
+    }
+}
+
+#[cfg(test)]
+mod portable_policy_tests {
+    use super::*;
+
+    #[test]
+    fn portable_build_never_uses_installer_updates() {
+        assert!(!updates_allowed(true));
+        assert!(updates_allowed(false));
+    }
+
+    #[test]
+    fn portable_install_error_is_stable_and_actionable() {
+        assert_eq!(
+            ensure_installer_updates_allowed(true),
+            Err(PORTABLE_UPDATES_DISABLED.to_string())
+        );
+        assert_eq!(ensure_installer_updates_allowed(false), Ok(()));
+    }
+}
+
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 pub(crate) struct DesktopUpdate {
@@ -34,6 +72,9 @@ pub(crate) struct DesktopUpdate {
 
 #[tauri::command]
 pub(crate) async fn check_desktop_update(app: AppHandle) -> Result<Option<DesktopUpdate>, String> {
+    if !updates_allowed(is_portable(&app)) {
+        return Ok(None);
+    }
     let update = check_installable_update(&app)
         .await
         .map_err(|e| e.to_string())?;
@@ -47,6 +88,7 @@ pub(crate) async fn check_desktop_update(app: AppHandle) -> Result<Option<Deskto
 
 #[tauri::command]
 pub(crate) fn install_desktop_update(app: AppHandle) -> Result<(), String> {
+    ensure_installer_updates_allowed(is_portable(&app))?;
     let guard = begin_update()?;
     tauri::async_runtime::spawn(async move {
         let _guard = guard;
@@ -79,6 +121,7 @@ async fn run_install(app: AppHandle) {
 
 #[tauri::command]
 pub(crate) fn download_desktop_update(app: AppHandle) -> Result<(), String> {
+    ensure_installer_updates_allowed(is_portable(&app))?;
     if !supports_cached_updates() {
         return Err("background update download is not supported on this platform".into());
     }
@@ -113,6 +156,7 @@ async fn run_background_download(app: AppHandle) {
 
 #[tauri::command]
 pub(crate) fn install_downloaded_update(app: AppHandle) -> Result<(), String> {
+    ensure_installer_updates_allowed(is_portable(&app))?;
     if !supports_cached_updates() {
         return Err("cached updates are not supported on this platform".into());
     }
@@ -254,6 +298,9 @@ async fn install_cached_macos(
 
 #[tauri::command]
 pub(crate) async fn check_cached_update(app: AppHandle) -> Result<Option<String>, String> {
+    if !updates_allowed(is_portable(&app)) {
+        return Ok(None);
+    }
     if !supports_cached_updates() {
         return Ok(None);
     }
