@@ -1,0 +1,175 @@
+#!/usr/bin/env python3
+"""Stage and archive the self-contained Windows portable distribution."""
+
+from __future__ import annotations
+
+import argparse
+import hashlib
+import json
+import shutil
+import sys
+import zipfile
+from dataclasses import dataclass
+from pathlib import Path
+
+ARCHIVE_STEM = "QwenPaw-Portable-{version}-Windows-x64"
+REQUIRED_RUNTIME_ENTRIES = (
+    Path("qwenpaw-backend/qwenpaw-backend.exe"),
+    Path("python-runtime/python/python.exe"),
+    Path("node-runtime/node.exe"),
+)
+
+
+@dataclass(frozen=True)
+class PortableOutput:
+    stage_dir: Path
+    zip_path: Path
+    sha256_path: Path
+    unpacked_bytes: int
+    archived_bytes: int
+
+
+def _require_file(path: Path, label: str) -> Path:
+    resolved = path.expanduser().resolve()
+    if not resolved.is_file():
+        raise FileNotFoundError(f"missing {label}: {resolved}")
+    return resolved
+
+
+def _validate_dist(dist: Path, repository_root: Path | None) -> Path:
+    if not str(dist).strip():
+        raise ValueError("dist path must not be empty")
+    resolved = dist.expanduser().resolve()
+    if repository_root and resolved == repository_root.expanduser().resolve():
+        raise ValueError("dist must not be the repository root")
+    if resolved == Path(resolved.anchor):
+        raise ValueError("dist must not be a filesystem root")
+    return resolved
+
+
+def _tree_size(root: Path) -> int:
+    return sum(path.stat().st_size for path in root.rglob("*") if path.is_file())
+
+
+def _zip_tree(stage_dir: Path, zip_path: Path) -> None:
+    with zipfile.ZipFile(
+        zip_path,
+        "w",
+        compression=zipfile.ZIP_DEFLATED,
+        allowZip64=True,
+    ) as archive:
+        for path in sorted(stage_dir.rglob("*")):
+            if path.is_file():
+                archive.write(path, path.relative_to(stage_dir.parent))
+
+
+def _sha256(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as source:
+        for block in iter(lambda: source.read(1024 * 1024), b""):
+            digest.update(block)
+    return digest.hexdigest()
+
+
+def stage_portable(
+    *,
+    version: str,
+    exe: Path,
+    binaries: Path,
+    dist: Path,
+    license_file: Path,
+    readme_file: Path,
+    repository_root: Path | None = None,
+) -> PortableOutput:
+    """Create a versioned portable directory, ZIP and SHA-256 sidecar."""
+    if not version.strip() or any(char in version for char in "/\\"):
+        raise ValueError("version must be a non-empty path-safe value")
+    exe = _require_file(exe, "Tauri executable")
+    license_file = _require_file(license_file, "license file")
+    readme_file = _require_file(readme_file, "portable readme")
+    binaries = binaries.expanduser().resolve()
+    for relative in REQUIRED_RUNTIME_ENTRIES:
+        _require_file(binaries / relative, str(relative))
+
+    dist = _validate_dist(dist, repository_root)
+    dist.mkdir(parents=True, exist_ok=True)
+    stem = ARCHIVE_STEM.format(version=version)
+    stage_dir = dist / stem
+    zip_path = dist / f"{stem}.zip"
+    sha256_path = dist / f"{stem}.zip.sha256"
+
+    if stage_dir.exists():
+        if stage_dir.parent != dist or stage_dir.name != stem:
+            raise ValueError(f"unsafe stage directory: {stage_dir}")
+        shutil.rmtree(stage_dir)
+    for generated in (zip_path, sha256_path):
+        if generated.exists():
+            generated.unlink()
+
+    stage_dir.mkdir()
+    shutil.copy2(exe, stage_dir / "QwenPaw-Portable.exe")
+    shutil.copytree(binaries, stage_dir / "binaries")
+    shutil.copy2(license_file, stage_dir / "LICENSE")
+    shutil.copy2(readme_file, stage_dir / "README-PORTABLE.zh-CN.txt")
+    (stage_dir / "portable.json").write_text(
+        json.dumps(
+            {"schemaVersion": 1, "clientMode": "browser"},
+            indent=2,
+            ensure_ascii=False,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+
+    unpacked_bytes = _tree_size(stage_dir)
+    _zip_tree(stage_dir, zip_path)
+    archived_bytes = zip_path.stat().st_size
+    sha256_path.write_text(
+        f"{_sha256(zip_path)}  {zip_path.name}\n",
+        encoding="ascii",
+    )
+    return PortableOutput(
+        stage_dir=stage_dir,
+        zip_path=zip_path,
+        sha256_path=sha256_path,
+        unpacked_bytes=unpacked_bytes,
+        archived_bytes=archived_bytes,
+    )
+
+
+def _parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--version", required=True)
+    parser.add_argument("--exe", type=Path, required=True)
+    parser.add_argument("--binaries", type=Path, required=True)
+    parser.add_argument("--dist", type=Path, required=True)
+    parser.add_argument("--license", dest="license_file", type=Path)
+    parser.add_argument("--readme", dest="readme_file", type=Path)
+    return parser
+
+
+def main(argv: list[str] | None = None) -> int:
+    args = _parser().parse_args(argv)
+    repository_root = Path(__file__).resolve().parents[2]
+    output = stage_portable(
+        version=args.version,
+        exe=args.exe,
+        binaries=args.binaries,
+        dist=args.dist,
+        license_file=args.license_file or repository_root / "LICENSE",
+        readme_file=(
+            args.readme_file
+            or repository_root / "scripts" / "pack-tauri" / "README-PORTABLE.zh-CN.txt"
+        ),
+        repository_root=repository_root,
+    )
+    print(f"Portable directory: {output.stage_dir}")
+    print(f"Portable ZIP: {output.zip_path}")
+    print(f"SHA-256: {output.sha256_path}")
+    print(f"Unpacked bytes: {output.unpacked_bytes}")
+    print(f"ZIP bytes: {output.archived_bytes}")
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

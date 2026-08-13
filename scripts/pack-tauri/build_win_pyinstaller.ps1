@@ -202,10 +202,43 @@ if ($tauriExit -ne 0) {
 Set-Location $REPO_ROOT
 Write-Host "Tauri app built" -ForegroundColor Green
 
+# Step 4: Build and stage the portable flavor. The standard NSIS installer is
+# already complete, so this raw build cannot replace the installer artifact.
+Write-Host ""
+Write-Host "== Step 4: Building Portable Flavor ==" -ForegroundColor Yellow
+Set-Location console
+npm exec -- tauri build --no-bundle `
+    --config src-tauri/tauri.version.conf.json `
+    --config src-tauri/tauri.portable.conf.json
+if ($LASTEXITCODE -ne 0) {
+    throw "Portable Tauri build failed"
+}
+Set-Location $REPO_ROOT
+
+$PORTABLE_EXE = Join-Path $REPO_ROOT "console\src-tauri\target\release\qwenpaw-desktop.exe"
+$PORTABLE_BINARIES = Join-Path $REPO_ROOT "console\src-tauri\binaries"
+$PORTABLE_STAGER = Join-Path $REPO_ROOT "scripts\pack-tauri\stage_windows_portable.py"
+python $PORTABLE_STAGER `
+    --version $VERSION `
+    --exe $PORTABLE_EXE `
+    --binaries $PORTABLE_BINARIES `
+    --dist $DIST
+if ($LASTEXITCODE -ne 0) {
+    throw "Portable staging failed"
+}
+$PORTABLE_ZIP = Join-Path $DIST "QwenPaw-Portable-${VERSION}-Windows-x64.zip"
+$PORTABLE_SHA256 = "${PORTABLE_ZIP}.sha256"
+if (-not (Test-Path $PORTABLE_ZIP) -or -not (Test-Path $PORTABLE_SHA256)) {
+    throw "Portable archive or checksum was not produced"
+}
+Write-Host "Portable archive staged" -ForegroundColor Green
+
 Write-Host ""
 Write-Host "=========================================" -ForegroundColor Cyan
 Write-Host "Build Complete!" -ForegroundColor Green
 Write-Host "=========================================" -ForegroundColor Cyan
 Write-Host "Output:"
 Write-Host "  NSIS bundle directory: ${NSIS_DIR}\"
+Write-Host "  Portable ZIP: ${PORTABLE_ZIP}"
+Write-Host "  Portable SHA-256: ${PORTABLE_SHA256}"
 Write-Host ""
