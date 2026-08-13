@@ -101,12 +101,28 @@ jobs:
       - name: Stage Tauri Windows installer and updater assets
         shell: pwsh
         run: |
-          python scripts/pack-tauri/generate_update_manifest.py stage `
-            --bundle-dir console/src-tauri/target/release/bundle/nsis `
-            --pattern '*-setup.exe' `
-            --target windows-x86_64 `
-            --output "dist/QwenPaw-Tauri-${{ steps.version.outputs.version }}-Windows-setup.exe" `
-            --pubkey-config console/src-tauri/tauri.version.conf.json
+          $bundleDir = "console/src-tauri/target/release/bundle/nsis"
+          $output = "dist/QwenPaw-Tauri-${{ steps.version.outputs.version }}-Windows-setup.exe"
+          $installers = @(Get-ChildItem -LiteralPath $bundleDir -Filter "*-setup.exe" -File)
+          if ($installers.Count -ne 1) {
+            throw "Expected exactly one Windows installer, found $($installers.Count)"
+          }
+
+          $signature = "$($installers[0].FullName).sig"
+          if (Test-Path -LiteralPath $signature) {
+            python scripts/pack-tauri/generate_update_manifest.py stage `
+              --bundle-dir $bundleDir `
+              --pattern '*-setup.exe' `
+              --target windows-x86_64 `
+              --output $output `
+              --pubkey-config console/src-tauri/tauri.version.conf.json
+            if ($LASTEXITCODE -ne 0) {
+              throw "Failed to stage signed Windows updater assets"
+            }
+          } else {
+            Copy-Item -LiteralPath $installers[0].FullName -Destination $output
+            Write-Warning "TAURI_SIGNING_PRIVATE_KEY is not configured; staged an unsigned test installer without updater metadata"
+          }
 
       - name: Verify desktop (Tauri Windows Portable)
         timeout-minutes: 15
