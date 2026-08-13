@@ -15,6 +15,12 @@ use crate::{
     portable::{self, ClientMode, PortableRuntime},
 };
 
+const PORTABLE_QUIT_ARG: &str = "--portable-quit";
+
+pub(crate) fn requests_portable_quit(args: &[String]) -> bool {
+    args.iter().skip(1).any(|arg| arg == PORTABLE_QUIT_ARG)
+}
+
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 enum LaunchStrategy {
     Browser,
@@ -176,5 +182,21 @@ mod tests {
             launch_strategy(ClientMode::Auto),
             LaunchStrategy::WebviewThenBrowser
         );
+    }
+
+    #[test]
+    fn portable_quit_argument_is_exact_and_case_sensitive() {
+        assert!(requests_portable_quit(&[
+            "QwenPaw-Portable.exe".to_string(),
+            "--portable-quit".to_string(),
+        ]));
+        assert!(!requests_portable_quit(&[
+            "QwenPaw-Portable.exe".to_string(),
+            "--PORTABLE-QUIT".to_string(),
+        ]));
+        assert!(!requests_portable_quit(&[
+            "QwenPaw-Portable.exe".to_string(),
+            "--portable-quit-now".to_string(),
+        ]));
     }
 }

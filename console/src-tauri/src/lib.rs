@@ -23,8 +23,20 @@ fn open_devtools(window: WebviewWindow) {
 pub fn run() {
     let portable_runtime = portable::PortableRuntime::detect();
     let build_result = tauri::Builder::default()
-        .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
-            client::show_or_open(app);
+        .plugin(tauri_plugin_single_instance::init(|app, args, _cwd| {
+            if client::requests_portable_quit(&args)
+                && app.state::<portable::PortableRuntime>().state().is_some()
+            {
+                let app = app.clone();
+                tauri::async_runtime::spawn(async move {
+                    if let Err(error) = backend::stop_and_wait(&app).await {
+                        log::warn!("[portable] graceful control quit failed: {error}");
+                    }
+                    app.exit(0);
+                });
+            } else {
+                client::show_or_open(app);
+            }
         }))
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_dialog::init())

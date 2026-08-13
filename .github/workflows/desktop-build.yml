@@ -25,6 +25,11 @@ on:
         type: string
         required: false
         default: ""
+      windows_only:
+        description: "Run only the Windows build and portable verification"
+        type: boolean
+        required: false
+        default: false
 
 permissions:
   contents: read
@@ -103,6 +108,39 @@ jobs:
             --output "dist/QwenPaw-Tauri-${{ steps.version.outputs.version }}-Windows-setup.exe" `
             --pubkey-config console/src-tauri/tauri.version.conf.json
 
+      - name: Verify desktop (Tauri Windows Portable)
+        timeout-minutes: 15
+        uses: ./.github/actions/verify-tauri-windows-portable
+        with:
+          dashscope-api-key: ${{ secrets.QWENPAW_DASHSCOPE_API_KEY }}
+
+      - name: Upload portable verify logs (Tauri Windows)
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: portable-verify-logs-tauri-windows-${{ steps.version.outputs.version }}
+          path: |
+            ${{ env.PORTABLE_ROOT }}/logs/
+            ${{ env.PORTABLE_ROOT }}/data/desktop.log
+          if-no-files-found: ignore
+          retention-days: 7
+
+      - name: Stop desktop server (Tauri Windows Portable)
+        if: always()
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Continue"
+          Get-Process -Name "QwenPaw-Portable", "qwenpaw-desktop", "qwenpaw-backend" `
+            -ErrorAction SilentlyContinue |
+            Stop-Process -Force -ErrorAction SilentlyContinue
+          subst P: /D 2>$null
+          subst Q: /D 2>$null
+          subst R: /D 2>$null
+          subst S: /D 2>$null
+          subst T: /D 2>$null
+          subst U: /D 2>$null
+          exit 0
+
       - name: Verify desktop (Tauri Windows)
         timeout-minutes: 10
         uses: ./.github/actions/verify-tauri-windows
@@ -153,6 +191,15 @@ jobs:
           name: QwenPaw-Desktop-Tauri-Windows-${{ steps.version.outputs.version }}
           path: dist/QwenPaw-Tauri-*-Windows-setup.exe
 
+      - name: Upload Tauri Windows portable artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: QwenPaw-Portable-Windows-${{ steps.version.outputs.version }}
+          path: |
+            dist/QwenPaw-Portable-*-Windows-x64.zip
+            dist/QwenPaw-Portable-*-Windows-x64.zip.sha256
+          if-no-files-found: error
+
       - name: Upload Tauri Windows updater metadata
         uses: actions/upload-artifact@v4
         with:
@@ -162,6 +209,7 @@ jobs:
             dist/tauri-windows-x86_64-updater.json
 
   build-tauri-macos:
+    if: ${{ inputs.windows_only != true }}
     runs-on: macos-14
     timeout-minutes: 60
     steps:

@@ -1,0 +1,51 @@
+name: Verify Desktop (Tauri Windows Portable)
+description: Extract, launch, relocate and drive the Windows portable ZIP.
+
+inputs:
+  dashscope-api-key:
+    description: DashScope API key (empty skips LLM chat)
+    required: false
+    default: ""
+
+runs:
+  using: composite
+  steps:
+    - name: Install portable verify dependencies
+      shell: pwsh
+      run: |
+        $ErrorActionPreference = "Stop"
+        python -m pip install --upgrade pip
+        python -m pip install -r scripts/verify/requirements-verify.txt
+        python -m playwright install chromium --with-deps
+
+    - name: Launch and relocate portable archive
+      shell: pwsh
+      run: . scripts/verify/launch_tauri_windows_portable.ps1
+
+    - name: Verify portable browser UI
+      shell: pwsh
+      env:
+        QWENPAW_DASHSCOPE_API_KEY: ${{ inputs.dashscope-api-key }}
+        PYTHONIOENCODING: utf-8
+      run: |
+        python scripts/verify/desktop_verify.py `
+          --base-url $env:BASE_URL `
+          --ui-mode tauri-windows `
+          --headed
+        if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+    - name: Gracefully stop portable archive
+      shell: pwsh
+      run: |
+        $ErrorActionPreference = "Stop"
+        $control = Start-Process -FilePath $env:PORTABLE_EXE `
+          -ArgumentList "--portable-quit" -PassThru
+        $deadline = (Get-Date).AddSeconds(70)
+        while ((Get-Date) -lt $deadline) {
+          $shell = Get-Process -Name "QwenPaw-Portable", "qwenpaw-desktop" `
+            -ErrorAction SilentlyContinue
+          $backend = Get-Process -Name "qwenpaw-backend" -ErrorAction SilentlyContinue
+          if (-not $shell -and -not $backend) { exit 0 }
+          Start-Sleep -Seconds 2
+        }
+        throw "Portable shell/backend did not exit gracefully after UI verification"
