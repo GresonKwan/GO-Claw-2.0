@@ -171,7 +171,18 @@ try {
     $agents = Invoke-RestMethod -Uri "http://127.0.0.1:$secondPort/api/agents" -TimeoutSec 10
     $defaultAgent = $agents.agents | Where-Object { $_.id -eq "default" } | Select-Object -First 1
     if (-not $defaultAgent) { throw "Default agent missing after relocation" }
-    if (-not $defaultAgent.workspace_dir.StartsWith($secondRoot, [System.StringComparison]::OrdinalIgnoreCase)) {
+    # subst may be resolved by Python/Windows APIs to its backing directory.
+    # Both forms identify the relocated USB root; the old backing path was
+    # deleted above, so accepting it here would still fail.
+    $actualWorkspace = [IO.Path]::GetFullPath($defaultAgent.workspace_dir).TrimEnd('\')
+    $expectedWorkspaces = @(
+        [IO.Path]::GetFullPath((Join-Path $secondRoot "data\workspaces\default")).TrimEnd('\'),
+        [IO.Path]::GetFullPath((Join-Path $secondBacking "data\workspaces\default")).TrimEnd('\')
+    )
+    $workspaceRebound = $expectedWorkspaces | Where-Object {
+        $_.Equals($actualWorkspace, [System.StringComparison]::OrdinalIgnoreCase)
+    }
+    if (-not $workspaceRebound) {
         throw "Workspace was not rebound to relocated root: $($defaultAgent.workspace_dir)"
     }
     $agentDetails = Invoke-RestMethod `

@@ -208,6 +208,7 @@ jobs:
           path: dist/QwenPaw-Tauri-*-Windows-setup.exe
 
       - name: Upload Tauri Windows portable artifact
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: QwenPaw-Portable-Windows-${{ steps.version.outputs.version }}
