@@ -1,0 +1,23 @@
+{
+  "productName": "QwenPaw Portable",
+  "identifier": "io.agentscope.qwenpaw.portable",
+  "app": {
+    "windows": [
+      {
+        "label": "main",
+        "create": false,
+        "title": "QwenPaw Portable",
+        "width": 1280,
+        "height": 800,
+        "minWidth": 960,
+        "minHeight": 600,
+        "resizable": true,
+        "fullscreen": false,
+        "dragDropEnabled": false
+      }
+    ]
+  },
+  "bundle": {
+    "active": false
+  }
+}
