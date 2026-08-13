@@ -78,12 +78,12 @@ yarn-debug.log*
 yarn-error.log*
 openapi-ts*.log
 
-# Only ignore npm lockfiles inside subpackages
-console/package-lock.json
+# The console lockfile is committed because desktop CI uses npm ci.
 website/package-lock.json
 
 # MacOS
 .DS_Store
+._*
 
 # Windows
 Thumbs.db
