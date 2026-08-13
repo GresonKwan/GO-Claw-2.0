@@ -125,6 +125,11 @@ Write-Host ""
 Write-Host "== Step 1: Building Console Static Assets ==" -ForegroundColor Yellow
 Set-Location console
 
+# The production bundle includes Monaco and Mermaid and exceeds Node's default
+# heap limit on a clean Windows runner. Match the repository's other CI builds.
+$env:NODE_OPTIONS = "--max-old-space-size=8192"
+Write-Host "Node options: $env:NODE_OPTIONS"
+
 Write-Host "Installing frontend dependencies..."
 npm ci
 if ($LASTEXITCODE -ne 0) {
