@@ -9,12 +9,15 @@ from pathlib import Path
 
 from qwenpaw.config.utils import get_plugins_dir
 from qwenpaw.plugins.architecture import PluginManifest
+from qwenpaw.plugins.paths import (
+    PLUGIN_INSTALL_WORKDIR_MARKER,
+    is_reserved_plugin_install_workdir,
+)
 
 _BUNDLED_PLUGIN_DIRECTORIES = {
     "qwen-image-tool": "qwen-image",
     "wan27-tool": "wan27",
 }
-_TEMP_DIRECTORY_MARKER = ".go-claw-plugin.tmp"
 
 
 def _get_bundled_plugins_root() -> Path:
@@ -240,7 +243,7 @@ def _find_installed_manifests(plugins_dir: Path) -> dict[str, Path]:
             continue
         if candidate.name in canonical_names:
             continue
-        if _TEMP_DIRECTORY_MARKER in candidate.name:
+        if is_reserved_plugin_install_workdir(candidate):
             continue
         manifest_path = candidate / "plugin.json"
         if not manifest_path.is_file():
@@ -294,7 +297,7 @@ def _copy_plugin_atomically(
         return existing_manifest
 
     temp_path = target.parent / (
-        f".{target.name}{_TEMP_DIRECTORY_MARKER}-{uuid.uuid4().hex}"
+        f".{target.name}{PLUGIN_INSTALL_WORKDIR_MARKER}-{uuid.uuid4().hex}"
     )
 
     try:

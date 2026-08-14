@@ -43,10 +43,13 @@ def _list_plugins_from_disk() -> list[dict]:
         return []
 
     from ...plugins.loader import _is_disabled_plugin_dir
+    from ...plugins.paths import is_reserved_plugin_install_workdir
 
     result: list[dict] = []
     for item in sorted(plugins_dir.iterdir()):
         if not item.is_dir():
+            continue
+        if is_reserved_plugin_install_workdir(item):
             continue
         if _is_disabled_plugin_dir(item):
             continue

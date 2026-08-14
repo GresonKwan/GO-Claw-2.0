@@ -10,8 +10,11 @@ from pathlib import Path
 import pytest
 
 from qwenpaw.app import go_claw_bundled_plugins
+from qwenpaw.app.routers import plugins as plugins_router
+from qwenpaw.config import utils as config_utils
 from qwenpaw.plugins.architecture import PluginManifest
 from qwenpaw.plugins.loader import PluginLoader
+from qwenpaw.plugins.registry import PluginRegistry
 
 
 def _write_plugin(
@@ -32,6 +35,7 @@ def _write_plugin(
         "author": "GO CLAW Test",
         "entry": {"backend": "plugin.py"},
         "dependencies": [],
+        "qwenpaw_version": {"min": "0.1.0", "max": "99.0.0"},
         "meta": {
             "tools": [
                 {
@@ -57,6 +61,39 @@ def _write_plugin(
     (plugin_dir / "requirements.txt").write_text("", encoding="utf-8")
     (plugin_dir / "marker.txt").write_text(marker, encoding="utf-8")
     return plugin_dir
+
+
+def _write_canonical_media_plugins_and_legacy_workdir(
+    plugins_dir: Path,
+) -> tuple[Path, Path, Path]:
+    legacy_dir = _write_plugin(
+        plugins_dir,
+        "qwen-image.go-claw-plugin.tmp",
+        "qwen-image-tool",
+        marker="legacy workdir content",
+    )
+    legacy_manifest_path = legacy_dir / "plugin.json"
+    legacy_manifest = json.loads(
+        legacy_manifest_path.read_text(encoding="utf-8")
+    )
+    legacy_manifest["name"] = "Legacy installation workdir"
+    legacy_manifest_path.write_text(
+        json.dumps(legacy_manifest),
+        encoding="utf-8",
+    )
+    qwen_dir = _write_plugin(
+        plugins_dir,
+        "qwen-image",
+        "qwen-image-tool",
+        marker="canonical qwen",
+    )
+    wan_dir = _write_plugin(
+        plugins_dir,
+        "wan27",
+        "wan27-tool",
+        marker="canonical wan",
+    )
+    return qwen_dir, wan_dir, legacy_dir
 
 
 def _configure_roots(
@@ -690,3 +727,138 @@ def test_source_tree_symlink_is_rejected_before_copy(
 
     assert external_content.exists()
     assert not (plugins_dir / "qwen-image").exists()
+
+
+def test_real_loader_discovery_hides_legacy_installation_workdir(
+    tmp_path: Path,
+) -> None:
+    plugins_dir = tmp_path / "plugins"
+    qwen_dir, wan_dir, legacy_dir = (
+        _write_canonical_media_plugins_and_legacy_workdir(plugins_dir)
+    )
+    loader = PluginLoader(plugin_dirs=[plugins_dir])
+
+    discovered = loader.discover_plugins()
+
+    assert sorted(
+        (manifest.id, source_path) for manifest, source_path in discovered
+    ) == [
+        ("qwen-image-tool", qwen_dir),
+        ("wan27-tool", wan_dir),
+    ]
+    assert (legacy_dir / "marker.txt").read_text(encoding="utf-8") == (
+        "legacy workdir content"
+    )
+
+
+@pytest.mark.asyncio
+async def test_real_loader_loads_each_canonical_plugin_once(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    plugins_dir = tmp_path / "plugins"
+    qwen_dir, wan_dir, legacy_dir = (
+        _write_canonical_media_plugins_and_legacy_workdir(plugins_dir)
+    )
+    monkeypatch.setattr(PluginRegistry, "_instance", None)
+    loader = PluginLoader(plugin_dirs=[plugins_dir])
+    load_sources: list[Path] = []
+    registered_ids: list[str] = []
+    original_load_plugin = loader.load_plugin
+    original_register_manifest = loader.registry.register_plugin_manifest
+
+    async def record_load_plugin(
+        manifest: PluginManifest,
+        source_path: Path,
+        config: dict | None = None,
+    ) -> object:
+        load_sources.append(source_path)
+        return await original_load_plugin(manifest, source_path, config)
+
+    def record_register_manifest(
+        plugin_id: str,
+        manifest: dict,
+    ) -> None:
+        registered_ids.append(plugin_id)
+        original_register_manifest(plugin_id, manifest)
+
+    monkeypatch.setattr(loader, "load_plugin", record_load_plugin)
+    monkeypatch.setattr(
+        loader.registry,
+        "register_plugin_manifest",
+        record_register_manifest,
+    )
+
+    try:
+        loaded = await loader.load_all_plugins()
+
+        assert set(loaded) == {"qwen-image-tool", "wan27-tool"}
+        assert loaded["qwen-image-tool"].source_path == qwen_dir
+        assert loaded["wan27-tool"].source_path == wan_dir
+        assert sorted(load_sources) == sorted([qwen_dir, wan_dir])
+        assert sorted(registered_ids) == ["qwen-image-tool", "wan27-tool"]
+        assert set(loader.registry.get_all_plugin_manifests()) == {
+            "qwen-image-tool",
+            "wan27-tool",
+        }
+        assert (legacy_dir / "marker.txt").read_text(encoding="utf-8") == (
+            "legacy workdir content"
+        )
+    finally:
+        for plugin_id in list(loader.get_all_loaded_plugins()):
+            await loader.unload_plugin(plugin_id)
+
+
+def test_disk_plugin_fallback_hides_legacy_installation_workdir(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    plugins_dir = tmp_path / "plugins"
+    _qwen_dir, _wan_dir, legacy_dir = (
+        _write_canonical_media_plugins_and_legacy_workdir(plugins_dir)
+    )
+    monkeypatch.setattr(
+        config_utils,
+        "get_plugins_dir",
+        lambda: plugins_dir,
+    )
+
+    plugins = plugins_router._list_plugins_from_disk()
+
+    assert sorted(plugin["id"] for plugin in plugins) == [
+        "qwen-image-tool",
+        "wan27-tool",
+    ]
+    assert all(
+        plugin["name"] != "Legacy installation workdir" for plugin in plugins
+    )
+    assert (legacy_dir / "marker.txt").read_text(encoding="utf-8") == (
+        "legacy workdir content"
+    )
+
+
+def test_similar_normal_plugin_directory_name_is_not_reserved(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    plugins_dir = tmp_path / "plugins"
+    ordinary_dir = _write_plugin(
+        plugins_dir,
+        "customer-go-claw-plugin-workdir",
+        "customer-tool",
+        marker="ordinary plugin",
+    )
+    loader = PluginLoader(plugin_dirs=[plugins_dir])
+    monkeypatch.setattr(
+        config_utils,
+        "get_plugins_dir",
+        lambda: plugins_dir,
+    )
+
+    discovered = loader.discover_plugins()
+    disk_plugins = plugins_router._list_plugins_from_disk()
+
+    assert [(manifest.id, source) for manifest, source in discovered] == [
+        ("customer-tool", ordinary_dir)
+    ]
+    assert [plugin["id"] for plugin in disk_plugins] == ["customer-tool"]

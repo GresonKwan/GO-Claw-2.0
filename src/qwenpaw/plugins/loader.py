@@ -23,6 +23,7 @@ from packaging.requirements import Requirement
 
 from .architecture import PluginManifest, PluginRecord
 from .api import PluginApi
+from .paths import is_reserved_plugin_install_workdir
 from .registry import PluginRegistry
 
 logger = logging.getLogger(__name__)
@@ -264,6 +265,13 @@ class PluginLoader:
 
             for item in plugin_dir.iterdir():
                 if not item.is_dir():
+                    continue
+
+                if is_reserved_plugin_install_workdir(item):
+                    logger.info(
+                        "Skipping reserved plugin installation workdir: %s",
+                        item.name,
+                    )
                     continue
 
                 if _is_disabled_plugin_dir(item):
