@@ -10,7 +10,11 @@ export async function synchronizeFixedChineseLanguage(
   localStorage.removeItem("language");
 
   if (languageEngine.language !== "zh") {
-    await languageEngine.changeLanguage("zh");
+    try {
+      await languageEngine.changeLanguage("zh");
+    } catch (error) {
+      reportError("Failed to switch language to Chinese:", error);
+    }
   }
 
   try {

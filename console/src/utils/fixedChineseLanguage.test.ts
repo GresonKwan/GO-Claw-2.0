@@ -46,6 +46,30 @@ describe("synchronizeFixedChineseLanguage", () => {
     expect(calls).toEqual(["change:zh", "update:zh"]);
   });
 
+  it("reports language switch errors and still synchronizes the backend", async () => {
+    const switchError = new Error("language switch failed");
+    const changeLanguage = vi
+      .fn<i18n["changeLanguage"]>()
+      .mockRejectedValue(switchError);
+    const updateLanguage = vi.fn().mockResolvedValue(undefined);
+    const reportError = vi.fn();
+
+    await expect(
+      synchronizeFixedChineseLanguage(
+        { language: "en", changeLanguage },
+        updateLanguage,
+        reportError,
+      ),
+    ).resolves.toBeUndefined();
+
+    expect(reportError).toHaveBeenCalledWith(
+      "Failed to switch language to Chinese:",
+      switchError,
+    );
+    expect(updateLanguage).toHaveBeenCalledTimes(1);
+    expect(updateLanguage).toHaveBeenCalledWith("zh");
+  });
+
   it("reports backend errors without rejecting", async () => {
     const error = new Error("backend unavailable");
     const updateLanguage = vi.fn().mockRejectedValue(error);
