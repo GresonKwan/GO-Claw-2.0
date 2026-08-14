@@ -142,7 +142,7 @@ pub(crate) fn show_startup_error(app: &tauri::AppHandle, message: impl Into<Stri
         handle
             .dialog()
             .message(message)
-            .title("QwenPaw Portable 启动失败")
+            .title("GO CLAW 启动失败")
             .kind(MessageDialogKind::Error)
             .blocking_show();
     });
@@ -156,7 +156,7 @@ mod tests {
     #[test]
     fn manifest_resolves_all_mutable_paths_beside_exe() {
         let temp = tempfile::tempdir().unwrap();
-        let exe = temp.path().join("QwenPaw-Portable.exe");
+        let exe = temp.path().join("GO-CLAW-Portable.exe");
         std::fs::write(&exe, b"").unwrap();
         std::fs::write(
             temp.path().join(PORTABLE_MANIFEST),
@@ -187,7 +187,7 @@ mod tests {
     #[test]
     fn unsupported_manifest_schema_is_rejected() {
         let temp = tempfile::tempdir().unwrap();
-        let exe = temp.path().join("QwenPaw-Portable.exe");
+        let exe = temp.path().join("GO-CLAW-Portable.exe");
         std::fs::write(
             temp.path().join(PORTABLE_MANIFEST),
             br#"{"schemaVersion":2,"clientMode":"browser"}"#,

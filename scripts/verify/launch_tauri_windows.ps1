@@ -27,12 +27,12 @@ foreach ($hive in @("HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall",
                     "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall",
                     "HKLM:\SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall")) {
   $reg = Get-ChildItem $hive -ErrorAction SilentlyContinue |
-    Where-Object { (Get-ItemProperty $_.PSPath -ErrorAction SilentlyContinue).DisplayName -match "QwenPaw" } |
+    Where-Object { (Get-ItemProperty $_.PSPath -ErrorAction SilentlyContinue).DisplayName -eq "GO CLAW" } |
     Select-Object -First 1
   if ($reg) {
     $loc = (Get-ItemProperty $reg.PSPath).InstallLocation
     if ($loc -and (Test-Path $loc)) {
-      $found = Get-ChildItem -Path $loc -Filter "qwenpaw-desktop.exe" `
+      $found = Get-ChildItem -Path $loc -Filter "GO CLAW.exe" `
         -Recurse -Depth 3 -ErrorAction SilentlyContinue |
         Select-Object -First 1
       if ($found) { $tauriExe = $found.FullName; break }
@@ -43,14 +43,14 @@ foreach ($hive in @("HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall",
 # Fallback: search known install candidate directories.
 if (-not $tauriExe) {
   $candidateRoots = @(
-    (Join-Path $env:LOCALAPPDATA "QwenPaw Desktop"),
-    (Join-Path $env:LOCALAPPDATA "Programs\QwenPaw Desktop"),
-    (Join-Path $env:ProgramFiles "QwenPaw Desktop"),
-    (Join-Path ${env:ProgramFiles(x86)} "QwenPaw Desktop")
+    (Join-Path $env:LOCALAPPDATA "GO CLAW"),
+    (Join-Path $env:LOCALAPPDATA "Programs\GO CLAW"),
+    (Join-Path $env:ProgramFiles "GO CLAW"),
+    (Join-Path ${env:ProgramFiles(x86)} "GO CLAW")
   )
   foreach ($root in $candidateRoots) {
     if (Test-Path $root) {
-      $found = Get-ChildItem -Path $root -Filter "qwenpaw-desktop.exe" `
+      $found = Get-ChildItem -Path $root -Filter "GO CLAW.exe" `
         -Recurse -Depth 3 -ErrorAction SilentlyContinue |
         Select-Object -First 1
       if ($found) { $tauriExe = $found.FullName; break }
@@ -60,11 +60,11 @@ if (-not $tauriExe) {
 
 if (-not $tauriExe) {
   Write-Host "=== DEBUG: install location not found ==="
-  Write-Host "Registry entries matching QwenPaw:"
+  Write-Host "Registry entries matching GO CLAW:"
   foreach ($hive in @("HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall",
                       "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall")) {
     Get-ChildItem $hive -ErrorAction SilentlyContinue |
-      Where-Object { (Get-ItemProperty $_.PSPath -ErrorAction SilentlyContinue).DisplayName -match "QwenPaw" } |
+      Where-Object { (Get-ItemProperty $_.PSPath -ErrorAction SilentlyContinue).DisplayName -eq "GO CLAW" } |
       ForEach-Object { Write-Host "  $((Get-ItemProperty $_.PSPath).InstallLocation)" }
   }
   throw "Tauri exe not found after NSIS install"

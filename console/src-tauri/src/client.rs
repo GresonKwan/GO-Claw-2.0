@@ -187,15 +187,15 @@ mod tests {
     #[test]
     fn portable_quit_argument_is_exact_and_case_sensitive() {
         assert!(requests_portable_quit(&[
-            "QwenPaw-Portable.exe".to_string(),
+            "GO-CLAW-Portable.exe".to_string(),
             "--portable-quit".to_string(),
         ]));
         assert!(!requests_portable_quit(&[
-            "QwenPaw-Portable.exe".to_string(),
+            "GO-CLAW-Portable.exe".to_string(),
             "--PORTABLE-QUIT".to_string(),
         ]));
         assert!(!requests_portable_quit(&[
-            "QwenPaw-Portable.exe".to_string(),
+            "GO-CLAW-Portable.exe".to_string(),
             "--portable-quit-now".to_string(),
         ]));
     }

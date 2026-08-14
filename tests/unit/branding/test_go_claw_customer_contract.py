@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+import json
 import re
 from pathlib import Path
 
@@ -49,6 +50,98 @@ LEGACY_CUSTOMER_ASSET_REFERENCES = (
     "/qwenpaw.png",
     "/qwenpawBack.png",
 )
+TAURI_PRODUCT_CONFIG_PATHS = (
+    "console/src-tauri/tauri.conf.json",
+    "console/src-tauri/tauri.portable.conf.json",
+)
+PACKAGING_CONSUMER_TOKEN_CONTRACTS = {
+    "scripts/pack-tauri/build_win_pyinstaller.ps1": {
+        "forbidden": ("QwenPaw-Portable-",),
+        "required": ("GO-CLAW-Portable-${VERSION}-Windows-x64.zip",),
+    },
+    "scripts/verify/launch_tauri_windows_portable.ps1": {
+        "forbidden": ("QwenPaw-Portable",),
+        "required": (
+            "GO-CLAW-Portable-*-Windows-x64.zip",
+            "GO-CLAW-Portable.exe",
+            'Get-Process -Name "GO-CLAW-Portable", "qwenpaw-desktop"',
+        ),
+    },
+    ".github/workflows/desktop-build.yml": {
+        "forbidden": (
+            "QwenPaw-Portable",
+            'pkill -f "QwenPaw Desktop"',
+            'pkill -9 -f "QwenPaw Desktop"',
+        ),
+        "required": (
+            "GO-CLAW-Portable-Windows-${{ steps.version.outputs.version }}",
+            "dist/GO-CLAW-Portable-*-Windows-x64.zip",
+            'Get-Process -Name "GO-CLAW-Portable", "qwenpaw-desktop"',
+            'pkill -f "GO CLAW"',
+            'pkill -9 -f "GO CLAW"',
+        ),
+    },
+    ".github/actions/verify-tauri-windows-portable/action.yml": {
+        "forbidden": ("QwenPaw-Portable",),
+        "required": (
+            'Get-Process -Name "GO-CLAW-Portable", "qwenpaw-desktop"',
+        ),
+    },
+    "scripts/pack-tauri/build_macos_pyinstaller.sh": {
+        "forbidden": ("macos/QwenPaw Desktop.app",),
+        "required": ('APP_PATH="${BUNDLE_DIR}/macos/GO CLAW.app"',),
+    },
+    "scripts/verify/launch_tauri_windows.ps1": {
+        "forbidden": (
+            '.DisplayName -match "QwenPaw"',
+            '"QwenPaw Desktop"',
+            '-Filter "qwenpaw-desktop.exe"',
+        ),
+        "required": (
+            '.DisplayName -eq "GO CLAW"',
+            '-Filter "GO CLAW.exe"',
+            '(Join-Path $env:LOCALAPPDATA "GO CLAW")',
+            '(Join-Path $env:LOCALAPPDATA "Programs\\GO CLAW")',
+            '(Join-Path $env:ProgramFiles "GO CLAW")',
+            '(Join-Path ${env:ProgramFiles(x86)} "GO CLAW")',
+            "Registry entries matching GO CLAW:",
+        ),
+    },
+    ".github/workflows/fork-verify-desktop.yml": {
+        "forbidden": (
+            'pkill -f "QwenPaw Desktop"',
+            'pkill -9 -f "QwenPaw Desktop"',
+        ),
+        "required": (
+            'pkill -f "GO CLAW"',
+            'pkill -9 -f "GO CLAW"',
+        ),
+    },
+    ".github/workflows/desktop-release.yml": {
+        "forbidden": (
+            'pkill -f "QwenPaw Desktop"',
+            'pkill -9 -f "QwenPaw Desktop"',
+        ),
+        "required": (
+            'pkill -f "GO CLAW"',
+            'pkill -9 -f "GO CLAW"',
+        ),
+    },
+    "console/src-tauri/src/client.rs": {
+        "forbidden": ("QwenPaw-Portable.exe",),
+        "required": ("GO-CLAW-Portable.exe",),
+    },
+    "console/src-tauri/src/portable.rs": {
+        "forbidden": (
+            "QwenPaw-Portable.exe",
+            "QwenPaw Portable 启动失败",
+        ),
+        "required": (
+            "GO-CLAW-Portable.exe",
+            "GO CLAW 启动失败",
+        ),
+    },
+}
 STANDALONE_AGENT_PATTERN = re.compile(r"(?<![A-Za-z])Agent(?![A-Za-z])")
 
 
@@ -116,6 +209,48 @@ def test_market_plugin_categories_use_digital_employee_copy() -> None:
 
     assert "Agent 工具" not in market_plugin_list_text, (
         "Legacy Agent 工具 customer copy remains:\n" + "\n".join(offenders)
+    )
+
+
+def test_tauri_product_names_and_window_titles_are_exact_go_claw() -> None:
+    failures = []
+    for relative_path in TAURI_PRODUCT_CONFIG_PATHS:
+        config = json.loads(_read_customer_text(relative_path))
+        if config.get("productName") != "GO CLAW":
+            failures.append(
+                f"{relative_path}:productName={config.get('productName')!r}"
+            )
+        for index, window in enumerate(config.get("app", {}).get("windows", [])):
+            if window.get("title") != "GO CLAW":
+                failures.append(
+                    f"{relative_path}:app.windows[{index}].title="
+                    f"{window.get('title')!r}"
+                )
+
+    assert not failures, "Tauri customer product names diverge:\n" + "\n".join(
+        failures
+    )
+
+
+def test_tauri_bootstrap_declares_the_customer_locale() -> None:
+    tauri_html = _read_customer_text("console/tauri.html")
+
+    assert '<html lang="zh-CN">' in tauri_html
+
+
+def test_direct_packaging_consumers_use_current_artifact_tokens() -> None:
+    failures = []
+    for relative_path, token_contract in PACKAGING_CONSUMER_TOKEN_CONTRACTS.items():
+        consumer_text = _read_customer_text(relative_path)
+        for token in token_contract["forbidden"]:
+            if token in consumer_text:
+                failures.append(f"{relative_path}: forbidden token {token!r}")
+        for token in token_contract["required"]:
+            if token not in consumer_text:
+                failures.append(f"{relative_path}: missing token {token!r}")
+
+    assert not failures, "Packaging artifact consumers diverge:\n" + "\n".join(
+        failures
     )
 
 

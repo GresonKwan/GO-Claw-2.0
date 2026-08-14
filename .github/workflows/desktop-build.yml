@@ -146,7 +146,7 @@ jobs:
         shell: pwsh
         run: |
           $ErrorActionPreference = "Continue"
-          Get-Process -Name "QwenPaw-Portable", "qwenpaw-desktop", "qwenpaw-backend" `
+          Get-Process -Name "GO-CLAW-Portable", "qwenpaw-desktop", "qwenpaw-backend" `
             -ErrorAction SilentlyContinue |
             Stop-Process -Force -ErrorAction SilentlyContinue
           subst P: /D 2>$null
@@ -211,10 +211,10 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: QwenPaw-Portable-Windows-${{ steps.version.outputs.version }}
+          name: GO-CLAW-Portable-Windows-${{ steps.version.outputs.version }}
           path: |
-            dist/QwenPaw-Portable-*-Windows-x64.zip
-            dist/QwenPaw-Portable-*-Windows-x64.zip.sha256
+            dist/GO-CLAW-Portable-*-Windows-x64.zip
+            dist/GO-CLAW-Portable-*-Windows-x64.zip.sha256
           if-no-files-found: error
 
       - name: Upload Tauri Windows updater metadata
@@ -295,10 +295,10 @@ jobs:
         if: always()
         run: |
           # Kill the Tauri shell and its sidecar subprocess.
-          pkill -f "QwenPaw Desktop" 2>/dev/null || true
+          pkill -f "GO CLAW" 2>/dev/null || true
           pkill -f "qwenpaw-backend" 2>/dev/null || true
           sleep 2
-          pkill -9 -f "QwenPaw Desktop" 2>/dev/null || true
+          pkill -9 -f "GO CLAW" 2>/dev/null || true
           pkill -9 -f "qwenpaw-backend" 2>/dev/null || true
           # Best-effort: kill anything sitting on the detected port.
           if [ -n "${BASE_URL:-}" ]; then

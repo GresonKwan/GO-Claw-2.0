@@ -231,7 +231,7 @@ python $PORTABLE_STAGER `
 if ($LASTEXITCODE -ne 0) {
     throw "Portable staging failed"
 }
-$PORTABLE_ZIP = Join-Path $DIST "QwenPaw-Portable-${VERSION}-Windows-x64.zip"
+$PORTABLE_ZIP = Join-Path $DIST "GO-CLAW-Portable-${VERSION}-Windows-x64.zip"
 $PORTABLE_SHA256 = "${PORTABLE_ZIP}.sha256"
 if (-not (Test-Path $PORTABLE_ZIP) -or -not (Test-Path $PORTABLE_SHA256)) {
     throw "Portable archive or checksum was not produced"

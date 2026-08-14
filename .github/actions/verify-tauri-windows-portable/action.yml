@@ -42,7 +42,7 @@ runs:
           -ArgumentList "--portable-quit" -PassThru
         $deadline = (Get-Date).AddSeconds(70)
         while ((Get-Date) -lt $deadline) {
-          $shell = Get-Process -Name "QwenPaw-Portable", "qwenpaw-desktop" `
+          $shell = Get-Process -Name "GO-CLAW-Portable", "qwenpaw-desktop" `
             -ErrorAction SilentlyContinue
           $backend = Get-Process -Name "qwenpaw-backend" -ErrorAction SilentlyContinue
           if (-not $shell -and -not $backend) { exit 0 }

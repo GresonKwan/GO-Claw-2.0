@@ -44,7 +44,7 @@ function Stop-PortableGracefully {
     $control = Start-Process -FilePath $Exe -ArgumentList "--portable-quit" -PassThru
     $deadline = (Get-Date).AddSeconds($TimeoutSeconds)
     while ((Get-Date) -lt $deadline) {
-        $shell = Get-Process -Name "QwenPaw-Portable", "qwenpaw-desktop" `
+        $shell = Get-Process -Name "GO-CLAW-Portable", "qwenpaw-desktop" `
             -ErrorAction SilentlyContinue
         $backend = Get-Process -Name "qwenpaw-backend" -ErrorAction SilentlyContinue
         if (-not $shell -and -not $backend) {
@@ -85,7 +85,7 @@ function Get-DriveLetter {
     throw "No free drive letter available from: $($Preferred -join ', ')"
 }
 
-$archive = Get-ChildItem "dist\QwenPaw-Portable-*-Windows-x64.zip" |
+$archive = Get-ChildItem "dist\GO-CLAW-Portable-*-Windows-x64.zip" |
     Select-Object -First 1
 if (-not $archive) { throw "Portable ZIP not found in dist/" }
 $checksum = "$($archive.FullName).sha256"
@@ -120,7 +120,7 @@ $secondLetter = Get-DriveLetter @("R", "T", "U")
 subst "${firstLetter}:" $firstBacking
 try {
     $firstRoot = "${firstLetter}:\"
-    $firstExe = Join-Path $firstRoot "QwenPaw-Portable.exe"
+    $firstExe = Join-Path $firstRoot "GO-CLAW-Portable.exe"
     Start-Process -FilePath $firstExe
     $firstPort = Wait-PortableReady $firstRoot
     $firstBackend = Get-BackendProcess
@@ -163,7 +163,7 @@ Remove-Item $firstBacking -Recurse -Force
 subst "${secondLetter}:" $secondBacking
 try {
     $secondRoot = "${secondLetter}:\"
-    $secondExe = Join-Path $secondRoot "QwenPaw-Portable.exe"
+    $secondExe = Join-Path $secondRoot "GO-CLAW-Portable.exe"
     Start-Process -FilePath $secondExe
     $secondPort = Wait-PortableReady $secondRoot
     Assert-PortableOutputs $secondRoot
