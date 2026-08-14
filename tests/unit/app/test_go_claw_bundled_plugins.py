@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import json
+import threading
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 import pytest
@@ -92,10 +94,10 @@ def test_installs_by_manifest_id_with_atomic_publish_and_filtered_copy(
         "qwen-image-tool",
         "wan27-tool",
     ]
-    assert [source.name for source, _target in replace_calls] == [
-        "qwen-image.go-claw-plugin.tmp",
-        "wan27.go-claw-plugin.tmp",
-    ]
+    temp_names = [source.name for source, _target in replace_calls]
+    assert len(set(temp_names)) == 2
+    assert temp_names[0].startswith(".qwen-image.go-claw-plugin.tmp-")
+    assert temp_names[1].startswith(".wan27.go-claw-plugin.tmp-")
     assert [target for _source, target in replace_calls] == [
         plugins_dir / "qwen-image",
         plugins_dir / "wan27",
@@ -208,7 +210,11 @@ def test_failed_publish_cleans_temp_and_can_be_retried_idempotently(
     with pytest.raises(OSError, match="cannot publish"):
         go_claw_bundled_plugins.install_go_claw_bundled_plugins()
 
-    assert not list(plugins_dir.glob("*.go-claw-plugin.tmp"))
+    assert not [
+        candidate
+        for candidate in plugins_dir.iterdir()
+        if ".go-claw-plugin.tmp" in candidate.name
+    ]
 
     monkeypatch.setattr(Path, "replace", original_replace)
     first_result = go_claw_bundled_plugins.install_go_claw_bundled_plugins()
@@ -237,7 +243,7 @@ def test_invalid_required_manifest_reports_its_path_and_expected_id(
 ) -> None:
     source_root = tmp_path / "bundle"
     plugins_dir = tmp_path / "installed"
-    invalid_dir = source_root / "broken-qwen"
+    invalid_dir = source_root / "qwen-image"
     invalid_dir.mkdir(parents=True)
     invalid_manifest = invalid_dir / "plugin.json"
     invalid_manifest.write_text("{not json", encoding="utf-8")
@@ -254,3 +260,189 @@ def test_invalid_required_manifest_reports_its_path_and_expected_id(
         match=rf"{invalid_manifest}.*qwen-image-tool",
     ):
         go_claw_bundled_plugins.install_go_claw_bundled_plugins()
+
+
+def test_unrelated_invalid_manifests_do_not_block_required_plugins(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    source_root = tmp_path / "bundle"
+    plugins_dir = tmp_path / "installed"
+    _write_plugin(
+        source_root,
+        "qwen-image",
+        "qwen-image-tool",
+        marker="qwen",
+    )
+    _write_plugin(
+        source_root,
+        "wan27",
+        "wan27-tool",
+        marker="wan",
+    )
+    broken_source = source_root / "unrelated-broken-source"
+    broken_source.mkdir()
+    (broken_source / "plugin.json").write_text(
+        "{not json",
+        encoding="utf-8",
+    )
+    missing_id_source = source_root / "unrelated-missing-id-source"
+    missing_id_source.mkdir()
+    (missing_id_source / "plugin.json").write_text(
+        json.dumps({"name": "unrelated"}),
+        encoding="utf-8",
+    )
+    broken_installed = plugins_dir / "unrelated-broken-installed"
+    broken_installed.mkdir(parents=True)
+    (broken_installed / "plugin.json").write_text(
+        "{not json",
+        encoding="utf-8",
+    )
+    missing_id_installed = plugins_dir / "unrelated-missing-id-installed"
+    missing_id_installed.mkdir()
+    (missing_id_installed / "plugin.json").write_text(
+        json.dumps({"name": "unrelated"}),
+        encoding="utf-8",
+    )
+    _configure_roots(monkeypatch, source_root, plugins_dir)
+
+    manifests = go_claw_bundled_plugins.install_go_claw_bundled_plugins()
+
+    assert manifests == [
+        plugins_dir / "qwen-image" / "plugin.json",
+        plugins_dir / "wan27" / "plugin.json",
+    ]
+    assert broken_source.exists()
+    assert missing_id_source.exists()
+    assert broken_installed.exists()
+    assert missing_id_installed.exists()
+
+
+def test_canonical_source_manifest_must_match_required_id(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    source_root = tmp_path / "bundle"
+    plugins_dir = tmp_path / "installed"
+    conflicting_source = _write_plugin(
+        source_root,
+        "qwen-image",
+        "some-other-plugin",
+        marker="conflict",
+    )
+    _write_plugin(
+        source_root,
+        "alternate-qwen-source",
+        "qwen-image-tool",
+        marker="qwen",
+    )
+    _write_plugin(
+        source_root,
+        "wan27",
+        "wan27-tool",
+        marker="wan",
+    )
+    _configure_roots(monkeypatch, source_root, plugins_dir)
+
+    with pytest.raises(
+        RuntimeError,
+        match=r"qwen-image-tool.*qwen-image.*some-other-plugin",
+    ):
+        go_claw_bundled_plugins.install_go_claw_bundled_plugins()
+
+    assert (conflicting_source / "marker.txt").read_text(
+        encoding="utf-8",
+    ) == "conflict"
+    assert not plugins_dir.exists()
+
+
+def test_concurrent_installers_publish_complete_plugins_without_temp_leaks(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    source_root = tmp_path / "bundle"
+    qwen_source = _write_plugin(
+        source_root,
+        "qwen-image",
+        "qwen-image-tool",
+        marker="complete qwen",
+    )
+    _write_plugin(
+        source_root,
+        "wan27",
+        "wan27-tool",
+        marker="complete wan",
+    )
+    monkeypatch.setattr(
+        go_claw_bundled_plugins,
+        "_get_bundled_plugins_root",
+        lambda: source_root,
+    )
+    original_copytree = go_claw_bundled_plugins.shutil.copytree
+
+    for iteration in range(8):
+        plugins_dir = tmp_path / f"installed-{iteration}"
+        monkeypatch.setattr(
+            go_claw_bundled_plugins,
+            "get_plugins_dir",
+            lambda: plugins_dir,
+        )
+        before_copy = threading.Barrier(2)
+        after_copy = threading.Barrier(2)
+        destinations: list[Path] = []
+        destinations_lock = threading.Lock()
+
+        def synchronized_copytree(
+            source: Path,
+            destination: Path,
+            *args: object,
+            **kwargs: object,
+        ) -> Path:
+            with destinations_lock:
+                destinations.append(Path(destination))
+            if Path(source) != qwen_source:
+                return original_copytree(source, destination, *args, **kwargs)
+            before_copy.wait(timeout=10)
+            try:
+                return original_copytree(source, destination, *args, **kwargs)
+            finally:
+                after_copy.wait(timeout=10)
+
+        monkeypatch.setattr(
+            go_claw_bundled_plugins.shutil,
+            "copytree",
+            synchronized_copytree,
+        )
+
+        with ThreadPoolExecutor(max_workers=2) as executor:
+            futures = [
+                executor.submit(
+                    go_claw_bundled_plugins.install_go_claw_bundled_plugins,
+                )
+                for _index in range(2)
+            ]
+            results = [future.result(timeout=15) for future in futures]
+
+        expected_manifests = [
+            plugins_dir / "qwen-image" / "plugin.json",
+            plugins_dir / "wan27" / "plugin.json",
+        ]
+        assert results == [expected_manifests, expected_manifests]
+        assert (plugins_dir / "qwen-image" / "marker.txt").read_text(
+            encoding="utf-8",
+        ) == "complete qwen"
+        assert (plugins_dir / "wan27" / "marker.txt").read_text(
+            encoding="utf-8",
+        ) == "complete wan"
+        qwen_destinations = [
+            destination
+            for destination in destinations
+            if ".qwen-image.go-claw-plugin.tmp" in destination.name
+        ]
+        assert len(qwen_destinations) == 2
+        assert len(set(qwen_destinations)) == 2
+        assert not [
+            candidate
+            for candidate in plugins_dir.iterdir()
+            if ".go-claw-plugin.tmp" in candidate.name
+        ]
