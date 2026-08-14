@@ -156,22 +156,30 @@ def build_preset_agent_config(
     for tool_name in preset.required_builtin_tools:
         current = tools.builtin_tools[tool_name]
         tools.builtin_tools[tool_name] = current.model_copy(
+            deep=True,
             update={"enabled": True},
         )
 
     for tool_name in preset.plugin_tools:
-        tools.builtin_tools[tool_name] = BuiltinToolConfig(
-            name=tool_name,
-            enabled=True,
-            config={},
-        )
+        current = tools.builtin_tools.get(tool_name)
+        if current is None:
+            tools.builtin_tools[tool_name] = BuiltinToolConfig(
+                name=tool_name,
+                enabled=True,
+                config={},
+            )
+        else:
+            tools.builtin_tools[tool_name] = current.model_copy(
+                deep=True,
+                update={"enabled": True, "config": {}},
+            )
 
     return AgentProfileConfig(
         id=agent_id,
         name=preset.name,
         description=preset.description,
         workspace_dir=str(workspace_dir),
-        template_id=preset.id,
+        template_id=preset.md_template_id,
         language="zh",
         channels=ChannelConfig(),
         mcp=MCPConfig(),

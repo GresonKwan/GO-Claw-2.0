@@ -4,13 +4,18 @@
 from __future__ import annotations
 
 import re
+from dataclasses import FrozenInstanceError, replace
 from pathlib import Path
+
+import pytest
 
 from qwenpaw.agents.go_claw_presets import (
     PRESET_ORDER,
     SPECIALIST_PRESETS,
     build_preset_agent_config,
 )
+from qwenpaw.agents.templates import get_workspace_md_template_id
+from qwenpaw.agents.utils.setup_utils import copy_workspace_md_files
 from qwenpaw.config.config import (
     AgentProfileConfig,
     BuiltinToolConfig,
@@ -18,7 +23,9 @@ from qwenpaw.config.config import (
     HeartbeatConfig,
     MCPConfig,
     ToolsConfig,
+    _reset_builtin_tools_cache_for_tests,
 )
+from qwenpaw.plugins.registry import PluginRegistry
 
 EXPECTED_SKILLS = {
     "marketing-growth": (
@@ -108,14 +115,16 @@ def test_preset_order_and_specialist_metadata_are_stable() -> None:
 
 
 def test_preset_mapping_cannot_be_mutated() -> None:
-    try:
+    with pytest.raises(TypeError):
         SPECIALIST_PRESETS["unexpected"] = SPECIALIST_PRESETS[
             "marketing-growth"
         ]
-    except TypeError:
-        pass
-    else:  # pragma: no cover - explicit failure is clearer than a cast
-        raise AssertionError("SPECIALIST_PRESETS must be immutable")
+
+
+def test_preset_records_are_frozen() -> None:
+    preset = SPECIALIST_PRESETS["marketing-growth"]
+    with pytest.raises(FrozenInstanceError):
+        setattr(preset, "name", "changed")
 
 
 def test_build_preset_agent_config_uses_normal_agent_config_defaults(
@@ -137,7 +146,7 @@ def test_build_preset_agent_config_uses_normal_agent_config_defaults(
         assert config.name == preset.name
         assert config.description == preset.description
         assert config.workspace_dir == str(workspace_dir)
-        assert config.template_id == preset.id
+        assert config.template_id == preset.md_template_id
         assert config.language == "zh"
         assert type(config.channels) is ChannelConfig
         assert type(config.mcp) is MCPConfig
@@ -160,6 +169,55 @@ def test_build_preset_agent_config_uses_normal_agent_config_defaults(
         for tool_name, default_tool in default_tools.builtin_tools.items():
             if tool_name not in changed_tools:
                 assert config.tools.builtin_tools[tool_name] == default_tool
+
+
+def test_preset_agent_tool_configs_are_deeply_isolated(
+    tmp_path: Path,
+) -> None:
+    preset = SPECIALIST_PRESETS["marketing-growth"]
+    first = build_preset_agent_config(
+        preset,
+        agent_id="marketing-first",
+        workspace_dir=tmp_path / "marketing-first",
+    )
+    second = build_preset_agent_config(
+        preset,
+        agent_id="marketing-second",
+        workspace_dir=tmp_path / "marketing-second",
+    )
+    assert first.tools is not None
+    assert second.tools is not None
+
+    first_tool = first.tools.builtin_tools["read_file"]
+    second_tool = second.tools.builtin_tools["read_file"]
+    assert first_tool is not second_tool
+    assert first_tool.config is not second_tool.config
+
+    first_tool.config["owner"] = "marketing-first"
+    assert "owner" not in second_tool.config
+
+    third = build_preset_agent_config(
+        SPECIALIST_PRESETS["data-processing"],
+        agent_id="data-third",
+        workspace_dir=tmp_path / "data-third",
+    )
+    assert third.tools is not None
+    assert "owner" not in third.tools.builtin_tools["read_file"].config
+
+
+def test_preset_agent_configs_survive_pydantic_round_trip(
+    tmp_path: Path,
+) -> None:
+    for preset in SPECIALIST_PRESETS.values():
+        config = build_preset_agent_config(
+            preset,
+            agent_id=f"round-trip-{preset.id}",
+            workspace_dir=tmp_path / preset.id,
+        )
+
+        restored = AgentProfileConfig.model_validate(config.model_dump())
+
+        assert restored == config
 
 
 def test_content_preset_enables_only_its_five_explicit_plugin_tools(
@@ -198,6 +256,119 @@ def test_content_preset_enables_only_its_five_explicit_plugin_tools(
         for tool_name in CONTENT_PLUGIN_TOOLS:
             tool = other_config.tools.builtin_tools.get(tool_name)
             assert tool is None or tool.enabled is False
+
+
+def test_content_plugin_manifest_metadata_is_preserved(
+    tmp_path: Path,
+) -> None:
+    plugin_id = "__ut_go_claw_media_metadata__"
+    tool_name = "generate_image_qwen"
+    registry = PluginRegistry()
+    registry.unregister_plugin(plugin_id)
+    _reset_builtin_tools_cache_for_tests()
+    try:
+        registry.register_plugin_manifest(
+            plugin_id,
+            {
+                "name": plugin_id,
+                "meta": {
+                    "tools": [
+                        {
+                            "name": tool_name,
+                            "description": "Generate campaign artwork",
+                            "icon": "🎨",
+                        },
+                    ],
+                },
+            },
+        )
+        content = SPECIALIST_PRESETS["content-production"]
+        overlap = replace(
+            content,
+            required_builtin_tools=(
+                *content.required_builtin_tools,
+                tool_name,
+            ),
+        )
+
+        config = build_preset_agent_config(
+            overlap,
+            agent_id="content-with-manifest",
+            workspace_dir=tmp_path / "content-with-manifest",
+        )
+        assert config.tools is not None
+        tool = config.tools.builtin_tools[tool_name]
+        assert tool.enabled is True
+        assert tool.config == {}
+        assert tool.description == "Generate campaign artwork"
+        assert tool.icon == "🎨"
+        assert tool.display_to_user is True
+        assert tool.async_execution is False
+    finally:
+        registry.unregister_plugin(plugin_id)
+        _reset_builtin_tools_cache_for_tests()
+
+
+def test_preset_template_survives_real_resolver_and_workspace_copy(
+    tmp_path: Path,
+) -> None:
+    template_root = (
+        Path(__file__).parents[3] / "src" / "qwenpaw" / "agents" / "md_files"
+    )
+
+    for preset in SPECIALIST_PRESETS.values():
+        workspace_dir = tmp_path / preset.id
+        config = build_preset_agent_config(
+            preset,
+            agent_id=f"employee-{preset.id}",
+            workspace_dir=workspace_dir,
+        )
+        assert config.template_id == preset.md_template_id
+
+        resolved_template_id = get_workspace_md_template_id(
+            config.template_id,
+        )
+        assert resolved_template_id == preset.md_template_id
+        copied = copy_workspace_md_files(
+            config.language,
+            workspace_dir,
+            md_template_id=resolved_template_id,
+        )
+        assert {"AGENTS.md", "SOUL.md", "PROFILE.md"} <= set(copied)
+
+        source_dir = template_root / preset.md_template_id / "zh"
+        for filename in ("AGENTS.md", "SOUL.md", "PROFILE.md"):
+            assert (workspace_dir / filename).read_text(
+                encoding="utf-8",
+            ) == (
+                source_dir / filename
+            ).read_text(encoding="utf-8")
+
+
+def test_workspace_template_resolver_rejects_unknown_go_claw_ids() -> None:
+    for template_id in (
+        "go-claw-unknown",
+        "go-claw-marketing-growth/../../qa",
+        "../go-claw-content-production",
+    ):
+        assert get_workspace_md_template_id(template_id) is None
+
+
+def test_content_template_confirms_key_before_media_calls() -> None:
+    template_path = (
+        Path(__file__).parents[3]
+        / "src"
+        / "qwenpaw"
+        / "agents"
+        / "md_files"
+        / "go-claw-content-production"
+        / "zh"
+        / "AGENTS.md"
+    )
+    text = template_path.read_text(encoding="utf-8")
+    assert "无法从当前对话确认" in text
+    assert "先请用户确认" in text
+    assert "不通过试调用探测" in text
 
 
 TEMPLATE_EXPECTATIONS = {
@@ -261,6 +432,13 @@ TEMPLATE_EXPECTATIONS = {
     ),
 }
 
+SOUL_CHARACTER_TERMS = {
+    "marketing-growth": "理性",
+    "content-production": "好奇",
+    "data-processing": "严谨",
+    "business-analysis": "客观",
+}
+
 SUSPICIOUS_SECRET_PATTERNS = (
     re.compile(r"api_key", re.IGNORECASE),
     re.compile(r"sk-", re.IGNORECASE),
@@ -296,6 +474,22 @@ def test_templates_are_safe_complete_and_specific() -> None:
                     f"suspicious secret in {preset_id}/{filename}: "
                     f"{pattern.pattern}"
                 )
+
+        profile = texts["PROFILE.md"]
+        assert EXPECTED_NAMES[preset_id] in profile
+        assert "主要交付物" in profile
+
+        soul = texts["SOUL.md"]
+        assert SOUL_CHARACTER_TERMS[preset_id] in soul
+        assert "质量标准" in soul
+        assert "边界" in soul
+
+        agents = texts["AGENTS.md"]
+        assert agents.startswith("# 执行规范")
+        assert agents.count("## ") >= 3
+        assert "安全" in agents
+        assert "工具" in agents or "文件安全" in agents
+        assert any(term in agents for term in ("流程", "处理", "方案", "分析"))
 
         combined = "\n".join(texts.values())
         for term in expected_terms:

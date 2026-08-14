@@ -25,6 +25,14 @@ SUPPORTED_AGENT_TEMPLATES = (
     LOCAL_AGENT_TEMPLATE,
     QA_AGENT_TEMPLATE,
 )
+GO_CLAW_MD_TEMPLATE_IDS = frozenset(
+    {
+        "go-claw-marketing-growth",
+        "go-claw-content-production",
+        "go-claw-data-processing",
+        "go-claw-business-analysis",
+    },
+)
 
 LOCAL_TEMPLATE_SKILL_NAMES = ("make_plan",)
 QA_TEMPLATE_DESCRIPTION = (
@@ -51,7 +59,14 @@ def list_supported_agent_templates() -> tuple[str, ...]:
 
 def get_workspace_md_template_id(template_id: str | None) -> str | None:
     """Map an agent template id to the workspace markdown template id."""
-    if template_id in {LOCAL_AGENT_TEMPLATE, QA_AGENT_TEMPLATE}:
+    if (
+        template_id
+        in {
+            LOCAL_AGENT_TEMPLATE,
+            QA_AGENT_TEMPLATE,
+        }
+        or template_id in GO_CLAW_MD_TEMPLATE_IDS
+    ):
         return template_id
     return None
 

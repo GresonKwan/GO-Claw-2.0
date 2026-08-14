@@ -2011,8 +2011,8 @@ def _reset_builtin_tools_cache_for_tests() -> None:
 def _copy_builtin_tools(
     tools: Dict[str, BuiltinToolConfig],
 ) -> Dict[str, BuiltinToolConfig]:
-    """Return a shallow dict of model copies so callers cannot mutate cache."""
-    return {name: cfg.model_copy() for name, cfg in tools.items()}
+    """Return deep model copies so callers cannot mutate cached config."""
+    return {name: cfg.model_copy(deep=True) for name, cfg in tools.items()}
 
 
 def _add_plugin_tool_default(
