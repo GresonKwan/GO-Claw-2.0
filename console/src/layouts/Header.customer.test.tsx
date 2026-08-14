@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { renderWithProviders } from "@/test/common_setup";
@@ -115,14 +115,14 @@ describe("customer Header", () => {
     getVersion.mockImplementation(() =>
       Promise.resolve({ version: runtime.apiVersion }),
     );
-    invoke.mockResolvedValue(undefined);
+    invoke.mockReset().mockResolvedValue(undefined);
     fetchMock.mockReset();
-    fetchMock.mockResolvedValue({
-      json: vi.fn().mockResolvedValue({ releases: {} }),
-    });
     openExternalLink.mockReset();
-    vi.stubGlobal("fetch", fetchMock);
     localStorage.clear();
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
   });
 
   it("shows the GO CLAW logo without legacy resource navigation", () => {
@@ -162,6 +162,7 @@ describe("customer Header", () => {
         },
       }),
     });
+    vi.stubGlobal("fetch", fetchMock);
     renderHeader();
 
     const versionBadge = await screen.findByText("v1.0.0");
