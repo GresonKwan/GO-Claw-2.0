@@ -3,6 +3,7 @@
 
 Handles migration from legacy single-agent config to new multi-agent structure.
 """
+
 import json
 import logging
 import shutil
@@ -666,7 +667,7 @@ def _do_ensure_default_agent() -> None:
     if "default" in config.agents.profiles:
         agent_ref = config.agents.profiles["default"]
         default_workspace = Path(agent_ref.workspace_dir).expanduser()
-        agent_existed = True
+        agent_existed = (default_workspace / "agent.json").is_file()
     else:
         default_workspace = Path(
             f"{WORKING_DIR}/workspaces/default",

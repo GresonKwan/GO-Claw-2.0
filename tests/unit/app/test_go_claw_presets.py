@@ -20,6 +20,7 @@ from qwenpaw.agents.go_claw_presets import (
     PRESET_ORDER,
     SPECIALIST_PRESETS,
 )
+from qwenpaw.app import migration as app_migration
 from qwenpaw.app import go_claw_presets as preset_migration
 from qwenpaw.config import utils as config_utils
 from qwenpaw.config.config import (
@@ -1046,6 +1047,67 @@ def test_cli_init_does_not_provision_the_legacy_qa_employee() -> None:
 
     assert "ensure_qa_agent_exists" not in init_source
     assert "Builtin QA agent workspace ensured" not in init_source
+
+
+def test_default_reference_without_agent_json_is_initialized(
+    monkeypatch,
+    tmp_path,
+) -> None:
+    """A fresh root reference alone must not suppress workspace creation."""
+    workspace = tmp_path / "workspaces/default"
+    config = Config()
+    config.agents.profiles["default"] = AgentProfileRef(
+        id="default",
+        workspace_dir=str(workspace),
+    )
+    saved_agents: list[tuple[str, AgentProfileConfig]] = []
+
+    monkeypatch.setattr(app_migration, "load_config", lambda: config)
+    monkeypatch.setattr(app_migration, "save_config", lambda _config: None)
+    monkeypatch.setattr(
+        app_migration,
+        "save_agent_config",
+        lambda agent_id, agent: saved_agents.append((agent_id, agent)),
+    )
+
+    app_migration._do_ensure_default_agent()
+
+    assert len(saved_agents) == 1
+    assert saved_agents[0][0] == "default"
+    assert saved_agents[0][1].name == "Default Agent"
+
+
+def test_existing_default_agent_json_is_not_rewritten(
+    monkeypatch,
+    tmp_path,
+) -> None:
+    workspace = tmp_path / "user-owned-default"
+    agent_path = _write_agent_config(
+        workspace,
+        "default",
+        name="用户自定义员工",
+        extra={"user_owned_state": {"keep": "opaque-value"}},
+    )
+    before = agent_path.read_bytes()
+    config = Config()
+    config.agents.profiles["default"] = AgentProfileRef(
+        id="default",
+        workspace_dir=str(workspace),
+    )
+    saved_agents: list[tuple[str, AgentProfileConfig]] = []
+
+    monkeypatch.setattr(app_migration, "load_config", lambda: config)
+    monkeypatch.setattr(app_migration, "save_config", lambda _config: None)
+    monkeypatch.setattr(
+        app_migration,
+        "save_agent_config",
+        lambda agent_id, agent: saved_agents.append((agent_id, agent)),
+    )
+
+    app_migration._do_ensure_default_agent()
+
+    assert saved_agents == []
+    assert agent_path.read_bytes() == before
 
 
 def test_startup_runs_only_the_four_migrations_in_required_order(
