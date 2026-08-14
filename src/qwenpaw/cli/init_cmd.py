@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 # flake8: noqa: E501
 """CLI init: interactively create working_dir config.json and HEARTBEAT.md."""
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -176,7 +177,6 @@ def init_cmd(
     """Create working dir with config.json and HEARTBEAT.md (interactive)."""
     from ..app.migration import (
         ensure_default_agent_exists,
-        ensure_qa_agent_exists,
         migrate_legacy_skills_to_skill_pool,
     )
 
@@ -232,8 +232,6 @@ def init_cmd(
     ensure_default_agent_exists()
     migrate_legacy_skills_to_skill_pool()
     click.echo("✓ Default workspace initialized")
-    ensure_qa_agent_exists()
-    click.echo("✓ Builtin QA agent workspace ensured")
 
     # --- Ensure local skill hub exists ---
     from ..agents.skill_system import ensure_skill_pool_initialized

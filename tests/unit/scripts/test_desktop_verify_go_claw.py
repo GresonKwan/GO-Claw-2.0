@@ -140,6 +140,22 @@ def test_employees_reject_wrong_first_five_order(monkeypatch) -> None:
         desktop_verify.verify_go_claw_employees("http://desktop.local")
 
 
+def test_employees_reject_an_extra_legacy_qa_employee(monkeypatch) -> None:
+    responses = _responses()
+    responses["/api/agents"]["agents"].append(
+        {
+            "id": "QwenPaw_QA_Agent_0.2",
+            "name": "QA Agent",
+            "enabled": True,
+            "pinned": True,
+        },
+    )
+    _install_http_mock(monkeypatch, responses)
+
+    with pytest.raises(RuntimeError, match="exactly five"):
+        desktop_verify.verify_go_claw_employees("http://desktop.local")
+
+
 def test_employees_reject_disabled_or_unpinned_specialist(monkeypatch) -> None:
     responses = _responses()
     responses["/api/agents"]["agents"][1]["pinned"] = False

@@ -242,6 +242,11 @@ def verify_go_claw_employees(base_url: str) -> None:
 
     agents = payload["agents"]
     expected_ids = [agent_id for agent_id, _name in GO_CLAW_EMPLOYEES]
+    if len(agents) != len(expected_ids):
+        raise RuntimeError(
+            "GO CLAW startup must contain exactly five digital employees, "
+            f"got {len(agents)}",
+        )
     actual_ids = [agent.get("id") for agent in agents[:5]]
     if actual_ids != expected_ids:
         raise RuntimeError(

@@ -927,6 +927,21 @@ def test_existing_employee_order_is_appended_without_loss(
         assert _snapshot_tree(workspace) == snapshot
 
 
+def test_existing_legacy_qa_employee_is_preserved(
+    preset_env: PresetHarness,
+) -> None:
+    legacy_qa_id = "QwenPaw_QA_Agent_0.2"
+    workspace = preset_env.add_existing_agent(legacy_qa_id)
+    preset_env.config.agents.agent_order.append(legacy_qa_id)
+    before = _snapshot_tree(workspace)
+
+    assert preset_migration.ensure_go_claw_presets() is True
+
+    assert legacy_qa_id in preset_env.config.agents.profiles
+    assert legacy_qa_id in preset_env.config.agents.agent_order
+    assert _snapshot_tree(workspace) == before
+
+
 def test_strict_skill_install_uses_existing_pool_download_flow(
     monkeypatch,
     tmp_path,
@@ -979,6 +994,38 @@ def test_strict_skill_install_rejects_incomplete_pool_result(
             tmp_path,
             ("file_reader",),
         )
+
+
+def test_manifest_fsync_uses_a_writable_file_descriptor(
+    monkeypatch,
+    tmp_path,
+) -> None:
+    """Windows rejects fsync on the read-only descriptor used previously."""
+    manifest = tmp_path / "skill.json"
+    manifest.write_text("{}\n", encoding="utf-8")
+    real_os_open = preset_migration.os.open
+    opened_flags: list[int] = []
+
+    def recording_open(path, flags, *args, **kwargs):
+        opened_flags.append(flags)
+        return real_os_open(path, flags, *args, **kwargs)
+
+    monkeypatch.setattr(preset_migration.os, "open", recording_open)
+
+    preset_migration._fsync_file(manifest)
+
+    assert opened_flags
+    assert opened_flags[0] & preset_migration.os.O_RDWR
+
+
+def test_cli_init_does_not_provision_the_legacy_qa_employee() -> None:
+    """Fresh portable init leaves the five GO CLAW employees authoritative."""
+    init_source = (REPOSITORY_ROOT / "src/qwenpaw/cli/init_cmd.py").read_text(
+        encoding="utf-8"
+    )
+
+    assert "ensure_qa_agent_exists" not in init_source
+    assert "Builtin QA agent workspace ensured" not in init_source
 
 
 def test_startup_runs_only_the_four_migrations_in_required_order(

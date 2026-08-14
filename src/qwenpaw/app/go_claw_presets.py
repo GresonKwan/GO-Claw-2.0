@@ -381,8 +381,12 @@ def _is_owned_staging_sentinel(
 
 
 def _fsync_file(path: Path) -> None:
-    with open(path, "rb") as file:
-        os.fsync(file.fileno())
+    flags = os.O_RDWR | getattr(os, "O_BINARY", 0)
+    descriptor = os.open(path, flags)
+    try:
+        os.fsync(descriptor)
+    finally:
+        os.close(descriptor)
 
 
 def _remove_owned_temp_path(temp_path: Path) -> None:
