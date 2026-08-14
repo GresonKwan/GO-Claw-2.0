@@ -21,7 +21,9 @@ function renderWithTheme(mode: "light" | "dark" | "system" = "light") {
 describe("ThemeToggleButton", () => {
   it("renders the theme toggle button", () => {
     renderWithTheme("light");
-    expect(screen.getByRole("button")).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "切换主题" }),
+    ).toBeInTheDocument();
   });
 
   it("shows sun icon when light mode is active", () => {

@@ -1,4 +1,4 @@
-import { Layout, Space, Badge, Spin, Tooltip, Popover, message } from "antd";
+import { Layout, Space, Badge, Tooltip, Popover, message } from "antd";
 import ThemeToggleButton from "../components/ThemeToggleButton";
 import CodingModeToggle from "../components/CodingModeToggle";
 import { useTranslation } from "react-i18next";
@@ -67,7 +67,6 @@ export default function Header() {
   const [version, setVersion] = useState<string>("");
   const [latestVersion, setLatestVersion] = useState<string>("");
   const [updateModalOpen, setUpdateModalOpen] = useState(false);
-  const [updateMarkdown, setUpdateMarkdown] = useState<string>("");
   const logoClicksRef = useRef<number[]>([]);
 
   useEffect(() => {
@@ -159,21 +158,15 @@ export default function Header() {
       compareVersions(latestVersion, version) > 0;
 
   const modalVersion = onDesktop ? desktop.version : latestVersion;
+  const updateMarkdown = onDesktop
+    ? desktop.body ||
+      t("sidebar.updateModal.desktopInstallHint", {
+        version: desktop.version,
+      })
+    : UPDATE_MD;
 
   const handleOpenUpdateModal = () => {
-    setUpdateMarkdown("");
     setUpdateModalOpen(true);
-
-    if (onDesktop) {
-      setUpdateMarkdown(
-        desktop.body ||
-          t("sidebar.updateModal.desktopInstallHint", {
-            version: desktop.version,
-          }),
-      );
-      return;
-    }
-    setUpdateMarkdown(UPDATE_MD);
   };
 
   const handleStartInstall = () => {
@@ -381,35 +374,27 @@ export default function Header() {
 
         {/* Markdown content */}
         <div className={styles.updateModalBody}>
-          {updateMarkdown ? (
-            <ReactMarkdown
-              remarkPlugins={[remarkGfm]}
-              components={{
-                a: ExternalMarkdownLink,
-                code({ node, className, children, ...props }: any) {
-                  const match = /language-(\w+)/.exec(className || "");
-                  const isBlock =
-                    node?.position?.start?.line !== node?.position?.end?.line ||
-                    match;
-                  return isBlock ? (
-                    <UpdateCodeBlock
-                      code={String(children).replace(/\n$/, "")}
-                    />
-                  ) : (
-                    <code className={styles.codeInline} {...props}>
-                      {children}
-                    </code>
-                  );
-                },
-              }}
-            >
-              {updateMarkdown}
-            </ReactMarkdown>
-          ) : (
-            <div className={styles.updateModalSpinWrapper}>
-              <Spin />
-            </div>
-          )}
+          <ReactMarkdown
+            remarkPlugins={[remarkGfm]}
+            components={{
+              a: ExternalMarkdownLink,
+              code({ node, className, children, ...props }: any) {
+                const match = /language-(\w+)/.exec(className || "");
+                const isBlock =
+                  node?.position?.start?.line !== node?.position?.end?.line ||
+                  match;
+                return isBlock ? (
+                  <UpdateCodeBlock code={String(children).replace(/\n$/, "")} />
+                ) : (
+                  <code className={styles.codeInline} {...props}>
+                    {children}
+                  </code>
+                );
+              },
+            }}
+          >
+            {updateMarkdown}
+          </ReactMarkdown>
         </div>
       </Modal>
     </>

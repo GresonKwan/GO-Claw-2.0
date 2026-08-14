@@ -43,7 +43,13 @@ export default function ThemeToggleButton() {
       placement="bottomRight"
       overlayClassName={styles.themeDropdown}
     >
-      <Button className={styles.toggleBtn} type="text" icon={icon} />
+      <Button
+        className={styles.toggleBtn}
+        type="text"
+        icon={icon}
+        aria-label="切换主题"
+        title="切换主题"
+      />
     </Dropdown>
   );
 }
