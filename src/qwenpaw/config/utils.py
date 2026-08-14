@@ -52,6 +52,12 @@ _agent_config_cache: dict[str, tuple[Any, float]] = {}
 _agent_config_lock = threading.Lock()
 
 
+def invalidate_agent_config_cache(agent_id: str) -> None:
+    """Forget one cached agent after an out-of-band atomic file update."""
+    with _agent_config_lock:
+        _agent_config_cache.pop(agent_id, None)
+
+
 def _portable_roots() -> list[Path]:
     """Return validated portable working-dir history from the environment."""
     raw = os.environ.get("QWENPAW_PORTABLE_ROOT_HISTORY", "")

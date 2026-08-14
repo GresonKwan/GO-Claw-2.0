@@ -21,6 +21,7 @@ from qwenpaw.agents.go_claw_presets import (
     SPECIALIST_PRESETS,
 )
 from qwenpaw.app import go_claw_presets as preset_migration
+from qwenpaw.config import utils as config_utils
 from qwenpaw.config.config import (
     AgentProfileConfig,
     AgentProfileRef,
@@ -294,6 +295,25 @@ def test_default_exact_legacy_name_is_renamed(
         provider_id="user-provider",
         model="user-model",
     )
+
+
+def test_default_rename_invalidates_stale_agent_config_cache(
+    preset_env: PresetHarness,
+    monkeypatch,
+) -> None:
+    default_path = preset_env.root / "workspaces/default/agent.json"
+    stale = AgentProfileConfig.model_validate_json(
+        default_path.read_text(encoding="utf-8"),
+    )
+    monkeypatch.setattr(
+        config_utils,
+        "_agent_config_cache",
+        {"default": (stale, default_path.stat().st_mtime)},
+    )
+
+    assert preset_migration.ensure_go_claw_presets() is True
+
+    assert "default" not in config_utils._agent_config_cache
 
 
 def test_custom_default_name_is_preserved(

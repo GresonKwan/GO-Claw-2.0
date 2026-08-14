@@ -21,7 +21,12 @@ from ..agents.go_claw_presets import (
 from ..agents.skill_system import SkillPoolService
 from ..agents.skill_system.registry import reconcile_workspace_manifest
 from ..config.config import AgentProfileConfig, AgentProfileRef
-from ..config.utils import get_config_path, load_config, save_config
+from ..config.utils import (
+    get_config_path,
+    invalidate_agent_config_cache,
+    load_config,
+    save_config,
+)
 from ..plugins.architecture import PluginManifest
 from ..utils.io_utils import (
     fsync_directory,
@@ -459,6 +464,7 @@ def _rename_default_agent_if_unmodified(config: Any) -> None:
         return
     payload["name"] = _DEFAULT_GO_CLAW_NAME
     write_json_atomic(workspace / "agent.json", payload)
+    invalidate_agent_config_cache("default")
 
 
 def _merge_agent_order(
