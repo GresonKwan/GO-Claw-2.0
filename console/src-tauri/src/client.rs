@@ -154,7 +154,7 @@ pub(crate) fn show_backend_startup_error(app: &tauri::AppHandle, message: &str) 
     portable::show_startup_error(
         app,
         format!(
-            "QwenPaw 核心未能启动。\n\n{message}\n\n应用日志：{}",
+            "GO CLAW 核心未能启动。\n\n{message}\n\n应用日志：{}",
             log_dir.display()
         ),
     );

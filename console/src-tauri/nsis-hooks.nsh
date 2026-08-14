@@ -45,11 +45,11 @@ Page custom QWENPAW_CLI_PATH_PAGE QWENPAW_CLI_PATH_PAGE_LEAVE
   SetOutPath "$INSTDIR"
   File /oname=qwenpaw-desktop-debug.cmd "..\..\..\..\nsis\qwenpaw-desktop-debug.cmd"
   File /oname=qwenpaw-desktop-debug.ps1 "..\..\..\..\nsis\qwenpaw-desktop-debug.ps1"
-  CreateShortcut "$SMPROGRAMS\QwenPaw Desktop (Debug).lnk" "$INSTDIR\qwenpaw-desktop-debug.cmd" "" "$INSTDIR\qwenpaw-desktop.exe" 0
+  CreateShortcut "$SMPROGRAMS\GO CLAW (Debug).lnk" "$INSTDIR\qwenpaw-desktop-debug.cmd" "" "$INSTDIR\qwenpaw-desktop.exe" 0
 !macroend
 
 !macro QWENPAW_REMOVE_DEBUG_LAUNCHER
-  Delete "$SMPROGRAMS\QwenPaw Desktop (Debug).lnk"
+  Delete "$SMPROGRAMS\GO CLAW (Debug).lnk"
   Delete "$INSTDIR\qwenpaw-desktop-debug.cmd"
   Delete "$INSTDIR\qwenpaw-desktop-debug.ps1"
 !macroend

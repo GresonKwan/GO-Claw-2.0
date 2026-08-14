@@ -45,7 +45,7 @@ $desktop = Get-Process -Name "qwenpaw-desktop" -ErrorAction SilentlyContinue |
   Where-Object { $_.Path -eq $desktopExe } |
   Select-Object -First 1
 if ($desktop) {
-  Write-Host "Existing QwenPaw Desktop process detected; quit it from the tray before reproducing startup issues."
+  Write-Host "Existing GO CLAW process detected; quit it from the tray before reproducing startup issues."
   $desktop = $null
 } else {
   $desktop = Start-Process -FilePath $desktopExe `
@@ -80,7 +80,7 @@ try {
     if ($desktop) {
       $desktop.Refresh()
       if ($desktop.HasExited) {
-        Write-Host "QwenPaw Desktop exited with code $($desktop.ExitCode)."
+        Write-Host "GO CLAW exited with code $($desktop.ExitCode)."
         Show-DesktopOutput
         Read-Host "Press Enter to exit"
         break

@@ -15,6 +15,7 @@ if (-not [System.IO.Path]::IsPathRooted($DIST)) {
     $DIST = Join-Path $REPO_ROOT $DIST
 }
 $VERSION_FILE = "src\qwenpaw\__version__.py"
+$TAURI_ICON_SOURCE = Join-Path $REPO_ROOT "scripts\pack\assets\go-claw-app-icon-1024.png"
 
 function Invoke-NativeWithRetry {
     param(
@@ -136,8 +137,11 @@ if ($LASTEXITCODE -ne 0) {
     throw "npm ci failed"
 }
 
+if (-not (Test-Path -LiteralPath $TAURI_ICON_SOURCE -PathType Leaf)) {
+    throw "GO CLAW Tauri icon source not found: $TAURI_ICON_SOURCE"
+}
 Write-Host "Generating Tauri icons..."
-npm exec -- tauri icon ../scripts/pack/assets/icon.svg
+npm exec -- tauri icon ../scripts/pack/assets/go-claw-app-icon-1024.png
 if ($LASTEXITCODE -ne 0) {
     throw "Tauri icon generation failed"
 }

@@ -6,6 +6,7 @@ import ast
 import hashlib
 import json
 import re
+import tomllib
 from pathlib import Path
 
 import pytest
@@ -65,6 +66,29 @@ LEGACY_CUSTOMER_ASSET_REFERENCES = (
 TAURI_PRODUCT_CONFIG_PATHS = (
     "console/src-tauri/tauri.conf.json",
     "console/src-tauri/tauri.portable.conf.json",
+)
+TAURI_CUSTOMER_SHELL_PATHS = (
+    "console/src-tauri/src/client.rs",
+    "console/src-tauri/src/lib.rs",
+    "console/src-tauri/src/portable.rs",
+    "console/src-tauri/src/tray.rs",
+    "console/src-tauri/nsis/qwenpaw-desktop-debug.cmd",
+    "console/src-tauri/nsis/qwenpaw-desktop-debug.ps1",
+    "console/src-tauri/nsis-languages/English.nsh",
+    "console/src-tauri/nsis-languages/SimpChinese.nsh",
+    "console/src-tauri/nsis-languages/Indonesian.nsh",
+    "console/src-tauri/nsis-languages/Japanese.nsh",
+    "console/src-tauri/nsis-languages/Russian.nsh",
+    "console/src-tauri/nsis-languages/PortugueseBR.nsh",
+)
+TAURI_ICON_BUILD_SCRIPTS = (
+    "scripts/pack-tauri/build_win_pyinstaller.ps1",
+    "scripts/pack-tauri/build_macos_pyinstaller.sh",
+)
+GO_CLAW_APP_ICON_SOURCE = "scripts/pack/assets/go-claw-app-icon-1024.png"
+GO_CLAW_TAURI_ICON_COMMAND = (
+    "npm exec -- tauri icon ../scripts/pack/assets/"
+    "go-claw-app-icon-1024.png"
 )
 PACKAGING_CONSUMER_TOKEN_CONTRACTS = {
     "scripts/pack-tauri/build_win_pyinstaller.ps1": {
@@ -284,6 +308,82 @@ def test_tauri_product_names_and_window_titles_are_exact_go_claw() -> None:
     assert not failures, "Tauri customer product names diverge:\n" + "\n".join(
         failures
     )
+
+
+def test_tauri_shell_customer_copy_is_branded_go_claw() -> None:
+    failures = []
+    for relative_path in TAURI_CUSTOMER_SHELL_PATHS:
+        customer_shell_text = _read_customer_text(relative_path)
+        if "QwenPaw" in customer_shell_text:
+            failures.extend(
+                _matching_lines(relative_path, re.compile(r"QwenPaw"))
+            )
+
+    required_copy = {
+        "console/src-tauri/src/client.rs": "GO CLAW 核心未能启动。",
+        "console/src-tauri/src/lib.rs": "[GO CLAW] Fatal startup error:",
+        "console/src-tauri/src/portable.rs": "GO CLAW 启动失败",
+        "console/src-tauri/src/tray.rs": '.tooltip("GO CLAW")',
+        "console/src-tauri/nsis/qwenpaw-desktop-debug.cmd": (
+            "GO CLAW - Debug Mode"
+        ),
+        "console/src-tauri/nsis/qwenpaw-desktop-debug.ps1": (
+            "Existing GO CLAW process detected"
+        ),
+    }
+    for relative_path, required_text in required_copy.items():
+        if required_text not in _read_customer_text(relative_path):
+            failures.append(f"{relative_path}: missing {required_text!r}")
+
+    assert not failures, "Tauri customer shell copy diverges:\n" + "\n".join(
+        failures
+    )
+
+
+def test_tauri_debug_shortcut_uses_go_claw_display_name() -> None:
+    nsis_hooks = _read_customer_text("console/src-tauri/nsis-hooks.nsh")
+    shortcut_lines = [
+        line
+        for line in nsis_hooks.splitlines()
+        if "CreateShortcut" in line or ".lnk" in line
+    ]
+
+    assert shortcut_lines
+    assert all("QwenPaw" not in line for line in shortcut_lines)
+    assert any("GO CLAW (Debug).lnk" in line for line in shortcut_lines)
+
+
+def test_tauri_cargo_customer_metadata_uses_go_claw_repository() -> None:
+    cargo = tomllib.loads(_read_customer_text("console/src-tauri/Cargo.toml"))
+    package = cargo["package"]
+
+    assert package["name"] == "qwenpaw-desktop"
+    assert package["description"] == (
+        "GO CLAW desktop shell that runs the local core and opens the client."
+    )
+    assert package["authors"] == ["GO CLAW Contributors"]
+    assert package["repository"] == (
+        "https://github.com/GresonKwan/GO-Claw-2.0.git"
+    )
+
+
+def test_tauri_bundle_and_build_scripts_use_generated_go_claw_icons() -> None:
+    config = json.loads(_read_customer_text("console/src-tauri/tauri.conf.json"))
+    bundle = config["bundle"]
+
+    assert bundle["icon"] == ["icons/icon.icns", "icons/icon.ico"]
+    assert bundle["windows"]["nsis"]["installerIcon"] == "icons/icon.ico"
+    assert bundle["windows"]["nsis"]["uninstallerIcon"] == "icons/icon.ico"
+    assert (REPOSITORY_ROOT / GO_CLAW_APP_ICON_SOURCE).is_file()
+
+    for relative_path in TAURI_ICON_BUILD_SCRIPTS:
+        script = _read_customer_text(relative_path)
+        assert GO_CLAW_TAURI_ICON_COMMAND in script
+        assert "../scripts/pack/assets/icon.svg" not in script
+        source_reference = "go-claw-app-icon-1024.png"
+        source_check_index = script.index(source_reference)
+        command_index = script.index(GO_CLAW_TAURI_ICON_COMMAND)
+        assert source_check_index < command_index
 
 
 def test_tauri_bootstrap_declares_the_customer_locale() -> None:

@@ -19,6 +19,7 @@ echo "Version: ${VERSION}"
 echo ""
 
 SIGN_MACOS_BUNDLE="${REPO_ROOT}/scripts/pack-tauri/sign_macos_bundle.sh"
+TAURI_ICON_SOURCE="${REPO_ROOT}/scripts/pack/assets/go-claw-app-icon-1024.png"
 
 # Step 0: Prerequisites
 echo "== Step 0: Checking Prerequisites =="
@@ -80,8 +81,12 @@ echo ""
 echo "== Step 1: Building Console Static Assets =="
 cd console
 npm ci
+if [ ! -f "${TAURI_ICON_SOURCE}" ]; then
+    echo "ERROR: GO CLAW Tauri icon source not found at ${TAURI_ICON_SOURCE}"
+    exit 1
+fi
 echo "Generating Tauri icons..."
-npm exec -- tauri icon ../scripts/pack/assets/icon.svg
+npm exec -- tauri icon ../scripts/pack/assets/go-claw-app-icon-1024.png
 echo "Syncing Tauri version..."
 node ../scripts/pack-tauri/sync_tauri_version.mjs
 echo "Building console frontend..."

@@ -16,7 +16,7 @@ set "QWENPAW_BACKEND_LOGS=%QWENPAW_DEBUG_DIR%\desktop.log;%QWENPAW_DEBUG_DIR%\qw
 set "QWENPAW_SHELL_LOGS=%LOCALAPPDATA%\io.agentscope.qwenpaw.desktop\logs\qwenpaw-desktop.log;%LOCALAPPDATA%\com.qwenpaw.desktop\logs\qwenpaw-desktop.log"
 
 echo ====================================
-echo QwenPaw Desktop - Debug Mode
+echo GO CLAW - Debug Mode
 echo ====================================
 echo Log level: %QWENPAW_LOG_LEVEL%
 echo Working directory: %QWENPAW_DEBUG_DIR%

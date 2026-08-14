@@ -135,7 +135,7 @@ pub fn run() {
             });
         }
         Err(err) => {
-            eprintln!("[QwenPaw Desktop] Fatal startup error: {err}");
+            eprintln!("[GO CLAW] Fatal startup error: {err}");
             std::process::exit(1);
         }
     }
