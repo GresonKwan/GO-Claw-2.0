@@ -1,0 +1,155 @@
+name: GO CLAW Portable Reverify
+
+on:
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: "Git ref/SHA containing the Python backend fix"
+        type: string
+        required: true
+      base_run_id:
+        description: "Completed desktop-build run containing the base portable artifact"
+        type: string
+        required: true
+
+permissions:
+  actions: read
+  contents: read
+
+jobs:
+  rebuild-backend-and-verify:
+    runs-on: windows-latest
+    timeout-minutes: 60
+    steps:
+      - name: Checkout fixed backend source
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref }}
+          submodules: recursive
+
+      - name: Get version
+        id: version
+        uses: ./.github/actions/get-version
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v5
+
+      - name: Download base portable artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: GO-CLAW-Portable-Windows-${{ steps.version.outputs.version }}
+          path: ${{ runner.temp }}/base-artifact
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          run-id: ${{ inputs.base_run_id }}
+
+      - name: Extract base and reuse its verified frontend
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          $archives = @(Get-ChildItem `
+            -Path "${{ runner.temp }}/base-artifact" `
+            -Filter "GO-CLAW-Portable-*-Windows-x64.zip" `
+            -File -Recurse)
+          if ($archives.Count -ne 1) {
+            throw "Expected exactly one base portable ZIP, found $($archives.Count)"
+          }
+
+          $extractDir = "${{ runner.temp }}/base-portable"
+          Expand-Archive -LiteralPath $archives[0].FullName `
+            -DestinationPath $extractDir -Force
+          $roots = @(Get-ChildItem -LiteralPath $extractDir -Directory)
+          if ($roots.Count -ne 1) {
+            throw "Expected exactly one portable root, found $($roots.Count)"
+          }
+
+          $frontend = Join-Path $roots[0].FullName `
+            "binaries/qwenpaw-backend/_internal/qwenpaw/console"
+          if (-not (Test-Path -LiteralPath $frontend -PathType Container)) {
+            throw "Base portable frontend not found: $frontend"
+          }
+          New-Item -ItemType Directory -Force -Path "console/dist" | Out-Null
+          Copy-Item -Path (Join-Path $frontend "*") `
+            -Destination "console/dist" -Recurse -Force
+
+          "BASE_PORTABLE_ROOT=$($roots[0].FullName)" |
+            Out-File $env:GITHUB_ENV -Encoding utf8 -Append
+
+      - name: Rebuild only the PyInstaller backend
+        shell: pwsh
+        env:
+          DIST: ${{ runner.temp }}/backend-rebuild
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: ./scripts/pack-tauri/build_pyinstaller.ps1
+
+      - name: Replace backend and restage portable ZIP
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          $newBackend = Join-Path "${{ runner.temp }}/backend-rebuild" `
+            "pyinstaller/qwenpaw-backend"
+          $targetBackend = Join-Path $env:BASE_PORTABLE_ROOT `
+            "binaries/qwenpaw-backend"
+          if (-not (Test-Path -LiteralPath $newBackend -PathType Container)) {
+            throw "Rebuilt backend not found: $newBackend"
+          }
+          Remove-Item -LiteralPath $targetBackend -Recurse -Force
+          Copy-Item -LiteralPath $newBackend -Destination $targetBackend `
+            -Recurse -Force
+
+          if (Test-Path -LiteralPath "dist") {
+            Remove-Item -LiteralPath "dist" -Recurse -Force
+          }
+          New-Item -ItemType Directory -Force -Path "dist" | Out-Null
+          python scripts/pack-tauri/stage_windows_portable.py `
+            --version "${{ steps.version.outputs.version }}" `
+            --exe (Join-Path $env:BASE_PORTABLE_ROOT "GO-CLAW-Portable.exe") `
+            --binaries (Join-Path $env:BASE_PORTABLE_ROOT "binaries") `
+            --dist "dist"
+          if ($LASTEXITCODE -ne 0) {
+            throw "Portable restaging failed"
+          }
+
+      - name: Verify rebuilt portable archive
+        timeout-minutes: 15
+        uses: ./.github/actions/verify-tauri-windows-portable
+        with:
+          dashscope-api-key: ${{ secrets.QWENPAW_DASHSCOPE_API_KEY }}
+
+      - name: Upload portable verify logs
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: portable-reverify-logs-${{ steps.version.outputs.version }}
+          path: |
+            ${{ env.PORTABLE_ROOT }}/logs/
+            ${{ env.PORTABLE_ROOT }}/data/desktop.log
+          if-no-files-found: ignore
+          retention-days: 7
+
+      - name: Stop portable processes
+        if: always()
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Continue"
+          Get-Process -Name "GO-CLAW-Portable", "qwenpaw-desktop", "qwenpaw-backend" `
+            -ErrorAction SilentlyContinue |
+            Stop-Process -Force -ErrorAction SilentlyContinue
+          foreach ($letter in @("P", "Q", "R", "S", "T", "U")) {
+            subst "${letter}:" /D 2>$null
+          }
+          exit 0
+
+      - name: Upload verified portable artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: GO-CLAW-Portable-Windows-${{ steps.version.outputs.version }}-reverified
+          path: |
+            dist/GO-CLAW-Portable-*-Windows-x64.zip
+            dist/GO-CLAW-Portable-*-Windows-x64.zip.sha256
+          if-no-files-found: error
+
