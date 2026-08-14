@@ -56,20 +56,20 @@ def test_stage_portable_layout_manifest_zip_and_checksum(tmp_path):
     )
 
     root = output.stage_dir
-    assert (root / "QwenPaw-Portable.exe").read_bytes() == b"MZ-test"
+    assert (root / "GO-CLAW-Portable.exe").read_bytes() == b"MZ-test"
     assert json.loads((root / "portable.json").read_text("utf-8")) == {
         "schemaVersion": 1,
         "clientMode": "browser",
     }
-    assert output.zip_path.name == "QwenPaw-Portable-2.0.1-Windows-x64.zip"
+    assert output.zip_path.name == "GO-CLAW-Portable-2.0.1-Windows-x64.zip"
     expected_digest = hashlib.sha256(output.zip_path.read_bytes()).hexdigest()
     assert output.sha256_path.read_text("ascii") == (
         f"{expected_digest}  {output.zip_path.name}\n"
     )
     with zipfile.ZipFile(output.zip_path) as archive:
         names = set(archive.namelist())
-    prefix = "QwenPaw-Portable-2.0.1-Windows-x64/"
-    assert prefix + "QwenPaw-Portable.exe" in names
+    prefix = "GO-CLAW-Portable-2.0.1-Windows-x64/"
+    assert prefix + "GO-CLAW-Portable.exe" in names
     assert prefix + "binaries/node-runtime/node.exe" in names
 
 

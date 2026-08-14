@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { screen, waitFor } from "@testing-library/react";
+import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { renderWithProviders } from "@/test/common_setup";
 import AgentSelector from "./index";
@@ -34,7 +34,13 @@ vi.mock("@/stores/agentStore", () => ({
 }));
 
 vi.mock("react-i18next", () => ({
-  useTranslation: () => ({ t: (key: string) => key }),
+  useTranslation: () => ({
+    t: (key: string) =>
+      ({
+        "agent.currentWorkspace": "当前数字员工",
+        "agent.defaultDisplayName": "通用数字员工",
+      })[key] ?? key,
+  }),
 }));
 
 vi.mock("react-router-dom", async (importOriginal) => {
@@ -45,7 +51,7 @@ vi.mock("react-router-dom", async (importOriginal) => {
 const agents = [
   {
     id: "default",
-    name: "Default",
+    name: "Default Agent",
     enabled: true,
     description: "",
     workspace_dir: "",
@@ -53,24 +59,52 @@ const agents = [
     pinned: true,
   },
   {
-    id: "agent-1",
-    name: "Agent One",
+    id: "marketing-growth",
+    name: "营销获客",
     enabled: true,
-    description: "desc",
+    description: "",
     workspace_dir: "",
     startup_status: "running",
     pinned: false,
   },
   {
-    id: "agent-2",
-    name: "Agent Two",
-    enabled: false,
+    id: "content-production",
+    name: "内容生产",
+    enabled: true,
     description: "",
     workspace_dir: "",
-    startup_status: "disabled",
+    startup_status: "running",
+    pinned: false,
+  },
+  {
+    id: "data-processing",
+    name: "数据处理",
+    enabled: true,
+    description: "",
+    workspace_dir: "",
+    startup_status: "running",
+    pinned: false,
+  },
+  {
+    id: "business-analysis",
+    name: "商业分析",
+    enabled: true,
+    description: "",
+    workspace_dir: "",
+    startup_status: "running",
     pinned: false,
   },
 ];
+
+const disabledAgent = {
+  id: "disabled-agent",
+  name: "Disabled Employee",
+  enabled: false,
+  description: "",
+  workspace_dir: "",
+  startup_status: "disabled",
+  pinned: false,
+};
 
 describe("AgentSelector", () => {
   beforeEach(() => {
@@ -79,12 +113,12 @@ describe("AgentSelector", () => {
     mocks.refreshAgents.mockResolvedValue(undefined);
     mocks.toggleAgentEnabled.mockResolvedValue({
       success: true,
-      agent_id: "agent-2",
+      agent_id: "disabled-agent",
       enabled: true,
     });
     mocks.setAgentPinned.mockResolvedValue({
       success: true,
-      agent_id: "agent-1",
+      agent_id: "marketing-growth",
       pinned: true,
     });
   });
@@ -102,12 +136,44 @@ describe("AgentSelector", () => {
     expect(screen.queryByRole("combobox")).not.toBeInTheDocument();
   });
 
+  it("shows five enabled digital employees in the configured order", async () => {
+    const user = userEvent.setup();
+    renderWithProviders(<AgentSelector />);
+
+    expect(screen.getByText("当前数字员工").parentElement).toHaveTextContent(
+      "当前数字员工 (5)",
+    );
+
+    await user.click(screen.getByRole("combobox"));
+    const expectedNames = [
+      "通用数字员工",
+      "营销获客",
+      "内容生产",
+      "数据处理",
+      "商业分析",
+    ];
+    const dropdown = document.querySelector(".ant-select-dropdown");
+    expect(dropdown).toBeInTheDocument();
+    const displayedNames = expectedNames.map((name) =>
+      within(dropdown as HTMLElement).getByText(name),
+    );
+
+    for (let index = 1; index < displayedNames.length; index += 1) {
+      expect(
+        displayedNames[index - 1].compareDocumentPosition(
+          displayedNames[index],
+        ) & Node.DOCUMENT_POSITION_FOLLOWING,
+      ).toBeTruthy();
+    }
+  });
+
   it("shows disabled agents only after expanding the footer", async () => {
+    mocks.storeState.agents = [...agents, disabledAgent];
     const user = userEvent.setup();
     renderWithProviders(<AgentSelector />);
 
     await user.click(screen.getByRole("combobox"));
-    expect(screen.queryByText("Agent Two")).not.toBeInTheDocument();
+    expect(screen.queryByText("Disabled Employee")).not.toBeInTheDocument();
 
     const disabledHeader = screen.getByRole("button", {
       name: "agent.disabledAgents",
@@ -116,7 +182,7 @@ describe("AgentSelector", () => {
     await user.click(disabledHeader);
 
     expect(disabledHeader).toHaveAttribute("aria-expanded", "true");
-    expect(screen.getByText("Agent Two")).toBeInTheDocument();
+    expect(screen.getByText("Disabled Employee")).toBeInTheDocument();
   });
 
   it("keeps a pinned disabled agent visible and lets it be enabled", async () => {
@@ -142,6 +208,7 @@ describe("AgentSelector", () => {
   });
 
   it("optimistically marks an enabled agent as starting", async () => {
+    mocks.storeState.agents = [...agents, disabledAgent];
     const user = userEvent.setup();
     renderWithProviders(<AgentSelector />);
     await user.click(screen.getByRole("combobox"));
@@ -150,11 +217,14 @@ describe("AgentSelector", () => {
     );
     await user.click(screen.getByRole("button", { name: "agent.enableAgent" }));
 
-    expect(mocks.toggleAgentEnabled).toHaveBeenCalledWith("agent-2", true);
+    expect(mocks.toggleAgentEnabled).toHaveBeenCalledWith(
+      "disabled-agent",
+      true,
+    );
     expect(mocks.setAgents).toHaveBeenCalledWith(
       expect.arrayContaining([
         expect.objectContaining({
-          id: "agent-2",
+          id: "disabled-agent",
           enabled: true,
           startup_status: "starting",
         }),
@@ -163,16 +233,27 @@ describe("AgentSelector", () => {
   });
 
   it("switches to default after disabling the selected agent", async () => {
-    mocks.storeState.selectedAgent = "agent-1";
+    mocks.storeState.selectedAgent = "marketing-growth";
     const user = userEvent.setup();
     renderWithProviders(<AgentSelector />);
     await user.click(screen.getByRole("combobox"));
+    const dropdown = document.querySelector(".ant-select-dropdown");
+    expect(dropdown).toBeInTheDocument();
+    const selectedOption = within(dropdown as HTMLElement)
+      .getByText("营销获客")
+      .closest(".ant-select-item-option");
+    expect(selectedOption).toBeInTheDocument();
     await user.click(
-      screen.getByRole("button", { name: "agent.disableAgent" }),
+      within(selectedOption as HTMLElement).getByRole("button", {
+        name: "agent.disableAgent",
+      }),
     );
 
     await waitFor(() => {
-      expect(mocks.toggleAgentEnabled).toHaveBeenCalledWith("agent-1", false);
+      expect(mocks.toggleAgentEnabled).toHaveBeenCalledWith(
+        "marketing-growth",
+        false,
+      );
     });
     expect(mocks.setSelectedAgent).toHaveBeenCalledWith("default");
   });

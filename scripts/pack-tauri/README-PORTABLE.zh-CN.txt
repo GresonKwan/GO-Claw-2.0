@@ -1,18 +1,18 @@
-QwenPaw Portable 2.0.1（Windows 10/11 x64）
+GO CLAW Portable 2.0.1（Windows 10/11 x64）
 ================================================
 
 快速启动
 --------
 1. 将 ZIP 完整解压到 NTFS 或 exFAT 格式的 U 盘目录。
-2. 双击 QwenPaw-Portable.exe。
+2. 双击 GO-CLAW-Portable.exe。
 3. 首次启动需要初始化，通常等待 10–120 秒；准备完成后会自动打开系统默认浏览器。
 
 请勿只复制 EXE。binaries、portable.json 与 EXE 必须保持在同一完整目录结构中。
 
 数据与退出
 ----------
-QwenPaw 的数据存放在 EXE 同目录下的 data、secrets、backups、logs 和 cache 目录。
-U 盘盘符变化后，QwenPaw 会自动迁移自身工作区、媒体和项目路径。
+GO CLAW 的数据存放在 EXE 同目录下的 data、secrets、backups、logs 和 cache 目录。
+U 盘盘符变化后，GO CLAW 会自动迁移自身工作区、媒体和项目路径。
 运行时请勿拔出 U 盘。请先通过系统托盘图标选择 Quit，确认程序退出后再安全弹出。
 
 API 与模型
@@ -31,6 +31,6 @@ Windows SmartScreen 可能提示未识别的应用；请确认下载来源并核
 启动问题请查看 logs\qwenpaw-desktop.log 和 data\desktop.log。
 在 PowerShell 中校验 ZIP：
 
-  Get-FileHash .\QwenPaw-Portable-2.0.1-Windows-x64.zip -Algorithm SHA256
+  Get-FileHash .\GO-CLAW-Portable-2.0.1-Windows-x64.zip -Algorithm SHA256
 
 将输出与同目录 .zip.sha256 文件中的值对比。

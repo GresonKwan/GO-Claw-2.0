@@ -1,12 +1,12 @@
 {
-  "productName": "QwenPaw Portable",
+  "productName": "GO CLAW Portable",
   "identifier": "io.agentscope.qwenpaw.portable",
   "app": {
     "windows": [
       {
         "label": "main",
         "create": false,
-        "title": "QwenPaw Portable",
+        "title": "GO CLAW Portable",
         "width": 1280,
         "height": 800,
         "minWidth": 960,

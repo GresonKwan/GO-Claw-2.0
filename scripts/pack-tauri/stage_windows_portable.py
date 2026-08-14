@@ -12,7 +12,7 @@ import zipfile
 from dataclasses import dataclass
 from pathlib import Path
 
-ARCHIVE_STEM = "QwenPaw-Portable-{version}-Windows-x64"
+ARCHIVE_STEM = "GO-CLAW-Portable-{version}-Windows-x64"
 REQUIRED_RUNTIME_ENTRIES = (
     Path("qwenpaw-backend/qwenpaw-backend.exe"),
     Path("python-runtime/python/python.exe"),
@@ -107,7 +107,7 @@ def stage_portable(
             generated.unlink()
 
     stage_dir.mkdir()
-    shutil.copy2(exe, stage_dir / "QwenPaw-Portable.exe")
+    shutil.copy2(exe, stage_dir / "GO-CLAW-Portable.exe")
     shutil.copytree(binaries, stage_dir / "binaries")
     shutil.copy2(license_file, stage_dir / "LICENSE")
     shutil.copy2(readme_file, stage_dir / "README-PORTABLE.zh-CN.txt")
