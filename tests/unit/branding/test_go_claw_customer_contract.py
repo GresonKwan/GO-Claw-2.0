@@ -96,11 +96,17 @@ PACKAGING_CONSUMER_TOKEN_CONTRACTS = {
         "required": ("GO-CLAW-Portable-${VERSION}-Windows-x64.zip",),
     },
     "scripts/verify/launch_tauri_windows_portable.ps1": {
-        "forbidden": ("QwenPaw-Portable",),
+        "forbidden": (
+            "QwenPaw-Portable",
+            "QwenPaw First Backing",
+            "QwenPaw 移动盘 Second",
+        ),
         "required": (
             "GO-CLAW-Portable-*-Windows-x64.zip",
             "GO-CLAW-Portable.exe",
             'Get-Process -Name "GO-CLAW-Portable", "qwenpaw-desktop"',
+            'Join-Path $env:RUNNER_TEMP "GO CLAW 首次盘"',
+            'Join-Path $env:RUNNER_TEMP "GO CLAW 中文移动盘"',
         ),
     },
     ".github/workflows/desktop-build.yml": {
@@ -256,6 +262,22 @@ def test_customer_visible_copy_does_not_contain_qwenpaw_brand() -> None:
     assert (
         "QwenPaw" not in customer_text
     ), "Customer-visible QwenPaw copy remains:\n" + "\n".join(offenders)
+
+
+def test_portable_readme_explains_drive_letter_rebinding() -> None:
+    readme = _read_customer_text(
+        "scripts/pack-tauri/README-PORTABLE.zh-CN.txt"
+    )
+
+    assert readme.startswith("GO CLAW Portable")
+    assert "双击 GO-CLAW-Portable.exe" in readme
+    assert (
+        "U 盘盘符从 E、F 或 G 变化时，无需修改配置" in readme
+    )
+    assert (
+        "Get-FileHash .\\GO-CLAW-Portable-2.0.1-Windows-x64.zip "
+        "-Algorithm SHA256"
+    ) in readme
 
 
 def test_customer_visible_copy_does_not_reference_legacy_assets() -> None:

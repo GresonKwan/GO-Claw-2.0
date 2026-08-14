@@ -108,8 +108,8 @@ Expand-Archive -Path $archive.FullName -DestinationPath $testBase -Force
 $extracted = Get-ChildItem $testBase -Directory | Select-Object -First 1
 if (-not $extracted) { throw "Portable archive did not contain a root directory" }
 
-$firstBacking = Join-Path $env:RUNNER_TEMP "QwenPaw First Backing"
-$secondBacking = Join-Path $env:RUNNER_TEMP "QwenPaw 移动盘 Second"
+$firstBacking = Join-Path $env:RUNNER_TEMP "GO CLAW 首次盘"
+$secondBacking = Join-Path $env:RUNNER_TEMP "GO CLAW 中文移动盘"
 foreach ($path in @($firstBacking, $secondBacking)) {
     if (Test-Path $path) { Remove-Item -Recurse -Force $path }
 }
