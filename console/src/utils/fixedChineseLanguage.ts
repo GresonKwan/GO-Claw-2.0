@@ -3,8 +3,9 @@ import { languageApi } from "../api/modules/language";
 
 export async function synchronizeFixedChineseLanguage(
   languageEngine: Pick<i18n, "language" | "changeLanguage">,
-  updateLanguage: (language: string) => Promise<unknown> =
-    languageApi.updateLanguage,
+  updateLanguage: (
+    language: string,
+  ) => Promise<unknown> = languageApi.updateLanguage,
   reportError: (message: string, error: unknown) => void = console.error,
 ): Promise<void> {
   localStorage.removeItem("language");
