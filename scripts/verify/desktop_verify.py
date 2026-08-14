@@ -49,12 +49,29 @@ import sys
 import time
 import urllib.error
 import urllib.request
+from html.parser import HTMLParser
 
 DEFAULT_MODEL = "qwen3.6-plus"
 DEFAULT_PROVIDER = "dashscope"
 DEFAULT_TIMEOUT = 120
 SESSION_ID = "release-verify-session"
 USER_ID = "release-verify-user"
+
+GO_CLAW_EMPLOYEES = (
+    ("default", "通用数字员工"),
+    ("marketing-growth", "营销获客"),
+    ("content-production", "内容生产"),
+    ("data-processing", "数据处理"),
+    ("business-analysis", "商业分析"),
+)
+GO_CLAW_MEDIA_TOOLS = (
+    "generate_image_qwen",
+    "edit_image_qwen",
+    "text_to_video_wan",
+    "image_to_video_wan",
+    "reference_to_video_wan",
+)
+GO_CLAW_MEDIA_PLUGINS = ("qwen-image-tool", "wan27-tool")
 
 # Selectors come straight from e2e/pages/chat_page.py so they stay in sync
 # with what the real UI tests expect.
@@ -133,20 +150,163 @@ def health_check(base_url: str) -> str:
     return version
 
 
+class _FrontendShellParser(HTMLParser):
+    """Collect only stable shell metadata from the frontend HTML."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.html_lang = ""
+        self.title_parts: list[str] = []
+        self.has_root = False
+        self._inside_title = False
+
+    def handle_starttag(
+        self,
+        tag: str,
+        attrs: list[tuple[str, str | None]],
+    ) -> None:
+        attributes = dict(attrs)
+        if tag == "html":
+            self.html_lang = attributes.get("lang") or ""
+        elif tag == "title":
+            self._inside_title = True
+        elif attributes.get("id") == "root":
+            self.has_root = True
+
+    def handle_endtag(self, tag: str) -> None:
+        if tag == "title":
+            self._inside_title = False
+
+    def handle_data(self, data: str) -> None:
+        if self._inside_title:
+            self.title_parts.append(data)
+
+
 def verify_frontend(base_url: str) -> None:
-    """Verify the bundled console frontend is served at ``/``."""
+    """Verify stable GO CLAW shell metadata in the bundled frontend."""
     body = _http("GET", f"{base_url}/")
-    lower = body.lower()
-    if "<html" not in lower:
+    parser = _FrontendShellParser()
+    parser.feed(body)
+    if not parser.html_lang:
         raise RuntimeError(
             f"Frontend root did not return HTML (first 200 chars): "
             f"{body[:200]}",
         )
-    if "qwenpaw" not in lower:
+    if parser.html_lang != "zh-CN":
         raise RuntimeError(
-            "Frontend HTML does not mention QwenPaw — wrong bundle?",
+            f"Frontend html lang must be zh-CN, got {parser.html_lang!r}",
         )
-    print("PASS  GET / -> frontend HTML served")
+    title = " ".join("".join(parser.title_parts).split())
+    if title != "GO CLAW":
+        raise RuntimeError(f"Frontend title must be GO CLAW, got {title!r}")
+    if not parser.has_root:
+        raise RuntimeError(
+            "Frontend HTML is missing the root application shell",
+        )
+    print("PASS  GET / -> GO CLAW zh-CN frontend shell served")
+
+
+def _json_payload(body: str, endpoint: str) -> object:
+    try:
+        return json.loads(body)
+    except json.JSONDecodeError as exc:
+        raise RuntimeError(
+            f"{endpoint} returned non-JSON: {body[:200]}",
+        ) from exc
+
+
+def _has_nonempty_api_key(value: object) -> bool:
+    if isinstance(value, dict):
+        for key, nested in value.items():
+            if key.lower() == "api_key":
+                if isinstance(nested, str) and nested.strip():
+                    return True
+                if nested is not None and not isinstance(nested, str):
+                    return True
+            if _has_nonempty_api_key(nested):
+                return True
+    elif isinstance(value, list):
+        return any(_has_nonempty_api_key(item) for item in value)
+    return False
+
+
+def verify_go_claw_employees(base_url: str) -> None:
+    """Verify the five startup employees and keyless media-tool defaults."""
+    endpoint = "/api/agents"
+    payload = _json_payload(_http("GET", f"{base_url}{endpoint}"), endpoint)
+    if not isinstance(payload, dict) or not isinstance(
+        payload.get("agents"),
+        list,
+    ):
+        raise RuntimeError(f"{endpoint} missing agents list")
+
+    agents = payload["agents"]
+    expected_ids = [agent_id for agent_id, _name in GO_CLAW_EMPLOYEES]
+    actual_ids = [agent.get("id") for agent in agents[:5]]
+    if actual_ids != expected_ids:
+        raise RuntimeError(
+            f"GO CLAW first five IDs must be {expected_ids}, got {actual_ids}",
+        )
+
+    for index, (expected_id, expected_name) in enumerate(GO_CLAW_EMPLOYEES):
+        agent = agents[index]
+        if agent.get("name") != expected_name:
+            raise RuntimeError(
+                f"Employee {expected_id!r} must be named {expected_name!r}",
+            )
+        if agent.get("enabled") is not True or agent.get("pinned") is not True:
+            raise RuntimeError(
+                f"Employee {expected_id!r} must be enabled and pinned",
+            )
+
+    content_endpoint = "/api/agents/content-production"
+    content = _json_payload(
+        _http("GET", f"{base_url}{content_endpoint}"),
+        content_endpoint,
+    )
+    if not isinstance(content, dict):
+        raise RuntimeError(f"{content_endpoint} must return an object")
+    tools = content.get("tools")
+    builtin_tools = (
+        tools.get("builtin_tools") if isinstance(tools, dict) else None
+    )
+    if not isinstance(builtin_tools, dict):
+        raise RuntimeError(
+            f"{content_endpoint} missing tools.builtin_tools",
+        )
+    for tool_name in GO_CLAW_MEDIA_TOOLS:
+        tool = builtin_tools.get(tool_name)
+        if not isinstance(tool, dict) or tool.get("enabled") is not True:
+            raise RuntimeError(
+                f"Content employee media tool {tool_name!r} is not enabled",
+            )
+    if _has_nonempty_api_key(builtin_tools):
+        raise RuntimeError(
+            "Content employee tool config contains a nonempty api_key",
+        )
+
+    print("PASS  GO CLAW five digital employees and keyless media tools")
+
+
+def verify_go_claw_plugins(base_url: str) -> None:
+    """Verify startup discovers both bundled media plugins."""
+    endpoint = "/api/plugins"
+    payload = _json_payload(_http("GET", f"{base_url}{endpoint}"), endpoint)
+    if not isinstance(payload, list):
+        raise RuntimeError(f"{endpoint} must return a list")
+    discovered_ids = {
+        plugin.get("id") for plugin in payload if isinstance(plugin, dict)
+    }
+    missing = [
+        plugin_id
+        for plugin_id in GO_CLAW_MEDIA_PLUGINS
+        if plugin_id not in discovered_ids
+    ]
+    if missing:
+        raise RuntimeError(
+            f"GO CLAW bundled media plugins were not discovered: {missing}",
+        )
+    print("PASS  GO CLAW bundled media plugins discovered")
 
 
 def configure_provider(
@@ -879,6 +1039,8 @@ def main() -> int:
         # ---- API-level checks (always run, no key needed) ----
         health_check(base_url)
         verify_frontend(base_url)
+        verify_go_claw_employees(base_url)
+        verify_go_claw_plugins(base_url)
 
         # ---- UI load (always run unless --skip-ui, no key needed) ----
         # This catches broken Vite bundles, missing assets, CSP issues,
