@@ -35,6 +35,10 @@ def collect_tree(source_dir, target_dir):
         (str(path), str(Path(target_dir) / path.relative_to(source_dir).parent))
         for path in source_dir.rglob("*")
         if path.is_file()
+        and not any(part == "__pycache__" for part in path.relative_to(source_dir).parts)
+        and not path.name.startswith("._")
+        and path.name != ".DS_Store"
+        and path.suffix not in {".pyc", ".pyo"}
     ]
 
 
@@ -61,11 +65,20 @@ datas = [
     (str(SRC / src), dst) for src, dst in _data_dirs if (SRC / src).is_dir()
 ]
 datas += collect_tree(CONSOLE_DIST, "qwenpaw/console")
+datas += collect_tree(
+    REPO_ROOT / "plugins" / "tool" / "qwen-image",
+    "qwenpaw/bundled_plugins/qwen-image",
+)
+datas += collect_tree(
+    REPO_ROOT / "plugins" / "tool" / "wan27",
+    "qwenpaw/bundled_plugins/wan27",
+)
 
 # Include reme package data files (configs, tool yamls, etc.)
 datas += collect_data_files("reme")
 datas += collect_data_files("whisper")
 datas += collect_data_files("agentscope")
+datas += collect_data_files("dashscope")
 datas += collect_data_files(
     "agentscope.tool._builtin._scripts",
     include_py_files=True,
@@ -99,6 +112,7 @@ _metadata_pkgs = [
     "huggingface_hub",
     "modelscope",
     "openai-whisper",
+    "dashscope",
 ]
 for _pkg in _metadata_pkgs:
     try:
@@ -159,6 +173,7 @@ a = Analysis(
         *collect_submodules("agentscope.workspace._mcp_gateway"),
         *collect_submodules("whisper"),
         *collect_submodules("chromadb"),
+        *collect_submodules("dashscope"),
     ],
     hookspath=[],
     hooksconfig={},

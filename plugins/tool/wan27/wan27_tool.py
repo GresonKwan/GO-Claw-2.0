@@ -27,6 +27,7 @@ _DASHSCOPE_LOCK = threading.Lock()
 
 _DEFAULT_ENDPOINT = "https://dashscope.aliyuncs.com/api/v1"
 _DEFAULT_TIMEOUT = 600.0
+_MISSING_API_KEY_MESSAGE = "请在当前数字员工的工具配置中填写 DashScope API Key"
 
 _VALID_RESOLUTIONS = {"720P", "1080P"}
 _VALID_RATIOS = {"16:9", "9:16", "1:1", "4:3", "3:4"}
@@ -92,7 +93,7 @@ def _extract_config(
     Returns:
         Tuple of (api_key, endpoint, timeout).
     """
-    api_key = tool_config.get("api_key", "")
+    api_key = str(tool_config.get("api_key") or "").strip()
     endpoint = tool_config.get("endpoint", "")
     if not endpoint or not endpoint.strip():
         endpoint = _DEFAULT_ENDPOINT
@@ -104,6 +105,19 @@ def _extract_config(
         timeout = float(timeout_raw)
 
     return api_key, endpoint, timeout
+
+
+def _missing_api_key_result() -> ToolChunk:
+    """Return the actionable customer-facing missing-key error."""
+    return ToolChunk(
+        state=ToolResultState.ERROR,
+        content=[
+            TextBlock(
+                type="text",
+                text=_MISSING_API_KEY_MESSAGE,
+            ),
+        ],
+    )
 
 
 async def _download_video(
@@ -219,33 +233,11 @@ async def text_to_video_wan(
     try:
         tool_config = get_tool_config("text_to_video_wan")
         if not tool_config:
-            return ToolChunk(
-                state=ToolResultState.ERROR,
-                content=[
-                    TextBlock(
-                        type="text",
-                        text=(
-                            "Error: Tool not configured. "
-                            "Please set your API key in the tool settings."
-                        ),
-                    ),
-                ],
-            )
+            return _missing_api_key_result()
 
         api_key, endpoint, timeout = _extract_config(tool_config)
         if not api_key:
-            return ToolChunk(
-                state=ToolResultState.ERROR,
-                content=[
-                    TextBlock(
-                        type="text",
-                        text=(
-                            "Error: DashScope API key not configured. "
-                            "Please set your API key in the tool settings."
-                        ),
-                    ),
-                ],
-            )
+            return _missing_api_key_result()
 
         if resolution not in _VALID_RESOLUTIONS:
             return ToolChunk(
@@ -435,33 +427,11 @@ async def image_to_video_wan(
     try:
         tool_config = get_tool_config("image_to_video_wan")
         if not tool_config:
-            return ToolChunk(
-                state=ToolResultState.ERROR,
-                content=[
-                    TextBlock(
-                        type="text",
-                        text=(
-                            "Error: Tool not configured. "
-                            "Please set your API key in the tool settings."
-                        ),
-                    ),
-                ],
-            )
+            return _missing_api_key_result()
 
         api_key, endpoint, timeout = _extract_config(tool_config)
         if not api_key:
-            return ToolChunk(
-                state=ToolResultState.ERROR,
-                content=[
-                    TextBlock(
-                        type="text",
-                        text=(
-                            "Error: DashScope API key not configured. "
-                            "Please set your API key in the tool settings."
-                        ),
-                    ),
-                ],
-            )
+            return _missing_api_key_result()
 
         if resolution not in _VALID_RESOLUTIONS:
             return ToolChunk(
@@ -594,11 +564,11 @@ async def image_to_video_wan(
         mode_desc = (
             "video-continuation"
             if first_clip_url
-            else "first-last-frame"
-            if last_frame_url
-            else "audio-driven"
-            if driving_audio_url
-            else "first-frame"
+            else (
+                "first-last-frame"
+                if last_frame_url
+                else "audio-driven" if driving_audio_url else "first-frame"
+            )
         )
 
         logger.info(
@@ -744,33 +714,11 @@ async def reference_to_video_wan(
     try:
         tool_config = get_tool_config("reference_to_video_wan")
         if not tool_config:
-            return ToolChunk(
-                state=ToolResultState.ERROR,
-                content=[
-                    TextBlock(
-                        type="text",
-                        text=(
-                            "Error: Tool not configured. "
-                            "Please set your API key in the tool settings."
-                        ),
-                    ),
-                ],
-            )
+            return _missing_api_key_result()
 
         api_key, endpoint, timeout = _extract_config(tool_config)
         if not api_key:
-            return ToolChunk(
-                state=ToolResultState.ERROR,
-                content=[
-                    TextBlock(
-                        type="text",
-                        text=(
-                            "Error: DashScope API key not configured. "
-                            "Please set your API key in the tool settings."
-                        ),
-                    ),
-                ],
-            )
+            return _missing_api_key_result()
 
         if not reference_images:
             return ToolChunk(

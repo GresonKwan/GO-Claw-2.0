@@ -71,6 +71,15 @@ echo "== Installing project dependencies =="
 install_python_packages -e ".[full]"
 echo "Project dependencies installed with full extras"
 
+# Bundle the media plugin SDK so first use never needs a network pip install.
+echo "== Installing bundled media dependencies =="
+install_python_packages "dashscope>=1.25.16"
+if ! "$PYTHON_BIN" -c "import dashscope" 2> /dev/null; then
+    echo "ERROR: DashScope import check failed"
+    exit 1
+fi
+echo "DashScope installed and importable"
+
 # Fix agent-client-protocol namespace collision
 # PyPI has an empty 'acp' stub that shadows the real package
 if ! "$PYTHON_BIN" -c "from acp import Agent" 2> /dev/null; then

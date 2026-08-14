@@ -26,6 +26,7 @@ _DASHSCOPE_LOCK = threading.Lock()
 
 _DEFAULT_ENDPOINT = "https://dashscope.aliyuncs.com/api/v1"
 _DEFAULT_TIMEOUT = 120.0
+_MISSING_API_KEY_MESSAGE = "请在当前数字员工的工具配置中填写 DashScope API Key"
 
 _IMAGE_MIME_TYPES = {
     ".png": "image/png",
@@ -117,7 +118,7 @@ def _extract_config(
     Returns:
         Tuple of (api_key, endpoint, timeout, model).
     """
-    api_key = tool_config.get("api_key", "")
+    api_key = str(tool_config.get("api_key") or "").strip()
     endpoint = tool_config.get("endpoint", "")
     if not endpoint or not endpoint.strip():
         endpoint = _DEFAULT_ENDPOINT
@@ -131,6 +132,19 @@ def _extract_config(
     model = tool_config.get("model", "") or default_model
 
     return api_key, endpoint, timeout, model
+
+
+def _missing_api_key_result() -> ToolChunk:
+    """Return the actionable customer-facing missing-key error."""
+    return ToolChunk(
+        state=ToolResultState.ERROR,
+        content=[
+            TextBlock(
+                type="text",
+                text=_MISSING_API_KEY_MESSAGE,
+            ),
+        ],
+    )
 
 
 async def _download_image(
@@ -285,36 +299,14 @@ async def generate_image_qwen(
     try:
         tool_config = get_tool_config("generate_image_qwen")
         if not tool_config:
-            return ToolChunk(
-                state=ToolResultState.ERROR,
-                content=[
-                    TextBlock(
-                        type="text",
-                        text=(
-                            "Error: Tool not configured. "
-                            "Please set your API key in the tool settings."
-                        ),
-                    ),
-                ],
-            )
+            return _missing_api_key_result()
 
         api_key, endpoint, timeout, model = _extract_config(
             tool_config,
             default_model="qwen-image-2.0-pro",
         )
         if not api_key:
-            return ToolChunk(
-                state=ToolResultState.ERROR,
-                content=[
-                    TextBlock(
-                        type="text",
-                        text=(
-                            "Error: DashScope API key not configured. "
-                            "Please set your API key in the tool settings."
-                        ),
-                    ),
-                ],
-            )
+            return _missing_api_key_result()
 
         if model not in _VALID_MODELS_GENERATE:
             return ToolChunk(
@@ -546,36 +538,14 @@ async def edit_image_qwen(
 
         tool_config = get_tool_config("edit_image_qwen")
         if not tool_config:
-            return ToolChunk(
-                state=ToolResultState.ERROR,
-                content=[
-                    TextBlock(
-                        type="text",
-                        text=(
-                            "Error: Tool not configured. "
-                            "Please set your API key in the tool settings."
-                        ),
-                    ),
-                ],
-            )
+            return _missing_api_key_result()
 
         api_key, endpoint, timeout, model = _extract_config(
             tool_config,
             default_model="qwen-image-2.0-pro",
         )
         if not api_key:
-            return ToolChunk(
-                state=ToolResultState.ERROR,
-                content=[
-                    TextBlock(
-                        type="text",
-                        text=(
-                            "Error: DashScope API key not configured. "
-                            "Please set your API key in the tool settings."
-                        ),
-                    ),
-                ],
-            )
+            return _missing_api_key_result()
 
         if model not in _VALID_MODELS_EDIT:
             return ToolChunk(

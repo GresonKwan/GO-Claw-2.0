@@ -2,11 +2,13 @@
 
 from __future__ import annotations
 
+import ast
 import hashlib
 import json
 import re
 from pathlib import Path
 
+import pytest
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[3]
 
@@ -141,17 +143,42 @@ PACKAGING_CONSUMER_TOKEN_CONTRACTS = {
     },
 }
 STANDALONE_AGENT_PATTERN = re.compile(r"(?<![A-Za-z])Agent(?![A-Za-z])")
+SUSPECTED_API_KEY_PATTERN = re.compile(r"sk-[A-Za-z0-9_-]{16,}")
+CHINESE_CHARACTER_PATTERN = re.compile(r"[\u3400-\u9fff]")
+MISSING_DASHSCOPE_KEY_MESSAGE = (
+    "请在当前数字员工的工具配置中填写 DashScope API Key"
+)
+MEDIA_PLUGIN_CONTRACTS = {
+    "plugins/tool/qwen-image": {
+        "id": "qwen-image-tool",
+        "product_name": "Qwen-Image",
+        "tool_names": ["generate_image_qwen", "edit_image_qwen"],
+        "config_names": {"api_key", "model", "endpoint", "timeout"},
+        "tool_source": "qwen_image_tool.py",
+    },
+    "plugins/tool/wan27": {
+        "id": "wan27-tool",
+        "product_name": "Wan 2.7",
+        "tool_names": [
+            "text_to_video_wan",
+            "image_to_video_wan",
+            "reference_to_video_wan",
+        ],
+        "config_names": {"api_key", "endpoint", "timeout"},
+        "tool_source": "wan27_tool.py",
+    },
+}
 
 
 def _read_customer_text(relative_path: str) -> str:
     path = REPOSITORY_ROOT / relative_path
-    assert path.is_file(), f"Missing customer-visible text path: {relative_path}"
+    assert (
+        path.is_file()
+    ), f"Missing customer-visible text path: {relative_path}"
     return path.read_text(encoding="utf-8")
 
 
-def _matching_lines(
-    relative_path: str, pattern: re.Pattern[str]
-) -> list[str]:
+def _matching_lines(relative_path: str, pattern: re.Pattern[str]) -> list[str]:
     matches = []
     for line_number, line in enumerate(
         _read_customer_text(relative_path).splitlines(), start=1
@@ -162,11 +189,24 @@ def _matching_lines(
     return matches
 
 
+def _contains_chinese(value: object) -> bool:
+    return (
+        isinstance(value, str)
+        and CHINESE_CHARACTER_PATTERN.search(value) is not None
+    )
+
+
+def _call_name(node: ast.Call) -> str | None:
+    return node.func.id if isinstance(node.func, ast.Name) else None
+
+
 def test_go_claw_customer_assets_match_the_verified_contract() -> None:
     for asset_path, expected_sha256 in ASSET_SHA256.items():
         asset = REPOSITORY_ROOT / asset_path
         assert asset.is_file(), f"Missing required asset: {asset_path}"
-        assert hashlib.sha256(asset.read_bytes()).hexdigest() == expected_sha256
+        assert (
+            hashlib.sha256(asset.read_bytes()).hexdigest() == expected_sha256
+        )
 
 
 def test_customer_visible_copy_does_not_contain_qwenpaw_brand() -> None:
@@ -179,9 +219,9 @@ def test_customer_visible_copy_does_not_contain_qwenpaw_brand() -> None:
         for match in _matching_lines(path, re.compile(r"QwenPaw"))
     ]
 
-    assert "QwenPaw" not in customer_text, (
-        "Customer-visible QwenPaw copy remains:\n" + "\n".join(offenders)
-    )
+    assert (
+        "QwenPaw" not in customer_text
+    ), "Customer-visible QwenPaw copy remains:\n" + "\n".join(offenders)
 
 
 def test_customer_visible_copy_does_not_reference_legacy_assets() -> None:
@@ -192,7 +232,9 @@ def test_customer_visible_copy_does_not_reference_legacy_assets() -> None:
         match
         for asset_reference in LEGACY_CUSTOMER_ASSET_REFERENCES
         for path in CUSTOMER_VISIBLE_TEXT_PATHS
-        for match in _matching_lines(path, re.compile(re.escape(asset_reference)))
+        for match in _matching_lines(
+            path, re.compile(re.escape(asset_reference))
+        )
     ]
 
     assert all(
@@ -203,11 +245,13 @@ def test_customer_visible_copy_does_not_reference_legacy_assets() -> None:
 
 def test_market_plugin_categories_use_digital_employee_copy() -> None:
     market_plugin_list_text = _read_customer_text(MARKET_PLUGIN_LIST_PATH)
-    offenders = _matching_lines(MARKET_PLUGIN_LIST_PATH, re.compile(r"Agent 工具"))
-
-    assert "Agent 工具" not in market_plugin_list_text, (
-        "Legacy Agent 工具 customer copy remains:\n" + "\n".join(offenders)
+    offenders = _matching_lines(
+        MARKET_PLUGIN_LIST_PATH, re.compile(r"Agent 工具")
     )
+
+    assert (
+        "Agent 工具" not in market_plugin_list_text
+    ), "Legacy Agent 工具 customer copy remains:\n" + "\n".join(offenders)
 
 
 def test_tauri_product_names_and_window_titles_are_exact_go_claw() -> None:
@@ -218,7 +262,9 @@ def test_tauri_product_names_and_window_titles_are_exact_go_claw() -> None:
             failures.append(
                 f"{relative_path}:productName={config.get('productName')!r}"
             )
-        for index, window in enumerate(config.get("app", {}).get("windows", [])):
+        for index, window in enumerate(
+            config.get("app", {}).get("windows", [])
+        ):
             if window.get("title") != "GO CLAW":
                 failures.append(
                     f"{relative_path}:app.windows[{index}].title="
@@ -238,7 +284,10 @@ def test_tauri_bootstrap_declares_the_customer_locale() -> None:
 
 def test_direct_packaging_consumers_use_current_artifact_tokens() -> None:
     failures = []
-    for relative_path, token_contract in PACKAGING_CONSUMER_TOKEN_CONTRACTS.items():
+    for (
+        relative_path,
+        token_contract,
+    ) in PACKAGING_CONSUMER_TOKEN_CONTRACTS.items():
         consumer_text = _read_customer_text(relative_path)
         for token in token_contract["forbidden"]:
             if token in consumer_text:
@@ -256,15 +305,202 @@ def test_zh_locale_does_not_contain_legacy_smart_agent_term() -> None:
     zh_locale_text = _read_customer_text(ZH_LOCALE_PATH)
     offenders = _matching_lines(ZH_LOCALE_PATH, re.compile(r"智能体"))
 
-    assert "智能体" not in zh_locale_text, (
-        "Legacy 智能体 copy remains:\n" + "\n".join(offenders)
-    )
+    assert (
+        "智能体" not in zh_locale_text
+    ), "Legacy 智能体 copy remains:\n" + "\n".join(offenders)
 
 
 def test_zh_locale_does_not_contain_standalone_agent_label() -> None:
     zh_locale_text = _read_customer_text(ZH_LOCALE_PATH)
     offenders = _matching_lines(ZH_LOCALE_PATH, STANDALONE_AGENT_PATTERN)
 
-    assert STANDALONE_AGENT_PATTERN.search(zh_locale_text) is None, (
-        "Standalone Agent customer labels remain:\n" + "\n".join(offenders)
+    assert (
+        STANDALONE_AGENT_PATTERN.search(zh_locale_text) is None
+    ), "Standalone Agent customer labels remain:\n" + "\n".join(offenders)
+
+
+def test_bundled_media_plugin_manifests_are_customer_ready_and_keyless() -> (
+    None
+):
+    for plugin_dir, contract in MEDIA_PLUGIN_CONTRACTS.items():
+        manifest_text = _read_customer_text(f"{plugin_dir}/plugin.json")
+        manifest = json.loads(manifest_text)
+
+        assert manifest["id"] == contract["id"]
+        assert manifest["author"] == "GO CLAW Team"
+        assert contract["product_name"] in manifest["name"]
+        assert _contains_chinese(manifest["name"])
+        assert _contains_chinese(manifest["description"])
+        assert _contains_chinese(manifest["description_i18n"]["zh-CN"])
+        assert manifest["dependencies"] == [
+            "dashscope>=1.25.16",
+            "httpx>=0.24.0",
+        ]
+        requirements = _read_customer_text(
+            f"{plugin_dir}/requirements.txt",
+        ).splitlines()
+        assert requirements == manifest["dependencies"]
+
+        tools = manifest["meta"]["tools"]
+        assert [tool["name"] for tool in tools] == contract["tool_names"]
+        for tool in tools:
+            assert _contains_chinese(tool["description"])
+            fields = {field["name"]: field for field in tool["config_fields"]}
+            assert set(fields) == contract["config_names"]
+            for field in fields.values():
+                assert _contains_chinese(field["label"])
+                assert _contains_chinese(field["help"])
+            api_key_field = fields["api_key"]
+            assert api_key_field["type"] == "password"
+            assert api_key_field["required"] is True
+            assert "default" not in api_key_field
+
+        assert _contains_chinese(manifest["meta"]["api_key_hint"])
+        assert SUSPECTED_API_KEY_PATTERN.search(manifest_text) is None
+
+
+def test_media_tools_expose_the_actionable_missing_key_message() -> None:
+    for plugin_dir, contract in MEDIA_PLUGIN_CONTRACTS.items():
+        tool_source = _read_customer_text(
+            f"{plugin_dir}/{contract['tool_source']}",
+        )
+        assert MISSING_DASHSCOPE_KEY_MESSAGE in tool_source
+        assert SUSPECTED_API_KEY_PATTERN.search(tool_source) is None
+
+
+def test_pyinstaller_spec_bundles_media_plugins_and_dashscope() -> None:
+    spec_tree = ast.parse(
+        _read_customer_text("scripts/pack-tauri/qwenpaw.spec")
     )
+    calls = [
+        node for node in ast.walk(spec_tree) if isinstance(node, ast.Call)
+    ]
+    tree_sources_by_destination: dict[str, set[str]] = {}
+    for call in calls:
+        if _call_name(call) != "collect_tree" or len(call.args) < 2:
+            continue
+        destination = ast.literal_eval(call.args[1])
+        source_parts = {
+            node.value
+            for node in ast.walk(call.args[0])
+            if isinstance(node, ast.Constant) and isinstance(node.value, str)
+        }
+        tree_sources_by_destination[destination] = source_parts
+
+    assert tree_sources_by_destination[
+        "qwenpaw/bundled_plugins/qwen-image"
+    ] >= {"plugins", "tool", "qwen-image"}
+    assert tree_sources_by_destination["qwenpaw/bundled_plugins/wan27"] >= {
+        "plugins",
+        "tool",
+        "wan27",
+    }
+    assert any(
+        _call_name(call) == "collect_data_files"
+        and call.args
+        and ast.literal_eval(call.args[0]) == "dashscope"
+        for call in calls
+    )
+
+    metadata_assignment = next(
+        node
+        for node in spec_tree.body
+        if isinstance(node, ast.Assign)
+        and any(
+            isinstance(target, ast.Name) and target.id == "_metadata_pkgs"
+            for target in node.targets
+        )
+    )
+    assert "dashscope" in ast.literal_eval(metadata_assignment.value)
+
+    analysis_call = next(
+        call for call in calls if _call_name(call) == "Analysis"
+    )
+    hiddenimports = next(
+        keyword.value
+        for keyword in analysis_call.keywords
+        if keyword.arg == "hiddenimports"
+    )
+    assert any(
+        isinstance(call, ast.Call)
+        and _call_name(call) == "collect_submodules"
+        and call.args
+        and ast.literal_eval(call.args[0]) == "dashscope"
+        for call in ast.walk(hiddenimports)
+    )
+
+
+def test_pyinstaller_collect_tree_filters_packaging_noise(
+    tmp_path: Path,
+) -> None:
+    spec_tree = ast.parse(
+        _read_customer_text("scripts/pack-tauri/qwenpaw.spec")
+    )
+    collect_tree_node = next(
+        node
+        for node in spec_tree.body
+        if isinstance(node, ast.FunctionDef) and node.name == "collect_tree"
+    )
+    namespace: dict[str, object] = {"Path": Path}
+    function_module = ast.fix_missing_locations(
+        ast.Module(body=[collect_tree_node], type_ignores=[]),
+    )
+    exec(compile(function_module, "qwenpaw.spec", "exec"), namespace)
+
+    source_root = tmp_path / "plugin"
+    (source_root / "nested" / "__pycache__").mkdir(parents=True)
+    for relative_path in (
+        "plugin.json",
+        "nested/keep.py",
+        "._plugin.json",
+        ".DS_Store",
+        "nested/._keep.py",
+        "nested/__pycache__/keep.cpython-311.pyc",
+        "nested/direct.pyc",
+    ):
+        path = source_root / relative_path
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text("fixture", encoding="utf-8")
+
+    collect_tree = namespace["collect_tree"]
+    assert callable(collect_tree)
+    datas = collect_tree(source_root, "bundled")
+    copied_paths = {
+        Path(source).relative_to(source_root).as_posix()
+        for source, _destination in datas
+    }
+
+    assert copied_paths == {"plugin.json", "nested/keep.py"}
+
+
+@pytest.mark.parametrize(
+    ("script_path", "install_token", "import_token", "freeze_token"),
+    [
+        (
+            "scripts/pack-tauri/build_pyinstaller.sh",
+            'install_python_packages "dashscope>=1.25.16"',
+            '-c "import dashscope"',
+            '"$PYTHON_BIN" -m PyInstaller',
+        ),
+        (
+            "scripts/pack-tauri/build_pyinstaller.ps1",
+            'Install-PythonPackages -Packages @("dashscope>=1.25.16")',
+            'Test-PythonImport "import dashscope"',
+            "& $PYTHON_BIN -m PyInstaller",
+        ),
+    ],
+)
+def test_build_scripts_install_and_import_dashscope_before_freezing(
+    script_path: str,
+    install_token: str,
+    import_token: str,
+    freeze_token: str,
+) -> None:
+    script_text = _read_customer_text(script_path)
+
+    install_index = script_text.index(install_token)
+    import_index = script_text.index(import_token, install_index)
+    freeze_index = script_text.index(freeze_token, import_index)
+
+    assert install_index < import_index < freeze_index
+    assert "httpx>=" not in script_text

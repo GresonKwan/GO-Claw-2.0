@@ -133,6 +133,14 @@ Write-Host "== Installing project dependencies ==" -ForegroundColor Yellow
 Install-PythonPackages -Packages @("-e", ".[full]")
 Write-Host "Project dependencies installed with full extras" -ForegroundColor Green
 
+# Bundle the media plugin SDK so first use never needs a network pip install.
+Write-Host "== Installing bundled media dependencies ==" -ForegroundColor Yellow
+Install-PythonPackages -Packages @("dashscope>=1.25.16")
+if (-not (Test-PythonImport "import dashscope")) {
+    throw "DashScope import check failed"
+}
+Write-Host "DashScope installed and importable" -ForegroundColor Green
+
 # Fix agent-client-protocol namespace collision
 # PyPI has an empty 'acp' stub that shadows the real package
 if (-not (Test-PythonImport "from acp import Agent")) {
