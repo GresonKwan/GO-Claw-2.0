@@ -1,17 +1,4 @@
-import {
-  Layout,
-  Space,
-  Badge,
-  Spin,
-  Tooltip,
-  Dropdown,
-  Popover,
-  message,
-} from "antd";
-import type { MenuProps } from "antd";
-import LanguageSwitcher, {
-  LANGUAGE_LIST,
-} from "../components/LanguageSwitcher/index";
+import { Layout, Space, Badge, Spin, Tooltip, Popover, message } from "antd";
 import ThemeToggleButton from "../components/ThemeToggleButton";
 import CodingModeToggle from "../components/CodingModeToggle";
 import { useTranslation } from "react-i18next";
@@ -21,10 +8,6 @@ import api from "../api";
 import { openExternalLink } from "../utils/openExternalLink";
 import { ExternalMarkdownLink } from "../components/Markdown/externalLinkComponents";
 import {
-  GITHUB_URL,
-  getDocsUrl,
-  getFeatureDemosUrl,
-  getFaqUrl,
   getReleaseNotesUrl,
   PYPI_URL,
   ONE_HOUR_MS,
@@ -44,12 +27,6 @@ import {
   CopyOutlined,
   CheckOutlined,
   TagOutlined,
-  GithubOutlined,
-  FileTextOutlined,
-  ReadOutlined,
-  PlayCircleOutlined,
-  InfoCircleOutlined,
-  DownOutlined,
   SyncOutlined,
   CheckCircleOutlined,
   ExclamationCircleOutlined,
@@ -84,7 +61,7 @@ function UpdateCodeBlock({ code }: { code: string }) {
 
 export default function Header() {
   const { t, i18n } = useTranslation();
-  const { isDark, setThemeMode } = useTheme();
+  const { isDark } = useTheme();
   const desktop = useDesktopUpdate();
   const onDesktop = isDesktopApp();
   const [version, setVersion] = useState<string>("");
@@ -183,85 +160,9 @@ export default function Header() {
 
   const modalVersion = onDesktop ? desktop.version : latestVersion;
 
-  const resourcesMenuItems: MenuProps["items"] = [
-    {
-      key: "tutorial",
-      icon: <ReadOutlined />,
-      label: t("header.tutorial"),
-      onClick: () => handleNavClick(getDocsUrl(i18n.language)),
-    },
-    {
-      key: "featureDemos",
-      icon: <PlayCircleOutlined />,
-      label: t("header.featureDemos"),
-      onClick: () => handleNavClick(getFeatureDemosUrl(i18n.language)),
-    },
-    {
-      key: "changelog",
-      icon: <FileTextOutlined />,
-      label: t("header.changelog"),
-      onClick: () => handleNavClick(getReleaseNotesUrl(i18n.language)),
-    },
-    {
-      key: "faq",
-      icon: <InfoCircleOutlined />,
-      label: t("header.faq"),
-      onClick: () => handleNavClick(getFaqUrl(i18n.language)),
-    },
-    {
-      key: "github",
-      icon: <GithubOutlined />,
-      label: t("header.github"),
-      onClick: () => handleNavClick(GITHUB_URL),
-    },
-  ];
-
-  const mobileMenuItems: MenuProps["items"] = [
-    {
-      key: "language",
-      label: t("sidebar.settings.language"),
-      children: LANGUAGE_LIST.map(({ key, label }) => ({
-        key,
-        label,
-        onClick: () => {
-          i18n.changeLanguage(key);
-          localStorage.setItem("language", key);
-        },
-      })),
-    },
-    {
-      key: "theme",
-      label: t("sidebar.settings.theme"),
-      children: [
-        {
-          key: "light",
-          label: t("theme.light"),
-          onClick: () => setThemeMode("light"),
-        },
-        {
-          key: "dark",
-          label: t("theme.dark"),
-          onClick: () => setThemeMode("dark"),
-        },
-        {
-          key: "system",
-          label: t("theme.system"),
-          onClick: () => setThemeMode("system"),
-        },
-      ],
-    },
-    { type: "divider" },
-    ...resourcesMenuItems,
-  ];
-
   const handleOpenUpdateModal = () => {
     setUpdateMarkdown("");
     setUpdateModalOpen(true);
-    const lang = i18n.language?.startsWith("zh")
-      ? "zh"
-      : i18n.language?.startsWith("ru")
-      ? "ru"
-      : "en";
 
     if (onDesktop) {
       setUpdateMarkdown(
@@ -272,24 +173,7 @@ export default function Header() {
       );
       return;
     }
-
-    const faqLang = lang === "zh" ? "zh" : "en";
-    const url = `https://qwenpaw.agentscope.io/docs/faq.${faqLang}.md`;
-    fetch(url, { cache: "no-cache" })
-      .then((res) => (res.ok ? res.text() : Promise.reject()))
-      .then((text) => {
-        const zhPattern = /###\s*QwenPaw如何更新[\s\S]*?(?=\n###|$)/;
-        const enPattern = /###\s*How to update QwenPaw[\s\S]*?(?=\n###|$)/;
-        const match = text.match(faqLang === "zh" ? zhPattern : enPattern);
-        setUpdateMarkdown(
-          match && lang !== "ru"
-            ? match[0].trim()
-            : UPDATE_MD[lang] ?? UPDATE_MD.en,
-        );
-      })
-      .catch(() => {
-        setUpdateMarkdown(UPDATE_MD[lang] ?? UPDATE_MD.en);
-      });
+    setUpdateMarkdown(UPDATE_MD);
   };
 
   const handleStartInstall = () => {
@@ -346,8 +230,13 @@ export default function Header() {
           */}
           <Slot name="header.logo" kind="replace">
             <img
-              src={isDark ? "/logo-dark.svg" : "/logo-light.svg"}
-              alt="QwenPaw"
+              data-testid="go-claw-header-logo"
+              src={
+                isDark
+                  ? "/go-claw-horizontal-white.svg"
+                  : "/go-claw-horizontal.svg"
+              }
+              alt="GO CLAW"
               className={styles.logoImg}
             />
           </Slot>
@@ -431,42 +320,11 @@ export default function Header() {
         <Slot name="header.left" kind="fill" />
         <Space size="middle">
           <Slot name="header.right" kind="fill" />
-          {resourcesMenuItems.length > 0 && (
-            <Dropdown menu={{ items: resourcesMenuItems }}>
-              <Button type="text" className={styles.hideOnMobile}>
-                {t("header.resources")} <DownOutlined />
-              </Button>
-            </Dropdown>
-          )}
-          <Tooltip title={t("header.github")}>
-            <Button
-              type="text"
-              icon={<GithubOutlined />}
-              onClick={() => handleNavClick(GITHUB_URL)}
-              className={styles.hideOnMobile}
-            >
-              {t("header.github")}
-            </Button>
-          </Tooltip>
-          <div className={styles.headerDivider} />
           <span className={styles.hideOnMobile}>
             <CodingModeToggle />
           </span>
           <div className={styles.headerDivider} />
-          <span className={styles.hideOnMobile}>
-            <LanguageSwitcher />
-          </span>
-          <span className={styles.hideOnMobile}>
-            <ThemeToggleButton />
-          </span>
-          <Dropdown menu={{ items: mobileMenuItems }} placement="bottomRight">
-            <Button
-              type="text"
-              icon={<InfoCircleOutlined />}
-              className={styles.showOnMobile}
-              title={t("header.resources")}
-            />
-          </Dropdown>
+          <ThemeToggleButton />
         </Space>
       </AntHeader>
 

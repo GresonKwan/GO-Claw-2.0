@@ -2,22 +2,19 @@
  * Tests for layouts/constants.
  *
  * Covers:
- * - URL constants
+ * - Customer-facing URL constants
  * - ONE_HOUR_MS value
  * - getWebsiteLang()
- * - getDocsUrl(), getFaqUrl(), getReleaseNotesUrl()
+ * - getReleaseNotesUrl()
  * - isStableVersion()
  * - compareVersions()
- * - UPDATE_MD structure
+ * - Customer update copy
  */
 import { describe, it, expect } from "vitest";
 import {
   PYPI_URL,
-  GITHUB_URL,
   ONE_HOUR_MS,
   getWebsiteLang,
-  getDocsUrl,
-  getFaqUrl,
   getReleaseNotesUrl,
   isStableVersion,
   compareVersions,
@@ -27,11 +24,6 @@ import {
 describe("URL constants", () => {
   it("PYPI_URL points to qwenpaw json endpoint", () => {
     expect(PYPI_URL).toBe("https://pypi.org/pypi/qwenpaw/json");
-  });
-
-  it("GITHUB_URL points to QwenPaw repo", () => {
-    expect(GITHUB_URL).toContain("github.com");
-    expect(GITHUB_URL).toContain("QwenPaw");
   });
 });
 
@@ -52,22 +44,6 @@ describe("getWebsiteLang", () => {
     ["ru", "en"],
   ])("returns %s for input %s", (input, expected) => {
     expect(getWebsiteLang(input)).toBe(expected);
-  });
-});
-
-describe("getDocsUrl", () => {
-  it("includes lang param", () => {
-    const url = getDocsUrl("zh");
-    expect(url).toContain("lang=zh");
-    expect(url).toContain("/docs/intro");
-  });
-});
-
-describe("getFaqUrl", () => {
-  it("includes lang param", () => {
-    const url = getFaqUrl("en");
-    expect(url).toContain("lang=en");
-    expect(url).toContain("/docs/faq");
   });
 });
 
@@ -119,16 +95,10 @@ describe("compareVersions", () => {
 });
 
 describe("UPDATE_MD", () => {
-  it("has entries for zh, ru, and en", () => {
-    expect(UPDATE_MD).toHaveProperty("zh");
-    expect(UPDATE_MD).toHaveProperty("ru");
-    expect(UPDATE_MD).toHaveProperty("en");
-  });
-
-  it("each entry is a non-empty string", () => {
-    for (const [, md] of Object.entries(UPDATE_MD)) {
-      expect(typeof md).toBe("string");
-      expect(md.length).toBeGreaterThan(0);
-    }
+  it("is a single Chinese GO CLAW update guide with supported commands", () => {
+    expect(typeof UPDATE_MD).toBe("string");
+    expect(UPDATE_MD).toContain("GO CLAW");
+    expect(UPDATE_MD).toContain("pip install -U qwenpaw");
+    expect(UPDATE_MD).toContain("uv tool upgrade qwenpaw");
   });
 });
