@@ -19,6 +19,7 @@ ASSET_SHA256 = {
 
 CUSTOMER_VISIBLE_TEXT_PATHS = (
     "console/index.html",
+    "console/tauri.html",
     "console/src/pages/Login/index.tsx",
     "console/src/tauri/BackendLoadingPage.tsx",
     "console/src/pages/Chat/index.tsx",
@@ -38,6 +39,16 @@ CUSTOMER_VISIBLE_TEXT_PATHS = (
 )
 
 ZH_LOCALE_PATH = "console/src/locales/zh.json"
+MARKET_PLUGIN_LIST_PATH = (
+    "console/src/pages/Settings/PluginManager/components/MarketPluginList.tsx"
+)
+LEGACY_CUSTOMER_ASSET_REFERENCES = (
+    "/logo-dark.svg",
+    "/logo-light.svg",
+    "/online.svg",
+    "/qwenpaw.png",
+    "/qwenpawBack.png",
+)
 STANDALONE_AGENT_PATTERN = re.compile(r"(?<![A-Za-z])Agent(?![A-Za-z])")
 
 
@@ -79,6 +90,32 @@ def test_customer_visible_copy_does_not_contain_qwenpaw_brand() -> None:
 
     assert "QwenPaw" not in customer_text, (
         "Customer-visible QwenPaw copy remains:\n" + "\n".join(offenders)
+    )
+
+
+def test_customer_visible_copy_does_not_reference_legacy_assets() -> None:
+    customer_text = "\n".join(
+        _read_customer_text(path) for path in CUSTOMER_VISIBLE_TEXT_PATHS
+    )
+    offenders = [
+        match
+        for asset_reference in LEGACY_CUSTOMER_ASSET_REFERENCES
+        for path in CUSTOMER_VISIBLE_TEXT_PATHS
+        for match in _matching_lines(path, re.compile(re.escape(asset_reference)))
+    ]
+
+    assert all(
+        asset_reference not in customer_text
+        for asset_reference in LEGACY_CUSTOMER_ASSET_REFERENCES
+    ), "Legacy customer asset references remain:\n" + "\n".join(offenders)
+
+
+def test_market_plugin_categories_use_digital_employee_copy() -> None:
+    market_plugin_list_text = _read_customer_text(MARKET_PLUGIN_LIST_PATH)
+    offenders = _matching_lines(MARKET_PLUGIN_LIST_PATH, re.compile(r"Agent 工具"))
+
+    assert "Agent 工具" not in market_plugin_list_text, (
+        "Legacy Agent 工具 customer copy remains:\n" + "\n".join(offenders)
     )
 
 

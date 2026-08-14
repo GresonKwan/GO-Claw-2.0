@@ -119,6 +119,13 @@ describe("MarketPluginList", () => {
     expect(screen.getByText("GO CLAW 1.x, 2.x")).toBeInTheDocument();
   });
 
+  it("uses digital employee wording for the agent-tool category", () => {
+    render(<MarketPluginList onInstalled={vi.fn()} />);
+
+    expect(screen.getByText("Digital Employee Tool")).toBeInTheDocument();
+    expect(screen.queryByText("Agent Tool")).not.toBeInTheDocument();
+  });
+
   it("changes the plugin market sort order", () => {
     render(<MarketPluginList onInstalled={vi.fn()} />);
 

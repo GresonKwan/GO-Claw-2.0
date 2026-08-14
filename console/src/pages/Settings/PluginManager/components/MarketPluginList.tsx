@@ -26,7 +26,11 @@ const { Text } = Typography;
 
 const PLUGIN_CATEGORIES = [
   { code: "app", zh: "应用", en: "App" },
-  { code: "agent-tool", zh: "Agent 工具", en: "Agent Tool" },
+  {
+    code: "agent-tool",
+    zh: "数字员工工具",
+    en: "Digital Employee Tool",
+  },
   { code: "provider", zh: "模型接入", en: "Provider" },
   { code: "command", zh: "Slash 命令", en: "Slash Command" },
   { code: "hook", zh: "生命周期 Hook", en: "Lifecycle Hook" },
