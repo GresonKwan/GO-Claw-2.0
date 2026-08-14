@@ -94,7 +94,28 @@ def _has_completed_marker(marker_path: Path) -> bool:
         return False
     if not isinstance(payload, dict):
         return False
-    return payload.get("version") == PRESET_VERSION
+    if set(payload) != {"version", "completedAt"}:
+        return False
+    if payload.get("version") != PRESET_VERSION:
+        return False
+
+    completed_at = payload.get("completedAt")
+    if not isinstance(completed_at, str) or "T" not in completed_at:
+        return False
+    if completed_at.endswith("Z"):
+        parse_value = completed_at[:-1] + "+00:00"
+    elif completed_at.endswith("+00:00"):
+        parse_value = completed_at
+    else:
+        return False
+
+    try:
+        parsed = datetime.fromisoformat(parse_value)
+    except ValueError:
+        return False
+    if parsed.tzinfo is None:
+        return False
+    return parsed.utcoffset() == timezone.utc.utcoffset(parsed)
 
 
 def _validate_bundled_plugin_manifests(
@@ -140,6 +161,7 @@ def _ensure_specialist(
 
     if _path_exists(canonical_workspace):
         _read_agent_profile(canonical_workspace, preset.id)
+        reconcile_workspace_manifest(canonical_workspace)
     else:
         _stage_specialist_workspace(
             preset=preset,

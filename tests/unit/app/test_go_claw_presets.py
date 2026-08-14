@@ -414,6 +414,51 @@ def test_failure_on_third_specialist_retries_only_missing_items(
     assert attempts == 3
 
 
+def test_published_workspace_retries_reconcile_before_exposing_ref(
+    preset_env: PresetHarness,
+    monkeypatch,
+) -> None:
+    """A published workspace stays hidden until final-path reconcile works."""
+    specialist_id = PRESET_ORDER[1]
+    canonical = preset_env.root / "workspaces" / specialist_id
+    reconcile_calls: list[Path] = []
+    real_reconcile = preset_migration.reconcile_workspace_manifest
+
+    def fail_first_marketing_reconcile(workspace_dir: Path) -> dict:
+        if workspace_dir == canonical:
+            reconcile_calls.append(workspace_dir)
+            if len(reconcile_calls) == 1:
+                raise RuntimeError("injected final reconcile failure")
+        return real_reconcile(workspace_dir)
+
+    monkeypatch.setattr(
+        preset_migration,
+        "reconcile_workspace_manifest",
+        fail_first_marketing_reconcile,
+    )
+
+    assert preset_migration.ensure_go_claw_presets() is False
+    assert canonical.is_dir()
+    assert specialist_id not in preset_env.config.agents.profiles
+    assert not preset_env.marker.exists()
+    assert not (canonical / "skill.json").exists()
+
+    assert preset_migration.ensure_go_claw_presets() is True
+
+    assert reconcile_calls == [canonical, canonical]
+    ref = preset_env.config.agents.profiles[specialist_id]
+    assert ref.workspace_dir == str(canonical)
+    manifest_path = canonical / "skill.json"
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    assert set(manifest["skills"]) == set(
+        SPECIALIST_PRESETS[specialist_id].skill_names,
+    )
+    assert ".go-claw-presets-v1.tmp" not in manifest_path.read_text(
+        encoding="utf-8",
+    )
+    assert preset_env.marker.is_file()
+
+
 def test_marker_is_same_directory_atomic_and_contains_only_public_metadata(
     preset_env: PresetHarness,
     monkeypatch,
@@ -515,9 +560,53 @@ def test_plugin_failure_never_exposes_specialist_or_marker(
             ),
             id="wrong-version",
         ),
+        pytest.param(
+            json.dumps({"version": "presets-v1"}),
+            id="missing-completed-at",
+        ),
+        pytest.param(
+            json.dumps(
+                {"version": "presets-v1", "completedAt": 123},
+            ),
+            id="non-string-completed-at",
+        ),
+        pytest.param(
+            json.dumps(
+                {"version": "presets-v1", "completedAt": "tomorrow"},
+            ),
+            id="invalid-iso-completed-at",
+        ),
+        pytest.param(
+            json.dumps(
+                {
+                    "version": "presets-v1",
+                    "completedAt": "2026-08-14T10:00:00",
+                },
+            ),
+            id="naive-completed-at",
+        ),
+        pytest.param(
+            json.dumps(
+                {
+                    "version": "presets-v1",
+                    "completedAt": "2026-08-14T18:00:00+08:00",
+                },
+            ),
+            id="non-utc-completed-at",
+        ),
+        pytest.param(
+            json.dumps(
+                {
+                    "version": "presets-v1",
+                    "completedAt": "2026-08-14T10:00:00Z",
+                    "api_key": "sk-test-marker-must-be-removed",
+                },
+            ),
+            id="extra-sensitive-field",
+        ),
     ],
 )
-def test_invalid_marker_is_safely_retried(
+def test_invalid_marker_schema_is_safely_retried(
     preset_env: PresetHarness,
     marker_payload: str,
 ) -> None:
@@ -525,13 +614,45 @@ def test_invalid_marker_is_safely_retried(
     preset_env.marker.write_text(marker_payload, encoding="utf-8")
 
     assert preset_migration.ensure_go_claw_presets() is True
-    assert (
-        json.loads(
-            preset_env.marker.read_text(encoding="utf-8"),
-        )["version"]
-        == preset_migration.PRESET_VERSION
-    )
+    raw_marker = preset_env.marker.read_text(encoding="utf-8")
+    marker = json.loads(raw_marker)
+    assert set(marker) == {"version", "completedAt"}
+    assert marker["version"] == preset_migration.PRESET_VERSION
+    assert "sk-test-marker-must-be-removed" not in raw_marker
     assert tuple(preset_env.config.agents.profiles) == PRESET_ORDER
+
+
+@pytest.mark.parametrize(
+    "completed_at",
+    (
+        "2026-08-14T10:00:00Z",
+        "2026-08-14T10:00:00+00:00",
+    ),
+)
+def test_strict_valid_marker_returns_without_rechecking_state(
+    preset_env: PresetHarness,
+    monkeypatch,
+    completed_at: str,
+) -> None:
+    preset_env.marker.parent.mkdir(parents=True, exist_ok=True)
+    marker_payload = {
+        "version": preset_migration.PRESET_VERSION,
+        "completedAt": completed_at,
+    }
+    preset_env.marker.write_text(
+        json.dumps(marker_payload),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(
+        preset_migration,
+        "install_go_claw_bundled_plugins",
+        lambda: (_ for _ in ()).throw(
+            AssertionError("valid marker must not inspect plugins"),
+        ),
+    )
+
+    assert preset_migration.ensure_go_claw_presets() is True
+    assert tuple(preset_env.config.agents.profiles) == ("default",)
 
 
 def test_only_owned_stale_temp_directory_is_recovered(
@@ -599,11 +720,26 @@ def test_valid_canonical_workspace_without_ref_only_gets_ref(
         extra={"user_owned_state": {"keep": "untouched"}},
     )
     (canonical / "sentinel.bin").write_bytes(b"preserve")
-    before = _snapshot_tree(canonical)
+    user_skill = canonical / "skills/user-skill/SKILL.md"
+    user_skill.parent.mkdir(parents=True)
+    user_skill.write_text(
+        "---\nname: user-skill\ndescription: Keep me\n---\n# user\n",
+        encoding="utf-8",
+    )
+    preset_migration.reconcile_workspace_manifest(canonical)
+    agent_before = (canonical / "agent.json").read_bytes()
+    skill_before = user_skill.read_bytes()
+    sentinel_before = (canonical / "sentinel.bin").read_bytes()
 
     assert preset_migration.ensure_go_claw_presets() is True
 
-    assert _snapshot_tree(canonical) == before
+    assert (canonical / "agent.json").read_bytes() == agent_before
+    assert user_skill.read_bytes() == skill_before
+    assert (canonical / "sentinel.bin").read_bytes() == sentinel_before
+    manifest = json.loads(
+        (canonical / "skill.json").read_text(encoding="utf-8"),
+    )
+    assert set(manifest["skills"]) == {"user-skill"}
     assert preset_env.config.agents.profiles[specialist_id] == AgentProfileRef(
         id=specialist_id,
         workspace_dir=str(canonical),
