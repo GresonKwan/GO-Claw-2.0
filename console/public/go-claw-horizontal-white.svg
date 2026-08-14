@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1800 420" role="img" aria-labelledby="title desc">
+  <title id="title">GO CLAW hybrid horizontal logo for dark backgrounds</title>
+  <desc id="desc">Minimal orange claw with a custom white GO CLAW wordmark.</desc>
+  <g transform="translate(24 22) scale(.72)">
+    <path fill="#ff4a18" d="M120 64h208l120 106-66 62-76-64H190l-50 88 50 88h116l76-64 66 62-120 106H120L8 256z"/>
+  </g>
+  <g fill="#fff">
+    <path d="M472 125h110l31 31v31h-44v-13l-8-8h-68l-19 19v50l19 19h76v-25h-39v-38h83v73l-31 31H472l-42-42v-86z"/>
+    <path fill-rule="evenodd" d="M677 125h101l35 35v100l-35 35H677l-35-35V160zm21 42-12 12v62l12 12h59l12-12v-62l-12-12z"/>
+    <path d="M930 125h112l35 35v27h-44v-10l-11-11h-71l-19 19v50l19 19h71l11-11v-10h44v27l-35 35H930l-42-42v-86z"/>
+    <path d="M1110 125h45v128h88v42h-133z"/>
+    <path fill-rule="evenodd" d="M1324 125h64l67 170h-48l-15-39h-73l-15 39h-48zm13 89h38l-19-51z"/>
+    <path d="M1474 125h48l29 116 34-116h42l34 116 29-116h48l-52 170h-49l-31-105-31 105h-49z"/>
+  </g>
+</svg>
