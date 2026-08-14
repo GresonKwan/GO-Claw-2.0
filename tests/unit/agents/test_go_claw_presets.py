@@ -23,7 +23,6 @@ from qwenpaw.config.config import (
     HeartbeatConfig,
     MCPConfig,
     ToolsConfig,
-    _reset_builtin_tools_cache_for_tests,
 )
 from qwenpaw.plugins.registry import PluginRegistry
 
@@ -259,54 +258,50 @@ def test_content_preset_enables_only_its_five_explicit_plugin_tools(
 
 
 def test_content_plugin_manifest_metadata_is_preserved(
+    monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
 ) -> None:
     plugin_id = "__ut_go_claw_media_metadata__"
     tool_name = "generate_image_qwen"
-    registry = PluginRegistry()
-    registry.unregister_plugin(plugin_id)
-    _reset_builtin_tools_cache_for_tests()
-    try:
-        registry.register_plugin_manifest(
-            plugin_id,
-            {
-                "name": plugin_id,
-                "meta": {
-                    "tools": [
-                        {
-                            "name": tool_name,
-                            "description": "Generate campaign artwork",
-                            "icon": "🎨",
-                        },
-                    ],
+    manifest = {
+        "name": plugin_id,
+        "meta": {
+            "tools": [
+                {
+                    "name": tool_name,
+                    "description": "Generate campaign artwork",
+                    "icon": "🎨",
                 },
-            },
-        )
-        content = SPECIALIST_PRESETS["content-production"]
-        overlap = replace(
-            content,
-            required_builtin_tools=(
-                *content.required_builtin_tools,
-                tool_name,
-            ),
-        )
+            ],
+        },
+    }
+    monkeypatch.setattr(
+        PluginRegistry,
+        "get_all_plugin_manifests",
+        lambda _registry: {plugin_id: manifest},
+    )
+    content = SPECIALIST_PRESETS["content-production"]
+    overlap = replace(
+        content,
+        required_builtin_tools=(
+            *content.required_builtin_tools,
+            tool_name,
+        ),
+    )
 
-        config = build_preset_agent_config(
-            overlap,
-            agent_id="content-with-manifest",
-            workspace_dir=tmp_path / "content-with-manifest",
-        )
-        assert config.tools is not None
-        tool = config.tools.builtin_tools[tool_name]
-        assert tool.enabled is True
-        assert tool.config == {}
-        assert tool.description == "Generate campaign artwork"
-        assert tool.icon == "🎨"
-        assert tool.display_to_user is True
-        assert tool.async_execution is False
-    finally:
-        registry.unregister_plugin(plugin_id)
-        _reset_builtin_tools_cache_for_tests()
+    config = build_preset_agent_config(
+        overlap,
+        agent_id="content-with-manifest",
+        workspace_dir=tmp_path / "content-with-manifest",
+    )
+    assert config.tools is not None
+    tool = config.tools.builtin_tools[tool_name]
+    assert tool.enabled is True
+    assert tool.config == {}
+    assert tool.description == "Generate campaign artwork"
+    assert tool.icon == "🎨"
+    assert tool.display_to_user is True
+    assert tool.async_execution is False
 
 
 def test_preset_template_survives_real_resolver_and_workspace_copy(
