@@ -30,16 +30,48 @@ if sys.platform == "darwin":
 else:
     codesign_identity = None
 
+
 def collect_tree(source_dir, target_dir):
-    return [
-        (str(path), str(Path(target_dir) / path.relative_to(source_dir).parent))
-        for path in source_dir.rglob("*")
-        if path.is_file()
-        and not any(part == "__pycache__" for part in path.relative_to(source_dir).parts)
-        and not path.name.startswith("._")
-        and path.name != ".DS_Store"
-        and path.suffix not in {".pyc", ".pyo"}
-    ]
+    source_dir = Path(source_dir)
+    if source_dir.is_symlink():
+        raise RuntimeError(f"bundled tree source is a symlink: {source_dir}")
+
+    try:
+        trusted_root = source_dir.resolve(strict=True)
+    except OSError as exc:
+        raise RuntimeError(
+            f"cannot resolve bundled tree source {source_dir}: {exc}"
+        ) from exc
+    if not trusted_root.is_dir():
+        raise RuntimeError(
+            f"bundled tree source is not a directory: {source_dir}"
+        )
+
+    datas = []
+    for path in source_dir.rglob("*"):
+        relative_path = path.relative_to(source_dir)
+        if path.is_symlink():
+            raise RuntimeError(f"bundled tree contains a symlink: {path}")
+        try:
+            resolved_path = path.resolve(strict=True)
+        except OSError as exc:
+            raise RuntimeError(
+                f"cannot resolve bundled tree path {path}: {exc}"
+            ) from exc
+        if not resolved_path.is_relative_to(trusted_root):
+            raise RuntimeError(
+                f"bundled tree path escapes source directory: {path}"
+            )
+        if not path.is_file():
+            continue
+        if any(part == "__pycache__" for part in relative_path.parts):
+            continue
+        if path.name.startswith("._") or path.name == ".DS_Store":
+            continue
+        if path.suffix in {".pyc", ".pyo"}:
+            continue
+        datas.append((str(path), str(Path(target_dir) / relative_path.parent)))
+    return datas
 
 
 # Match the legacy desktop package: the FastAPI backend serves the web console
@@ -183,6 +215,7 @@ a = Analysis(
 )
 
 pyz = PYZ(a.pure)
+
 
 def script_entry(file_name):
     for item in a.scripts:

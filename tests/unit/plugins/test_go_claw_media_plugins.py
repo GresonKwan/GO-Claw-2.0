@@ -11,6 +11,8 @@ import pytest
 from agentscope.message import ToolResultState
 from agentscope.tool import ToolChunk
 
+from qwenpaw.config.config import BuiltinToolConfig
+
 REPOSITORY_ROOT = Path(__file__).resolve().parents[3]
 MISSING_KEY_MESSAGE = "请在当前数字员工的工具配置中填写 DashScope API Key"
 
@@ -22,6 +24,76 @@ def _load_tool_module(relative_path: str, module_name: str) -> ModuleType:
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     return module
+
+
+class _RecordingPluginApi:
+    def __init__(self) -> None:
+        self.tools: list[BuiltinToolConfig] = []
+
+    def register_tool(
+        self,
+        tool_name: str,
+        tool_func: Callable[..., object],
+        description: str = "",
+        icon: str = "🔧",
+        enabled: bool = False,
+        **_kwargs: object,
+    ) -> None:
+        assert callable(tool_func)
+        self.tools.append(
+            BuiltinToolConfig(
+                name=tool_name,
+                enabled=enabled,
+                description=description,
+                icon=icon,
+            )
+        )
+
+
+@pytest.mark.parametrize(
+    ("entry_path", "expected_descriptions"),
+    [
+        (
+            "plugins/tool/qwen-image/qwen_image.py",
+            {
+                "generate_image_qwen": (
+                    "使用 Qwen-Image 根据文字提示生成图像"
+                ),
+                "edit_image_qwen": "使用 Qwen-Image 编辑或融合图像",
+            },
+        ),
+        (
+            "plugins/tool/wan27/wan27.py",
+            {
+                "text_to_video_wan": ("使用 Wan 2.7 根据文字提示生成视频"),
+                "image_to_video_wan": ("使用 Wan 2.7 根据图像生成视频"),
+                "reference_to_video_wan": (
+                    "使用 Wan 2.7 根据角色参考素材生成视频"
+                ),
+            },
+        ),
+    ],
+)
+def test_media_plugin_registers_customer_ready_tool_descriptions(
+    entry_path: str,
+    expected_descriptions: dict[str, str],
+) -> None:
+    module = _load_tool_module(
+        entry_path,
+        f"media_plugin_entry_{Path(entry_path).stem}",
+    )
+    api = _RecordingPluginApi()
+
+    module.plugin.register(api)
+
+    configs = {config.name: config for config in api.tools}
+    assert set(configs) == set(expected_descriptions)
+    for tool_name, expected_description in expected_descriptions.items():
+        config = configs[tool_name]
+        assert isinstance(config, BuiltinToolConfig)
+        assert config.description == expected_description
+        assert any("\u4e00" <= char <= "\u9fff" for char in config.description)
+        assert "QwenPaw" not in config.description
 
 
 @pytest.mark.asyncio

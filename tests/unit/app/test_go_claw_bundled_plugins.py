@@ -10,6 +10,8 @@ from pathlib import Path
 import pytest
 
 from qwenpaw.app import go_claw_bundled_plugins
+from qwenpaw.plugins.architecture import PluginManifest
+from qwenpaw.plugins.loader import PluginLoader
 
 
 def _write_plugin(
@@ -21,10 +23,38 @@ def _write_plugin(
 ) -> Path:
     plugin_dir = root / directory_name
     plugin_dir.mkdir(parents=True)
+    tool_name = plugin_id.replace("-", "_")
+    manifest = {
+        "id": plugin_id,
+        "name": f"{plugin_id} fixture",
+        "version": "1.0.0",
+        "description": f"Fixture plugin for {plugin_id}",
+        "author": "GO CLAW Test",
+        "entry": {"backend": "plugin.py"},
+        "dependencies": [],
+        "meta": {
+            "tools": [
+                {
+                    "name": tool_name,
+                    "description": f"Fixture tool for {plugin_id}",
+                    "requires_config": False,
+                    "config_fields": [],
+                },
+            ],
+        },
+    }
     (plugin_dir / "plugin.json").write_text(
-        json.dumps({"id": plugin_id}),
+        json.dumps(manifest),
         encoding="utf-8",
     )
+    (plugin_dir / "plugin.py").write_text(
+        "class FixturePlugin:\n"
+        "    def register(self, api):\n"
+        "        del api\n\n"
+        "plugin = FixturePlugin()\n",
+        encoding="utf-8",
+    )
+    (plugin_dir / "requirements.txt").write_text("", encoding="utf-8")
     (plugin_dir / "marker.txt").write_text(marker, encoding="utf-8")
     return plugin_dir
 
@@ -44,6 +74,18 @@ def _configure_roots(
         "get_plugins_dir",
         lambda: plugins_dir,
     )
+
+
+def _symlink_or_skip(
+    link: Path,
+    target: Path,
+    *,
+    target_is_directory: bool,
+) -> None:
+    try:
+        link.symlink_to(target, target_is_directory=target_is_directory)
+    except (NotImplementedError, OSError) as exc:
+        pytest.skip(f"Symlinks are unavailable on this platform: {exc}")
 
 
 def test_installs_by_manifest_id_with_atomic_publish_and_filtered_copy(
@@ -102,6 +144,16 @@ def test_installs_by_manifest_id_with_atomic_publish_and_filtered_copy(
         plugins_dir / "qwen-image",
         plugins_dir / "wan27",
     ]
+    loader = PluginLoader(plugin_dirs=[plugins_dir])
+    for expected_id, manifest_path in zip(
+        ("qwen-image-tool", "wan27-tool"),
+        manifests,
+        strict=True,
+    ):
+        manifest_data = json.loads(manifest_path.read_text(encoding="utf-8"))
+        assert PluginManifest.from_dict(manifest_data).id == expected_id
+        assert loader._load_manifest(manifest_path).id == expected_id
+        assert (manifest_path.parent / "plugin.py").is_file()
     assert not list(plugins_dir.rglob("._*"))
     assert not list(plugins_dir.rglob(".DS_Store"))
     assert not list(plugins_dir.rglob("__pycache__"))
@@ -234,7 +286,9 @@ def test_failed_publish_cleans_temp_and_can_be_retried_idempotently(
     assert (plugins_dir / "qwen-image" / "marker.txt").read_text(
         encoding="utf-8",
     ) == "customer kept"
-    assert not stale_temp.exists()
+    assert (stale_temp / "partial-copy.txt").read_text(
+        encoding="utf-8",
+    ) == "stale"
 
 
 def test_invalid_required_manifest_reports_its_path_and_expected_id(
@@ -316,6 +370,76 @@ def test_unrelated_invalid_manifests_do_not_block_required_plugins(
     assert missing_id_source.exists()
     assert broken_installed.exists()
     assert missing_id_installed.exists()
+
+
+def test_canonical_required_manifest_with_invalid_schema_is_rejected(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    source_root = tmp_path / "bundle"
+    plugins_dir = tmp_path / "installed"
+    invalid_source = source_root / "qwen-image"
+    invalid_source.mkdir(parents=True)
+    invalid_manifest = invalid_source / "plugin.json"
+    invalid_manifest.write_text(
+        json.dumps({"id": "qwen-image-tool"}),
+        encoding="utf-8",
+    )
+    _write_plugin(
+        source_root,
+        "wan27",
+        "wan27-tool",
+        marker="wan",
+    )
+    _configure_roots(monkeypatch, source_root, plugins_dir)
+
+    with pytest.raises(
+        RuntimeError,
+        match=rf"(?s){invalid_manifest}.*version",
+    ):
+        go_claw_bundled_plugins.install_go_claw_bundled_plugins()
+
+    assert invalid_source.exists()
+    assert not plugins_dir.exists()
+
+
+def test_invalid_installed_target_manifest_is_a_preserved_conflict(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    source_root = tmp_path / "bundle"
+    plugins_dir = tmp_path / "installed"
+    _write_plugin(
+        source_root,
+        "qwen-image",
+        "qwen-image-tool",
+        marker="qwen source",
+    )
+    _write_plugin(
+        source_root,
+        "wan27",
+        "wan27-tool",
+        marker="wan source",
+    )
+    invalid_installed = plugins_dir / "customer-image-plugin"
+    invalid_installed.mkdir(parents=True)
+    invalid_manifest = invalid_installed / "plugin.json"
+    invalid_manifest.write_text(
+        json.dumps({"id": "qwen-image-tool"}),
+        encoding="utf-8",
+    )
+    marker = invalid_installed / "customer-content.txt"
+    marker.write_text("preserve me", encoding="utf-8")
+    _configure_roots(monkeypatch, source_root, plugins_dir)
+
+    with pytest.raises(
+        RuntimeError,
+        match=rf"(?s){invalid_manifest}.*version",
+    ):
+        go_claw_bundled_plugins.install_go_claw_bundled_plugins()
+
+    assert marker.read_text(encoding="utf-8") == "preserve me"
+    assert not (plugins_dir / "qwen-image").exists()
 
 
 def test_canonical_source_manifest_must_match_required_id(
@@ -446,3 +570,123 @@ def test_concurrent_installers_publish_complete_plugins_without_temp_leaks(
             for candidate in plugins_dir.iterdir()
             if ".go-claw-plugin.tmp" in candidate.name
         ]
+
+
+def test_legacy_fixed_temp_is_preserved_while_unique_temp_publishes(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    source_root = tmp_path / "bundle"
+    plugins_dir = tmp_path / "installed"
+    _write_plugin(
+        source_root,
+        "qwen-image",
+        "qwen-image-tool",
+        marker="qwen",
+    )
+    _write_plugin(
+        source_root,
+        "wan27",
+        "wan27-tool",
+        marker="wan",
+    )
+    legacy_temp = plugins_dir / "qwen-image.go-claw-plugin.tmp"
+    legacy_temp.mkdir(parents=True)
+    in_progress = legacy_temp / "in-progress"
+    in_progress.write_text("owned by another process", encoding="utf-8")
+    _configure_roots(monkeypatch, source_root, plugins_dir)
+
+    manifests = go_claw_bundled_plugins.install_go_claw_bundled_plugins()
+
+    assert manifests == [
+        plugins_dir / "qwen-image" / "plugin.json",
+        plugins_dir / "wan27" / "plugin.json",
+    ]
+    assert in_progress.read_text(encoding="utf-8") == (
+        "owned by another process"
+    )
+    assert not [
+        candidate
+        for candidate in plugins_dir.iterdir()
+        if ".go-claw-plugin.tmp-" in candidate.name
+    ]
+
+
+def test_canonical_source_directory_symlink_is_rejected_before_copy(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    source_root = tmp_path / "bundle"
+    source_root.mkdir()
+    outside_qwen = _write_plugin(
+        tmp_path / "outside",
+        "qwen-image",
+        "qwen-image-tool",
+        marker="outside secret",
+    )
+    _symlink_or_skip(
+        source_root / "qwen-image",
+        outside_qwen,
+        target_is_directory=True,
+    )
+    _write_plugin(
+        source_root,
+        "wan27",
+        "wan27-tool",
+        marker="wan",
+    )
+    plugins_dir = tmp_path / "installed"
+    _configure_roots(monkeypatch, source_root, plugins_dir)
+
+    with pytest.raises(RuntimeError, match="symlink"):
+        go_claw_bundled_plugins.install_go_claw_bundled_plugins()
+
+    assert (outside_qwen / "marker.txt").read_text(encoding="utf-8") == (
+        "outside secret"
+    )
+    assert not (plugins_dir / "qwen-image").exists()
+
+
+@pytest.mark.parametrize("link_kind", ["file", "directory"])
+def test_source_tree_symlink_is_rejected_before_copy(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    link_kind: str,
+) -> None:
+    source_root = tmp_path / "bundle"
+    qwen_source = _write_plugin(
+        source_root,
+        "qwen-image",
+        "qwen-image-tool",
+        marker="qwen",
+    )
+    _write_plugin(
+        source_root,
+        "wan27",
+        "wan27-tool",
+        marker="wan",
+    )
+    outside_root = tmp_path / f"outside-{link_kind}"
+    if link_kind == "directory":
+        outside_root.mkdir()
+        external_content = outside_root / "secret.txt"
+        external_content.write_text("secret directory", encoding="utf-8")
+        link_target = outside_root
+    else:
+        external_content = outside_root
+        external_content.write_text("secret file", encoding="utf-8")
+        link_target = external_content
+    unsafe_link = qwen_source / f"unsafe-{link_kind}"
+    _symlink_or_skip(
+        unsafe_link,
+        link_target,
+        target_is_directory=link_kind == "directory",
+    )
+    plugins_dir = tmp_path / "installed"
+    _configure_roots(monkeypatch, source_root, plugins_dir)
+
+    with pytest.raises(RuntimeError, match="symlink"):
+        go_claw_bundled_plugins.install_go_claw_bundled_plugins()
+
+    assert external_content.exists()
+    assert not (plugins_dir / "qwen-image").exists()

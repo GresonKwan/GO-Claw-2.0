@@ -42,9 +42,7 @@ class QwenImageToolPlugin:
         api.register_tool(
             tool_name="generate_image_qwen",
             tool_func=tool.generate_image_qwen,
-            description=(
-                "Generate images from text prompts " "using Qwen-Image"
-            ),
+            description="使用 Qwen-Image 根据文字提示生成图像",
             icon="🖼️",
             tool_type="network",
         )
@@ -52,7 +50,7 @@ class QwenImageToolPlugin:
         api.register_tool(
             tool_name="edit_image_qwen",
             tool_func=tool.edit_image_qwen,
-            description="Edit or fuse images using Qwen-Image",
+            description="使用 Qwen-Image 编辑或融合图像",
             icon="✏️",
             tool_type="network",
         )

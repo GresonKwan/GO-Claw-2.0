@@ -13,11 +13,21 @@ import pytest
 REPOSITORY_ROOT = Path(__file__).resolve().parents[3]
 
 ASSET_SHA256 = {
-    "console/public/go-claw-horizontal.svg": "9a947dfcecd81e50f1332c090429660350e10754c418a93bcb4a0091a530f831",
-    "console/public/go-claw-horizontal-white.svg": "76c14d9fca5cb6d8f641005e584bb06cf6dec5ecf8fea4bdc4df95abeb9b552e",
-    "console/public/go-claw-mark.svg": "fd98f1f953e8c989ac5878fe173dc2dec276bab0f8e52eff93ca90fe4f34d658",
-    "console/public/go-claw-favicon-64.png": "d6253ebb4472c5c66fabfd560aa342569af060f11d974284e81887153472441f",
-    "scripts/pack/assets/go-claw-app-icon-1024.png": "5d4c3032d2f0a538ff391f2e7a501e4c2681b278906f0db2e294b334da1781ae",
+    "console/public/go-claw-horizontal.svg": (
+        "9a947dfcecd81e50f1332c090429660350e10754c418a93bcb4a0091a530f831"
+    ),
+    "console/public/go-claw-horizontal-white.svg": (
+        "76c14d9fca5cb6d8f641005e584bb06cf6dec5ecf8fea4bdc4df95abeb9b552e"
+    ),
+    "console/public/go-claw-mark.svg": (
+        "fd98f1f953e8c989ac5878fe173dc2dec276bab0f8e52eff93ca90fe4f34d658"
+    ),
+    "console/public/go-claw-favicon-64.png": (
+        "d6253ebb4472c5c66fabfd560aa342569af060f11d974284e81887153472441f"
+    ),
+    "scripts/pack/assets/go-claw-app-icon-1024.png": (
+        "5d4c3032d2f0a538ff391f2e7a501e4c2681b278906f0db2e294b334da1781ae"
+    ),
 }
 
 CUSTOMER_VISIBLE_TEXT_PATHS = (
@@ -430,9 +440,7 @@ def test_pyinstaller_spec_bundles_media_plugins_and_dashscope() -> None:
     )
 
 
-def test_pyinstaller_collect_tree_filters_packaging_noise(
-    tmp_path: Path,
-) -> None:
+def _load_pyinstaller_collect_tree() -> object:
     spec_tree = ast.parse(
         _read_customer_text("scripts/pack-tauri/qwenpaw.spec")
     )
@@ -446,6 +454,25 @@ def test_pyinstaller_collect_tree_filters_packaging_noise(
         ast.Module(body=[collect_tree_node], type_ignores=[]),
     )
     exec(compile(function_module, "qwenpaw.spec", "exec"), namespace)
+    return namespace["collect_tree"]
+
+
+def _symlink_or_skip(
+    link: Path,
+    target: Path,
+    *,
+    target_is_directory: bool,
+) -> None:
+    try:
+        link.symlink_to(target, target_is_directory=target_is_directory)
+    except (NotImplementedError, OSError) as exc:
+        pytest.skip(f"symlinks are unavailable on this platform: {exc}")
+
+
+def test_pyinstaller_collect_tree_filters_packaging_noise(
+    tmp_path: Path,
+) -> None:
+    collect_tree = _load_pyinstaller_collect_tree()
 
     source_root = tmp_path / "plugin"
     (source_root / "nested" / "__pycache__").mkdir(parents=True)
@@ -462,7 +489,6 @@ def test_pyinstaller_collect_tree_filters_packaging_noise(
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text("fixture", encoding="utf-8")
 
-    collect_tree = namespace["collect_tree"]
     assert callable(collect_tree)
     datas = collect_tree(source_root, "bundled")
     copied_paths = {
@@ -471,6 +497,42 @@ def test_pyinstaller_collect_tree_filters_packaging_noise(
     }
 
     assert copied_paths == {"plugin.json", "nested/keep.py"}
+
+
+@pytest.mark.parametrize("symlink_kind", ["root", "file", "directory"])
+def test_pyinstaller_collect_tree_rejects_source_symlinks(
+    tmp_path: Path,
+    symlink_kind: str,
+) -> None:
+    collect_tree = _load_pyinstaller_collect_tree()
+    actual_source = tmp_path / "actual-plugin"
+    actual_source.mkdir()
+    (actual_source / "plugin.json").write_text("{}", encoding="utf-8")
+
+    if symlink_kind == "root":
+        source_root = tmp_path / "plugin"
+        _symlink_or_skip(
+            source_root,
+            actual_source,
+            target_is_directory=True,
+        )
+    else:
+        source_root = actual_source
+        external = tmp_path / f"external-{symlink_kind}"
+        if symlink_kind == "directory":
+            external.mkdir()
+            (external / "secret.txt").write_text("secret", encoding="utf-8")
+        else:
+            external.write_text("secret", encoding="utf-8")
+        _symlink_or_skip(
+            source_root / f"linked-{symlink_kind}",
+            external,
+            target_is_directory=symlink_kind == "directory",
+        )
+
+    assert callable(collect_tree)
+    with pytest.raises(RuntimeError, match="symlink"):
+        collect_tree(source_root, "bundled")
 
 
 @pytest.mark.parametrize(
