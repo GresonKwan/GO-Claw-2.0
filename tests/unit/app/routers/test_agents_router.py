@@ -21,6 +21,7 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from qwenpaw.exceptions import AppBaseException
+from qwenpaw.agents.go_claw_presets import PRESET_ORDER
 from qwenpaw.app.agent_startup import AgentStartupStatus
 from qwenpaw.app.routers.agents import (
     CopyAgentRequest,
@@ -357,6 +358,82 @@ def test_delete_agent_happy_path_calls_stop_and_saves(
     manager_mock.stop_agent.assert_awaited_once_with("bot")
     save_mock.assert_called_once()
     assert "bot" not in fake_config.agents.profiles
+
+
+@pytest.mark.parametrize("specialist_id", PRESET_ORDER[1:])
+def test_go_claw_specialists_remain_normal_mutable_agents(
+    client,
+    fake_config,
+    manager_mock,
+    specialist_id,
+):
+    """Preset provisioning must not add specialists to protected-ID rules."""
+    fake_config.agents.profiles = {
+        "default": _ref("default"),
+        specialist_id: _ref(specialist_id),
+    }
+    fake_config.agents.profiles[specialist_id].pinned = True
+    fake_config.agents.agent_order = ["default", specialist_id]
+    existing = AgentProfileConfig(
+        id=specialist_id,
+        name="Existing Specialist",
+        workspace_dir=f"/tmp/ws/{specialist_id}",
+    )
+    updated = existing.model_copy(update={"name": "User Renamed"})
+
+    with (
+        patch(
+            "qwenpaw.app.routers.agents.load_config",
+            return_value=fake_config,
+        ),
+        patch(
+            "qwenpaw.app.routers.agents.load_agent_config",
+            return_value=existing,
+        ),
+        patch("qwenpaw.app.routers.agents.save_config") as save_config_mock,
+        patch(
+            "qwenpaw.app.routers.agents.save_agent_config",
+        ) as save_agent_mock,
+        patch("qwenpaw.app.routers.agents.schedule_agent_reload"),
+    ):
+        update_response = client.put(
+            f"/api/agents/{specialist_id}",
+            json=updated.model_dump(mode="json"),
+        )
+        disable_response = client.patch(
+            f"/api/agents/{specialist_id}/toggle",
+            json={"enabled": False},
+        )
+        unpin_response = client.patch(
+            f"/api/agents/{specialist_id}/pin",
+            json={"pinned": False},
+        )
+        delete_response = client.delete(
+            f"/api/agents/{specialist_id}",
+        )
+
+    assert update_response.status_code == 200
+    assert disable_response.status_code == 200
+    assert unpin_response.status_code == 200
+    assert delete_response.status_code == 200
+    assert save_agent_mock.call_count == 1
+    assert save_config_mock.call_count == 3
+    assert fake_config.agents.profiles.get(specialist_id) is None
+    assert manager_mock.stop_agent.await_count == 2
+
+
+def test_default_remains_protected_from_disable(client, fake_config):
+    with patch(
+        "qwenpaw.app.routers.agents.load_config",
+        return_value=fake_config,
+    ):
+        response = client.patch(
+            "/api/agents/default/toggle",
+            json={"enabled": False},
+        )
+
+    assert response.status_code == 400
+    assert "Cannot disable the default agent" in response.json()["detail"]
 
 
 def test_toggle_rejects_disabling_agent_during_startup(

@@ -44,10 +44,10 @@ from .auth import (
 )
 from .migration import (
     ensure_default_agent_exists,
-    ensure_qa_agent_exists,
     migrate_legacy_skills_to_skill_pool,
     migrate_legacy_workspace_to_default_agent,
 )
+from .go_claw_presets import ensure_go_claw_presets
 from .routers import create_agent_scoped_router
 from .routers import router as api_router
 from .routers.agent_scoped import AgentContextMiddleware
@@ -73,6 +73,14 @@ mimetypes.add_type("image/svg+xml", ".svg")
 # Load persisted env vars into os.environ at module import time
 # so they are available before the lifespan starts.
 load_envs_into_environ()
+
+
+def _run_agent_profile_startup_migrations() -> None:
+    """Run synchronous agent migrations in their required dependency order."""
+    migrate_legacy_workspace_to_default_agent()
+    ensure_default_agent_exists()
+    migrate_legacy_skills_to_skill_pool()
+    ensure_go_claw_presets()
 
 
 @asynccontextmanager
@@ -120,10 +128,7 @@ async def lifespan(  # pylint: disable=too-many-statements,too-many-branches
         )
 
     logger.debug("Checking for legacy config migration...")
-    migrate_legacy_workspace_to_default_agent()
-    ensure_default_agent_exists()
-    migrate_legacy_skills_to_skill_pool()
-    ensure_qa_agent_exists()
+    _run_agent_profile_startup_migrations()
 
     # Migrate old conversations from sessions/*.json into each scroll agent's
     # history.db, so chats from before scroll existed stay recallable. This is
