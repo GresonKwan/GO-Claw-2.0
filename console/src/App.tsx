@@ -9,19 +9,12 @@ import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import zhCN from "antd/locale/zh_CN";
-import enUS from "antd/locale/en_US";
-import jaJP from "antd/locale/ja_JP";
-import ruRU from "antd/locale/ru_RU";
-import idID from "antd/locale/id_ID";
-import type { Locale } from "antd/es/locale";
 import { theme as antdTheme } from "antd";
 import dayjs from "dayjs";
 import relativeTime from "dayjs/plugin/relativeTime";
 import "dayjs/locale/zh-cn";
-import "dayjs/locale/ja";
-import "dayjs/locale/ru";
-import "dayjs/locale/id";
 dayjs.extend(relativeTime);
+dayjs.locale("zh-cn");
 import MainLayout from "./layouts/MainLayout";
 import { ThemeProvider, useTheme } from "./contexts/ThemeContext";
 import { PluginProvider, usePlugins } from "./plugins/PluginContext";
@@ -33,31 +26,17 @@ import { lazyImportWithRetry } from "./utils/lazyWithRetry";
 
 const LoginPage = lazyImportWithRetry("./pages/Login/index");
 import { authApi } from "./api/modules/auth";
-import { languageApi } from "./api/modules/language";
 import { useUploadLimitStore } from "./stores/uploadLimitStore";
 import { getApiUrl, getApiToken, clearAuthToken } from "./api/config";
 import CloseWindowPrompt from "./tauri/CloseWindowPrompt";
 import { isTauri } from "@tauri-apps/api/core";
 import { isDesktopTauriRuntime } from "./utils/openExternalLink";
 import { interceptBlankLinkClicks } from "./utils/interceptBlankLinkClicks";
+import { synchronizeFixedChineseLanguage } from "./utils/fixedChineseLanguage";
 import "./styles/layout.css";
 import "./styles/form-override.css";
 
-const antdLocaleMap: Record<string, Locale> = {
-  zh: zhCN,
-  en: enUS,
-  ja: jaJP,
-  ru: ruRU,
-  id: idID,
-};
-
-const dayjsLocaleMap: Record<string, string> = {
-  zh: "zh-cn",
-  en: "en",
-  ja: "ja",
-  ru: "ru",
-  id: "id",
-};
+const antdLocale = zhCN;
 
 const GlobalStyle = createGlobalStyle`
 * {
@@ -133,42 +112,10 @@ function AppInner() {
   const { isDark } = useTheme();
   const { loading: pluginsLoading } = usePlugins();
   const selectedTheme = isDark ? bailianDarkTheme : bailianTheme;
-  const lang = i18n.resolvedLanguage || i18n.language || "en";
-  const [antdLocale, setAntdLocale] = useState<Locale>(
-    antdLocaleMap[lang] ?? enUS,
-  );
 
   useEffect(() => {
-    if (!localStorage.getItem("language")) {
-      languageApi
-        .getLanguage()
-        .then(({ language }) => {
-          if (language && language !== i18n.language) {
-            i18n.changeLanguage(language);
-            localStorage.setItem("language", language);
-          }
-        })
-        .catch((err) =>
-          console.error("Failed to fetch language preference:", err),
-        );
-    }
-    useUploadLimitStore.getState().fetch();
-  }, []);
-
-  useEffect(() => {
-    const handleLanguageChanged = (lng: string) => {
-      const shortLng = lng.split("-")[0];
-      setAntdLocale(antdLocaleMap[shortLng] ?? enUS);
-      dayjs.locale(dayjsLocaleMap[shortLng] ?? "en");
-    };
-
-    // Set initial dayjs locale
-    dayjs.locale(dayjsLocaleMap[lang.split("-")[0]] ?? "en");
-
-    i18n.on("languageChanged", handleLanguageChanged);
-    return () => {
-      i18n.off("languageChanged", handleLanguageChanged);
-    };
+    void synchronizeFixedChineseLanguage(i18n);
+    void useUploadLimitStore.getState().fetch();
   }, [i18n]);
 
   // Disable the default browser context menu in the Tauri desktop build so
