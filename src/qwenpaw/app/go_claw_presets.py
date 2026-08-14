@@ -7,9 +7,10 @@ import json
 import logging
 import os
 import shutil
+from contextlib import contextmanager
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Iterable
+from typing import Any, BinaryIO, Iterable, Iterator
 
 from ..agents.go_claw_presets import (
     PRESET_ORDER,
@@ -22,7 +23,11 @@ from ..agents.skill_system.registry import reconcile_workspace_manifest
 from ..config.config import AgentProfileConfig, AgentProfileRef
 from ..config.utils import get_config_path, load_config, save_config
 from ..plugins.architecture import PluginManifest
-from ..utils.io_utils import write_json_atomic
+from ..utils.io_utils import (
+    fsync_directory,
+    get_sync_path_lock,
+    write_json_atomic,
+)
 from .go_claw_bundled_plugins import install_go_claw_bundled_plugins
 from .routers.agents import _initialize_agent_workspace
 
@@ -35,6 +40,8 @@ _DEFAULT_LEGACY_NAME = "Default Agent"
 _DEFAULT_GO_CLAW_NAME = "通用数字员工"
 _REQUIRED_PLUGIN_IDS = ("qwen-image-tool", "wan27-tool")
 _SPECIALIST_TEMP_LABEL = f"go-claw-{PRESET_VERSION}"
+_MIGRATION_LOCK_FILENAME = "go-claw-presets-v1.lock"
+_STAGING_SENTINEL_FILENAME = ".go-claw-presets-v1.staging.json"
 
 
 def ensure_go_claw_presets() -> bool:
@@ -51,6 +58,11 @@ def ensure_go_claw_presets() -> bool:
 
 def _ensure_go_claw_presets() -> bool:
     data_root = get_config_path().expanduser().parent
+    with _migration_lock(data_root):
+        return _ensure_go_claw_presets_locked(data_root)
+
+
+def _ensure_go_claw_presets_locked(data_root: Path) -> bool:
     marker_path = data_root / MARKER_RELATIVE_PATH
     if _has_completed_marker(marker_path):
         return True
@@ -59,13 +71,14 @@ def _ensure_go_claw_presets() -> bool:
         install_go_claw_bundled_plugins(),
     )
 
-    config = load_config()
+    config = load_config(force_reload=True)
     original_order = list(config.agents.agent_order)
     original_profile_ids = list(config.agents.profiles)
     workspaces_root = data_root / "workspaces"
     workspaces_root.mkdir(parents=True, exist_ok=True)
 
     for specialist_id in PRESET_ORDER[1:]:
+        config = load_config(force_reload=True)
         preset = SPECIALIST_PRESETS[specialist_id]
         _ensure_specialist(
             config=config,
@@ -73,18 +86,70 @@ def _ensure_go_claw_presets() -> bool:
             workspaces_root=workspaces_root,
         )
 
+    config = load_config(force_reload=True)
     _rename_default_agent_if_unmodified(config)
-    config.agents.agent_order = _merge_agent_order(
+    config = load_config(force_reload=True)
+    expected_order = _merge_agent_order(
         config=config,
-        original_order=original_order,
+        original_order=[
+            *original_order,
+            *config.agents.agent_order,
+        ],
         original_profile_ids=original_profile_ids,
     )
+    config.agents.agent_order = expected_order
     save_config(config)
 
-    persisted_config = load_config()
-    _validate_completed_profiles(persisted_config)
+    persisted_config = load_config(force_reload=True)
+    _validate_completed_profiles(persisted_config, expected_order)
     _write_completed_marker(marker_path)
     return True
+
+
+@contextmanager
+def _migration_lock(data_root: Path) -> Iterator[None]:
+    """Serialize this migration across threads and cooperating processes."""
+    lock_path = (
+        data_root / MARKER_RELATIVE_PATH.parent / _MIGRATION_LOCK_FILENAME
+    )
+    lock_path.parent.mkdir(parents=True, exist_ok=True)
+    with get_sync_path_lock(lock_path):
+        with open(lock_path, "a+b") as lock_file:
+            _acquire_file_lock(lock_file)
+            try:
+                yield
+            finally:
+                _release_file_lock(lock_file)
+
+
+def _acquire_file_lock(lock_file: BinaryIO) -> None:
+    if os.name == "nt":
+        import msvcrt
+
+        lock_file.seek(0, os.SEEK_END)
+        if lock_file.tell() == 0:
+            lock_file.write(b"\0")
+            lock_file.flush()
+        lock_file.seek(0)
+        msvcrt.locking(lock_file.fileno(), msvcrt.LK_LOCK, 1)
+        return
+
+    import fcntl
+
+    fcntl.flock(lock_file.fileno(), fcntl.LOCK_EX)
+
+
+def _release_file_lock(lock_file: BinaryIO) -> None:
+    if os.name == "nt":
+        import msvcrt
+
+        lock_file.seek(0)
+        msvcrt.locking(lock_file.fileno(), msvcrt.LK_UNLCK, 1)
+        return
+
+    import fcntl
+
+    fcntl.flock(lock_file.fileno(), fcntl.LOCK_UN)
 
 
 def _has_completed_marker(marker_path: Path) -> bool:
@@ -161,7 +226,7 @@ def _ensure_specialist(
 
     if _path_exists(canonical_workspace):
         _read_agent_profile(canonical_workspace, preset.id)
-        reconcile_workspace_manifest(canonical_workspace)
+        _finish_owned_staging(canonical_workspace, preset.id)
     else:
         _stage_specialist_workspace(
             preset=preset,
@@ -169,7 +234,6 @@ def _ensure_specialist(
         )
 
     _add_specialist_ref(
-        config=config,
         specialist_id=preset.id,
         workspace=canonical_workspace,
     )
@@ -266,6 +330,14 @@ def _stage_specialist_workspace(
             temp_workspace / "agent.json",
             profile.model_dump(mode="json", exclude_none=True),
         )
+        write_json_atomic(
+            temp_workspace / _STAGING_SENTINEL_FILENAME,
+            {
+                "version": PRESET_VERSION,
+                "specialistId": preset.id,
+            },
+            durable=True,
+        )
 
         if _path_exists(canonical_workspace):
             raise RuntimeError(
@@ -274,10 +346,43 @@ def _stage_specialist_workspace(
             )
         temp_workspace.rename(canonical_workspace)
         published = True
-        reconcile_workspace_manifest(canonical_workspace)
+        fsync_directory(canonical_workspace.parent)
+        _finish_owned_staging(canonical_workspace, preset.id)
     finally:
         if not published:
             _remove_owned_temp_path(temp_workspace)
+
+
+def _finish_owned_staging(workspace: Path, specialist_id: str) -> None:
+    """Finish a published migration workspace only with ownership proof."""
+    sentinel_path = workspace / _STAGING_SENTINEL_FILENAME
+    if not _is_owned_staging_sentinel(sentinel_path, specialist_id):
+        return
+
+    reconcile_workspace_manifest(workspace)
+    _fsync_file(workspace / "skill.json")
+    fsync_directory(workspace)
+    sentinel_path.unlink()
+    fsync_directory(workspace)
+
+
+def _is_owned_staging_sentinel(
+    sentinel_path: Path,
+    specialist_id: str,
+) -> bool:
+    try:
+        payload = json.loads(sentinel_path.read_text(encoding="utf-8"))
+    except (OSError, UnicodeError, json.JSONDecodeError):
+        return False
+    return payload == {
+        "version": PRESET_VERSION,
+        "specialistId": specialist_id,
+    }
+
+
+def _fsync_file(path: Path) -> None:
+    with open(path, "rb") as file:
+        os.fsync(file.fileno())
 
 
 def _remove_owned_temp_path(temp_path: Path) -> None:
@@ -310,10 +415,19 @@ def _install_preset_skills(
 
 def _add_specialist_ref(
     *,
-    config: Any,
     specialist_id: str,
     workspace: Path,
 ) -> None:
+    config = load_config(force_reload=True)
+    existing_ref = config.agents.profiles.get(specialist_id)
+    if existing_ref is not None:
+        _validate_profile_ref(existing_ref, specialist_id)
+        return
+    _reject_workspace_owned_by_other_profile(
+        config,
+        workspace,
+        specialist_id,
+    )
     ref = AgentProfileRef(
         id=specialist_id,
         workspace_dir=str(workspace),
@@ -366,7 +480,12 @@ def _merge_agent_order(
     return merged
 
 
-def _validate_completed_profiles(config: Any) -> None:
+def _validate_completed_profiles(
+    config: Any,
+    expected_order: list[str],
+) -> None:
+    if config.agents.agent_order != expected_order:
+        raise RuntimeError("GO CLAW preset employee order was not persisted")
     for agent_id in PRESET_ORDER:
         ref = config.agents.profiles.get(agent_id)
         if ref is None or ref.id != agent_id:
@@ -377,21 +496,9 @@ def _validate_completed_profiles(config: Any) -> None:
 
 
 def _write_completed_marker(marker_path: Path) -> None:
-    marker_path.parent.mkdir(parents=True, exist_ok=True)
-    temp_path = marker_path.with_name(marker_path.name + ".tmp")
-    _remove_owned_temp_path(temp_path)
     completed_at = datetime.now(timezone.utc).isoformat()
     payload = {
         "version": PRESET_VERSION,
         "completedAt": completed_at.replace("+00:00", "Z"),
     }
-
-    try:
-        with open(temp_path, "w", encoding="utf-8", newline="\n") as file:
-            json.dump(payload, file, ensure_ascii=False, indent=2)
-            file.write("\n")
-            file.flush()
-            os.fsync(file.fileno())
-        temp_path.replace(marker_path)
-    finally:
-        _remove_owned_temp_path(temp_path)
+    write_json_atomic(marker_path, payload, durable=True)

@@ -262,6 +262,7 @@ def write_text_atomic(
     *,
     encoding: str = "utf-8",
     new_file_mode: int = 0o600,
+    durable: bool = False,
 ) -> None:
     """Synchronously replace a file with complete text content.
 
@@ -277,9 +278,9 @@ def write_text_atomic(
     the destination directory entry, so hard links keep referring to the
     previous inode.
 
-    This guarantees complete-file visibility during normal operation. It
-    does not promise power-loss durability because the parent directory is
-    not flushed. Async application code should use
+    Set ``durable`` for migration and configuration commits that must also
+    flush the replaced directory entry. Directory flushing is unavailable on
+    Windows and is therefore a no-op there. Async application code should use
     :func:`write_text_atomic_async`.
     """
     target = _resolve_write_target(Path(path))
@@ -298,6 +299,8 @@ def write_text_atomic(
         temp_path.chmod(final_mode)
         os.replace(temp_path, target)
         temp_path = None
+        if durable:
+            fsync_directory(target.parent)
     finally:
         if temp_path is not None:
             try:
@@ -349,6 +352,7 @@ def write_json_atomic(
     indent: int | None = 2,
     sort_keys: bool = False,
     new_file_mode: int = 0o600,
+    durable: bool = False,
 ) -> None:
     """Synchronously serialize and atomically replace one JSON file.
 
@@ -367,7 +371,22 @@ def write_json_atomic(
             sort_keys=sort_keys,
         ),
         new_file_mode=new_file_mode,
+        durable=durable,
     )
+
+
+def fsync_directory(path: Path | str) -> None:
+    """Flush directory metadata where the platform exposes that operation."""
+    if os.name == "nt":
+        return
+    flags = os.O_RDONLY
+    if hasattr(os, "O_DIRECTORY"):
+        flags |= os.O_DIRECTORY
+    fd = os.open(Path(path), flags)
+    try:
+        os.fsync(fd)
+    finally:
+        os.close(fd)
 
 
 def write_yaml_atomic(

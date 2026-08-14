@@ -39,6 +39,40 @@ def test_write_json_atomic_replaces_complete_document(tmp_path: Path) -> None:
     assert not list(tmp_path.glob(".state.json.*.tmp"))
 
 
+@pytest.mark.skipif(
+    os.name == "nt",
+    reason="Windows cannot fsync directory handles",
+)
+def test_write_json_atomic_durable_syncs_parent_after_replace(
+    tmp_path: Path,
+) -> None:
+    """Durable publication syncs the new directory entry after replace."""
+    path = tmp_path / "state.json"
+    events: list[str] = []
+    real_fsync = os.fsync
+    real_replace = os.replace
+
+    def inspect_fsync(fd: int) -> None:
+        events.append(
+            "dir-fsync" if stat.S_ISDIR(os.fstat(fd).st_mode) else "file-fsync"
+        )
+        real_fsync(fd)
+
+    def inspect_replace(source: Path, destination: Path) -> None:
+        events.append("replace")
+        assert Path(source).parent == destination.parent
+        assert Path(source).name.startswith(".state.json.")
+        real_replace(source, destination)
+
+    with (
+        patch("qwenpaw.utils.io_utils.os.fsync", inspect_fsync),
+        patch("qwenpaw.utils.io_utils.os.replace", inspect_replace),
+    ):
+        write_json_atomic(path, {"value": "new"}, durable=True)
+
+    assert events == ["file-fsync", "replace", "dir-fsync"]
+
+
 def test_write_text_atomic_preserves_destination_on_replace_error(
     tmp_path: Path,
 ) -> None:

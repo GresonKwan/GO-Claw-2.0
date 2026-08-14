@@ -5,6 +5,9 @@ from __future__ import annotations
 
 import json
 import shutil
+import threading
+import time
+from concurrent.futures import ThreadPoolExecutor
 from copy import deepcopy
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
@@ -117,7 +120,7 @@ class PresetHarness:
         self.monkeypatch.setattr(
             preset_migration,
             "load_config",
-            lambda: self.config,
+            lambda *args, **kwargs: self.config,
         )
         self.monkeypatch.setattr(
             preset_migration,
@@ -442,6 +445,8 @@ def test_published_workspace_retries_reconcile_before_exposing_ref(
     assert specialist_id not in preset_env.config.agents.profiles
     assert not preset_env.marker.exists()
     assert not (canonical / "skill.json").exists()
+    staging_sentinel = canonical / preset_migration._STAGING_SENTINEL_FILENAME
+    assert staging_sentinel.is_file()
 
     assert preset_migration.ensure_go_claw_presets() is True
 
@@ -456,6 +461,7 @@ def test_published_workspace_retries_reconcile_before_exposing_ref(
     assert ".go-claw-presets-v1.tmp" not in manifest_path.read_text(
         encoding="utf-8",
     )
+    assert not staging_sentinel.exists()
     assert preset_env.marker.is_file()
 
 
@@ -464,13 +470,13 @@ def test_marker_is_same_directory_atomic_and_contains_only_public_metadata(
     monkeypatch,
 ) -> None:
     replace_calls: list[tuple[Path, Path]] = []
-    original_replace = Path.replace
+    original_replace = preset_migration.os.replace
 
-    def spy_replace(source: Path, target: Path) -> Path:
-        replace_calls.append((source, target))
-        return original_replace(source, target)
+    def spy_replace(source: Path, target: Path) -> None:
+        replace_calls.append((Path(source), Path(target)))
+        original_replace(source, target)
 
-    monkeypatch.setattr(Path, "replace", spy_replace)
+    monkeypatch.setattr("qwenpaw.utils.io_utils.os.replace", spy_replace)
     monkeypatch.setenv("GO_CLAW_TEST_OPAQUE_VALUE", "do-not-persist-this")
 
     assert preset_migration.ensure_go_claw_presets() is True
@@ -479,13 +485,14 @@ def test_marker_is_same_directory_atomic_and_contains_only_public_metadata(
     for call in replace_calls:
         if call[1] == preset_env.marker:
             marker_calls.append(call)
-    assert marker_calls == [
-        (
-            preset_env.marker.with_name(preset_env.marker.name + ".tmp"),
-            preset_env.marker,
-        ),
-    ]
+    assert len(marker_calls) == 1
     assert marker_calls[0][0].parent == marker_calls[0][1].parent
+    assert marker_calls[0][0].name.startswith(
+        f".{preset_env.marker.name}.",
+    )
+    assert marker_calls[0][0] != preset_env.marker.with_name(
+        preset_env.marker.name + ".tmp",
+    )
     assert not marker_calls[0][0].exists()
 
     raw_marker = preset_env.marker.read_text(encoding="utf-8")
@@ -498,6 +505,123 @@ def test_marker_is_same_directory_atomic_and_contains_only_public_metadata(
     assert completed_at.tzinfo is not None
     assert completed_at.utcoffset() == timezone.utc.utcoffset(completed_at)
     assert "do-not-persist-this" not in raw_marker
+
+
+def test_concurrent_migrations_are_serialized_before_marker_check(
+    preset_env: PresetHarness,
+    monkeypatch,
+) -> None:
+    """Only one caller stages resources; the waiter observes its marker."""
+    first_installer_entered = threading.Event()
+    release_first_installer = threading.Event()
+    plugin_calls = 0
+
+    def blocked_installer() -> list[Path]:
+        nonlocal plugin_calls
+        plugin_calls += 1
+        if plugin_calls == 1:
+            first_installer_entered.set()
+            assert release_first_installer.wait(timeout=5)
+        return list(VALID_PLUGIN_MANIFESTS)
+
+    monkeypatch.setattr(
+        preset_migration,
+        "install_go_claw_bundled_plugins",
+        blocked_installer,
+    )
+
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        first = executor.submit(preset_migration.ensure_go_claw_presets)
+        assert first_installer_entered.wait(timeout=5)
+        second = executor.submit(preset_migration.ensure_go_claw_presets)
+        time.sleep(0.1)
+        calls_while_first_holds_transaction = plugin_calls
+        release_first_installer.set()
+        results = (first.result(timeout=5), second.result(timeout=5))
+
+    assert calls_while_first_holds_transaction == 1
+    assert results == (True, True)
+    assert plugin_calls == 1
+    assert preset_env.marker.is_file()
+
+
+def test_locked_migration_fresh_reloads_and_merges_root_updates(
+    preset_env: PresetHarness,
+    monkeypatch,
+) -> None:
+    """A root update between specialist saves is not lost to stale state."""
+    concurrent_id = "concurrent-user"
+    concurrent_workspace = preset_env.root / "user-workspaces" / concurrent_id
+    _write_agent_config(
+        concurrent_workspace,
+        concurrent_id,
+        name="Concurrent User",
+    )
+    disk_config = deepcopy(preset_env.config)
+    save_calls = 0
+    force_reload_calls = 0
+    injected = False
+    original_skill_installer = preset_env._install_skills
+
+    def load_disk(*args, force_reload: bool = False, **kwargs) -> Config:
+        nonlocal force_reload_calls
+        force_reload_calls += int(force_reload)
+        return deepcopy(disk_config)
+
+    def save_disk(config: Config, *args, **kwargs) -> None:
+        nonlocal disk_config, save_calls
+        save_calls += 1
+        disk_config = deepcopy(config)
+
+    def install_skills_and_inject_root_update(
+        workspace_dir: Path,
+        skill_names: tuple[str, ...],
+    ) -> None:
+        nonlocal disk_config, injected
+        original_skill_installer(workspace_dir, skill_names)
+        if not injected:
+            injected = True
+            disk_config.agents.profiles[concurrent_id] = AgentProfileRef(
+                id=concurrent_id,
+                workspace_dir=str(concurrent_workspace),
+            )
+            disk_config.agents.agent_order.append(concurrent_id)
+
+    monkeypatch.setattr(preset_migration, "load_config", load_disk)
+    monkeypatch.setattr(preset_migration, "save_config", save_disk)
+    monkeypatch.setattr(
+        preset_migration,
+        "_install_preset_skills",
+        install_skills_and_inject_root_update,
+    )
+
+    assert preset_migration.ensure_go_claw_presets() is True
+
+    assert force_reload_calls >= 2
+    assert concurrent_id in disk_config.agents.profiles
+    assert disk_config.agents.agent_order == [*PRESET_ORDER, concurrent_id]
+
+
+def test_marker_waits_for_persisted_root_order_verification(
+    preset_env: PresetHarness,
+    monkeypatch,
+) -> None:
+    """A valid marker cannot publish after an incomplete root config save."""
+
+    def load_with_dropped_order(*args, **kwargs) -> Config:
+        loaded = deepcopy(preset_env.config)
+        if len(preset_env.saved_configs) >= 5:
+            loaded.agents.agent_order = ["default"]
+        return loaded
+
+    monkeypatch.setattr(
+        preset_migration,
+        "load_config",
+        load_with_dropped_order,
+    )
+
+    assert preset_migration.ensure_go_claw_presets() is False
+    assert not preset_env.marker.exists()
 
 
 @pytest.mark.parametrize(
@@ -726,20 +850,23 @@ def test_valid_canonical_workspace_without_ref_only_gets_ref(
         "---\nname: user-skill\ndescription: Keep me\n---\n# user\n",
         encoding="utf-8",
     )
-    preset_migration.reconcile_workspace_manifest(canonical)
+    custom_manifest = (
+        b'{\n  "skills": {},\n'
+        b'  "user_extension": {"preserve": "byte-for-byte"}\n}\n'
+    )
+    (canonical / "skill.json").write_bytes(custom_manifest)
     agent_before = (canonical / "agent.json").read_bytes()
     skill_before = user_skill.read_bytes()
+    manifest_before = (canonical / "skill.json").read_bytes()
     sentinel_before = (canonical / "sentinel.bin").read_bytes()
 
     assert preset_migration.ensure_go_claw_presets() is True
 
     assert (canonical / "agent.json").read_bytes() == agent_before
     assert user_skill.read_bytes() == skill_before
+    assert (canonical / "skill.json").read_bytes() == manifest_before
     assert (canonical / "sentinel.bin").read_bytes() == sentinel_before
-    manifest = json.loads(
-        (canonical / "skill.json").read_text(encoding="utf-8"),
-    )
-    assert set(manifest["skills"]) == {"user-skill"}
+    assert manifest_before == custom_manifest
     assert preset_env.config.agents.profiles[specialist_id] == AgentProfileRef(
         id=specialist_id,
         workspace_dir=str(canonical),

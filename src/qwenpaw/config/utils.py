@@ -28,6 +28,7 @@ from ..constant import (
     WORKING_DIR,
     EnvVarLoader,
 )
+from ..utils.io_utils import write_json_atomic
 from .config import (
     Config,
     HeartbeatConfig,
@@ -632,7 +633,11 @@ def _load_and_validate_config(
     return config
 
 
-def load_config(config_path: Optional[Path] = None) -> Config:
+def load_config(
+    config_path: Optional[Path] = None,
+    *,
+    force_reload: bool = False,
+) -> Config:
     """Load config from file with mtime-based caching.
 
     Uses file modification time to avoid unnecessary disk reads.
@@ -655,7 +660,8 @@ def load_config(config_path: Optional[Path] = None) -> Config:
     with _config_lock:
         # Return cached config if mtime hasn't changed
         if (
-            _config_cache is not None
+            not force_reload
+            and _config_cache is not None
             and _config_mtime is not None
             and _config_mtime == current_mtime
         ):
@@ -717,19 +723,16 @@ def strict_validate_config_file(
 
 
 def save_config(config: Config, config_path: Optional[Path] = None) -> None:
-    """Save the config to the file and invalidate cache."""
+    """Durably replace the config file and invalidate its process cache."""
     global _config_cache, _config_mtime
 
     if config_path is None:
         config_path = get_config_path()
-    config_path.parent.mkdir(parents=True, exist_ok=True)
-    with open(config_path, "w", encoding="utf-8") as file:
-        json.dump(
-            config.model_dump(mode="json", by_alias=True),
-            file,
-            indent=2,
-            ensure_ascii=False,
-        )
+    write_json_atomic(
+        config_path,
+        config.model_dump(mode="json", by_alias=True),
+        durable=True,
+    )
 
     # Invalidate cache after saving
     with _config_lock:
