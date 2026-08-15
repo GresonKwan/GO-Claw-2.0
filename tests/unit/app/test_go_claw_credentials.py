@@ -52,9 +52,7 @@ class FakeProviderManager:
             "dashscope": FakeProvider("dashscope", ("qwen-max",)),
         },
     )
-    update_calls: list[tuple[str, dict[str, str]]] = field(
-        default_factory=list
-    )
+    update_calls: list[tuple[str, dict[str, str]]] = field(default_factory=list)
     activate_calls: list[tuple[str, str]] = field(default_factory=list)
     active_model: ModelSlotConfig | None = None
     fail_update_for: str | None = None
@@ -222,9 +220,11 @@ async def test_marker_skips_changed_source_and_preserves_user_changes(
     credential_env.write_payload(changed)
     assert await credential_env.run() is True
     assert credential_env.manager.update_calls == first_updates
-    assert not credential_env.profiles["default"].tools.builtin_tools[
-        "generate_image_qwen"
-    ].enabled
+    assert (
+        not credential_env.profiles["default"]
+        .tools.builtin_tools["generate_image_qwen"]
+        .enabled
+    )
 
 
 @pytest.mark.asyncio

@@ -269,9 +269,7 @@ async def _import_go_claw_batch_credentials(
         "schemaVersion": 1,
         "batchId": credentials.batch_id,
         "sourceSha256": hashlib.sha256(source_bytes).hexdigest(),
-        "importedAt": datetime.now(timezone.utc)
-        .isoformat()
-        .replace("+00:00", "Z"),
+        "importedAt": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
     }
     write_json_atomic(marker_path, marker_payload, durable=True)
     return True
