@@ -8,6 +8,7 @@ from qwenpaw.app.chats.utils import (
     _is_local_file_url,
     _resolve_content_url,
     agentscope_msg_to_message,
+    build_env_context,
     clean_display_text,
     strip_injected_skill_block,
 )
@@ -160,3 +161,17 @@ def test_clean_title_truncates_long_title():
     long_title = "x" * 200
     result = _clean_title(long_title)
     assert len(result) <= 80
+
+
+def test_build_env_context_uses_go_claw_identity_without_project_links():
+    context = build_env_context(
+        session_id="session-1",
+        active_model_name="kimi-k2.5",
+        add_hint=False,
+    )
+
+    assert "GO CLAW 数字员工" in context
+    assert "由当前选中的 kimi-k2.5 模型提供推理能力" in context
+    assert "QwenPaw" not in context
+    assert "https://github.com/agentscope-ai/QwenPaw" not in context
+    assert "https://qwenpaw.agentscope.io/" not in context

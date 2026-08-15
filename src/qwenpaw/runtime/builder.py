@@ -351,7 +351,7 @@ class AgentBuilder:
         effective_max = resolve_max_iterations(running_config)
 
         agent = QwenPawAgent(
-            name=agent_config.name or "QwenPaw",
+            name=agent_config.name or "GO CLAW",
             model=model,
             system_prompt=sys_prompt,
             toolkit=toolkit,

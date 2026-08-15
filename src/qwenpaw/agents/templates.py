@@ -36,7 +36,7 @@ GO_CLAW_MD_TEMPLATE_IDS = frozenset(
 
 LOCAL_TEMPLATE_SKILL_NAMES = ("make_plan",)
 QA_TEMPLATE_DESCRIPTION = (
-    "Builtin Q&A helper for QwenPaw setup, local config under "
+    "Builtin Q&A helper for GO CLAW setup, local config under "
     "QWENPAW_WORKING_DIR, and documentation. Prefer reading files "
     "before answering; use absolute paths for code outside this "
     "workspace."

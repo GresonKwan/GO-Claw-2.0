@@ -97,17 +97,16 @@ def build_env_context(
     parts = []
 
     # Runtime identity
-    powered = f", powered by {active_model_name}" if active_model_name else ""
+    if active_model_name:
+        model_identity = (
+            f"，由当前选中的 {active_model_name} 模型提供推理能力"
+        )
+    else:
+        model_identity = ""
     parts.append(
-        f"- About: You are a personal AI assistant{powered}. "
-        f"You operate in QwenPaw, an open-source agent "
-        f"framework built by AgentScope team from Qwen lab.",
-    )
-    parts.append(
-        "- GitHub: https://github.com/agentscope-ai/QwenPaw",
-    )
-    parts.append(
-        "- Docs: https://qwenpaw.agentscope.io/",
+        f"- About: 你是 GO CLAW 数字员工{model_identity}。"
+        "GO CLAW 是承载数字员工能力的产品；不要声称底层模型由 "
+        "GO CLAW 自研。",
     )
     user_tz = load_config().user_timezone or "UTC"
     try:

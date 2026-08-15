@@ -1,6 +1,6 @@
 ---
 name: guidance
-description: "回答用户关于 QwenPaw 安装与配置的问题：优先定位并阅读本地文档，再提炼答案；若本地信息不足，兜底访问官网文档。"
+description: "回答用户关于 GO CLAW 安装与配置的问题：优先定位并阅读本地文档，再提炼答案；若本地信息不足，兜底访问官网文档。"
 metadata:
   builtin_skill_version: "1.3"
   qwenpaw:
@@ -8,9 +8,9 @@ metadata:
     requires: {}
 ---
 
-# QwenPaw 安装与配置问答指南
+# GO CLAW 安装与配置问答指南
 
-当用户询问 **QwenPaw 的安装、初始化、环境配置、依赖要求、常见配置项** 时，使用本 skill。
+当用户询问 **GO CLAW 的安装、初始化、环境配置、依赖要求、常见配置项** 时，使用本 skill。
 
 核心原则：
 
@@ -53,7 +53,7 @@ DOCS_DIR=$(find ~/.qwenpaw/memory/ -type d -name "docs")
 QWENPAW_PATH=$(which qwenpaw 2>/dev/null || whereis qwenpaw | awk '{print $2}')
 
 # 逻辑推导：如果路径包含 .qwenpaw/bin/qwenpaw，则根目录在其上三层
-# 例如：/path/to/QwenPaw/.qwenpaw/bin/qwenpaw -> /path/to/QwenPaw
+# 例如：/path/to/GO CLAW/.qwenpaw/bin/qwenpaw -> /path/to/GO CLAW
 if [[ "$QWENPAW_PATH" == *".qwenpaw/bin/qwenpaw" ]]; then
     QWENPAW_ROOT=$(echo "$QWENPAW_PATH" | sed 's/\/\.qwenpaw\/bin\/qwenpaw//')
 else
@@ -61,7 +61,7 @@ else
     QWENPAW_ROOT=$(dirname $(dirname "$QWENPAW_PATH") 2>/dev/null || echo ".")
 fi
 
-echo "Detected QwenPaw Root: $QWENPAW_ROOT"
+echo "Detected GO CLAW Root: $QWENPAW_ROOT"
 ```
 
 验证并列出文档目录：
@@ -135,7 +135,6 @@ find $DOCS_DIR -type f -name "*.md"
 
 若前面步骤无法完成（本地无文档、文档缺失、信息不足），使用官网作为兜底：
 
-- http://qwenpaw.agentscope.io/
 
 基于官网可获得内容继续回答，并在答案中明确说明该结论来自官网文档。
 

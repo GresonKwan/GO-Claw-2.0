@@ -43,9 +43,9 @@ def _make_daemon_adapter(subcommand: str) -> CommandSpec:
 
         try:
             cfg = load_agent_config(agent_id)
-            agent_name = cfg.name if cfg and cfg.name else "QwenPaw"
+            agent_name = cfg.name if cfg and cfg.name else "GO CLAW"
         except Exception:
-            agent_name = "QwenPaw"
+            agent_name = "GO CLAW"
 
         daemon_ctx = DaemonContext(
             load_config_fn=lambda: load_agent_config(agent_id),
@@ -105,9 +105,9 @@ def _make_daemon_compound_adapter() -> CommandSpec:
 
         try:
             cfg = load_agent_config(agent_id)
-            agent_name = cfg.name if cfg and cfg.name else "QwenPaw"
+            agent_name = cfg.name if cfg and cfg.name else "GO CLAW"
         except Exception:
-            agent_name = "QwenPaw"
+            agent_name = "GO CLAW"
 
         daemon_ctx = DaemonContext(
             load_config_fn=lambda: load_agent_config(agent_id),
@@ -459,9 +459,9 @@ def _make_conversation_adapter(
 
         try:
             cfg = load_agent_config(agent_id)
-            agent_name = cfg.name if cfg and cfg.name else "QwenPaw"
+            agent_name = cfg.name if cfg and cfg.name else "GO CLAW"
         except Exception:
-            agent_name = "QwenPaw"
+            agent_name = "GO CLAW"
 
         cmd_handler = CommandHandler(
             agent_name=agent_name,

@@ -112,9 +112,6 @@ REPOSITORY_ROOT = Path(__file__).resolve().parents[3]
 PROMPT_SOURCE_PATHS = (
     "src/qwenpaw/app/chats/utils.py",
     "src/qwenpaw/agents/templates.py",
-    "src/qwenpaw/runtime/builder.py",
-    "src/qwenpaw/runtime/builtin_commands.py",
-    "src/qwenpaw/runtime/commands/daemon.py",
     "src/qwenpaw/agents/md_files/zh/PROFILE.md",
     "src/qwenpaw/agents/md_files/zh/BOOTSTRAP.md",
     "src/qwenpaw/agents/md_files/go-claw-marketing-growth/zh/PROFILE.md",
@@ -155,6 +152,21 @@ def test_runtime_prompt_sources_use_go_claw_customer_identity():
         and "qwenpaw.agentscope.io" not in _customer_prose(path)
         for path in PROMPT_SOURCE_PATHS
     )
+    exact_forbidden_fallbacks = {
+        "src/qwenpaw/runtime/builder.py": (
+            'name=agent_config.name or "QwenPaw"',
+        ),
+        "src/qwenpaw/runtime/builtin_commands.py": (
+            'else "QwenPaw"',
+            'agent_name = "QwenPaw"',
+        ),
+        "src/qwenpaw/runtime/commands/daemon.py": (
+            'agent_name: str = "QwenPaw"',
+        ),
+    }
+    for path, forbidden in exact_forbidden_fallbacks.items():
+        source = (REPOSITORY_ROOT / path).read_text(encoding="utf-8")
+        assert all(token not in source for token in forbidden)
 
 
 def test_no_customer_response_filter_is_introduced():
