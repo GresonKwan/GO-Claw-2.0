@@ -18,6 +18,7 @@ from agentscope.message import ToolResultState
 from agentscope.tool import ToolChunk
 from qwenpaw.constant import DEFAULT_MEDIA_DIR
 from qwenpaw.plugins import get_tool_config
+from qwenpaw.plugins.dashscope_credentials import resolve_dashscope_api_key
 
 logger = logging.getLogger(__name__)
 
@@ -26,7 +27,7 @@ _DASHSCOPE_LOCK = threading.Lock()
 
 _DEFAULT_ENDPOINT = "https://dashscope.aliyuncs.com/api/v1"
 _DEFAULT_TIMEOUT = 120.0
-_MISSING_API_KEY_MESSAGE = "请在当前数字员工的工具配置中填写 DashScope API Key"
+_MISSING_API_KEY_MESSAGE = "请在 GO CLAW 批次凭证或当前数字员工工具配置中填写 DashScope API Key"
 
 _IMAGE_MIME_TYPES = {
     ".png": "image/png",
@@ -118,7 +119,7 @@ def _extract_config(
     Returns:
         Tuple of (api_key, endpoint, timeout, model).
     """
-    api_key = str(tool_config.get("api_key") or "").strip()
+    api_key = resolve_dashscope_api_key(tool_config)
     endpoint = tool_config.get("endpoint", "")
     if not endpoint or not endpoint.strip():
         endpoint = _DEFAULT_ENDPOINT
@@ -297,9 +298,7 @@ async def generate_image_qwen(
         ToolChunk: Contains generated images and metadata.
     """
     try:
-        tool_config = get_tool_config("generate_image_qwen")
-        if not tool_config:
-            return _missing_api_key_result()
+        tool_config = get_tool_config("generate_image_qwen") or {}
 
         api_key, endpoint, timeout, model = _extract_config(
             tool_config,
@@ -536,9 +535,7 @@ async def edit_image_qwen(
                 ],
             )
 
-        tool_config = get_tool_config("edit_image_qwen")
-        if not tool_config:
-            return _missing_api_key_result()
+        tool_config = get_tool_config("edit_image_qwen") or {}
 
         api_key, endpoint, timeout, model = _extract_config(
             tool_config,

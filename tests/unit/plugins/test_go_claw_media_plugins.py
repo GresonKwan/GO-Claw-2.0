@@ -12,9 +12,13 @@ from agentscope.message import ToolResultState
 from agentscope.tool import ToolChunk
 
 from qwenpaw.config.config import BuiltinToolConfig
+from qwenpaw.plugins.dashscope_credentials import resolve_dashscope_api_key
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[3]
-MISSING_KEY_MESSAGE = "请在当前数字员工的工具配置中填写 DashScope API Key"
+MISSING_KEY_MESSAGE = (
+    "请在 GO CLAW 批次凭证或当前数字员工工具配置中填写 "
+    "DashScope API Key"
+)
 
 
 def _load_tool_module(relative_path: str, module_name: str) -> ModuleType:
@@ -48,6 +52,69 @@ class _RecordingPluginApi:
                 icon=icon,
             )
         )
+
+
+class _Provider:
+    def __init__(self, api_key: str) -> None:
+        self.api_key = api_key
+
+
+class _ProviderManager:
+    def __init__(self, api_key: str) -> None:
+        self.provider = _Provider(api_key)
+
+    def get_provider(self, provider_id: str) -> _Provider | None:
+        assert provider_id == "dashscope"
+        return self.provider
+
+
+def test_employee_dashscope_key_wins_over_global_key() -> None:
+    assert resolve_dashscope_api_key(
+        {"api_key": " employee-key "},
+        manager=_ProviderManager("global-key"),
+    ) == "employee-key"
+
+
+def test_global_dashscope_key_is_used_when_employee_key_is_blank() -> None:
+    assert resolve_dashscope_api_key(
+        {"api_key": "  "},
+        manager=_ProviderManager(" global-key "),
+    ) == "global-key"
+
+
+@pytest.mark.parametrize(
+    ("relative_path", "module_name", "extract_args"),
+    [
+        (
+            "plugins/tool/qwen-image/qwen_image_tool.py",
+            "qwen_image_global_key",
+            {"default_model": "qwen-image-2.0-pro"},
+        ),
+        (
+            "plugins/tool/wan27/wan27_tool.py",
+            "wan27_global_key",
+            {},
+        ),
+    ],
+)
+def test_both_media_plugins_use_the_shared_global_key_resolver(
+    monkeypatch: pytest.MonkeyPatch,
+    relative_path: str,
+    module_name: str,
+    extract_args: dict[str, str],
+) -> None:
+    module = _load_tool_module(relative_path, module_name)
+    calls: list[dict] = []
+    monkeypatch.setattr(
+        module,
+        "resolve_dashscope_api_key",
+        lambda config: calls.append(config) or "global-key",
+    )
+
+    extracted = module._extract_config({}, **extract_args)
+
+    assert extracted[0] == "global-key"
+    assert calls == [{}]
 
 
 @pytest.mark.parametrize(
@@ -112,6 +179,11 @@ async def test_qwen_image_never_requests_without_a_nonblank_api_key(
         f"qwen_image_tool_missing_key_{tool_name}_{id(tool_config)}",
     )
     monkeypatch.setattr(module, "get_tool_config", lambda _name: tool_config)
+    monkeypatch.setattr(
+        module,
+        "resolve_dashscope_api_key",
+        lambda _config: "",
+    )
 
     def unexpected_request(*_args: object, **_kwargs: object) -> None:
         pytest.fail("DashScope request must not run without an API key")
@@ -148,6 +220,11 @@ async def test_wan_never_requests_without_a_nonblank_api_key(
         f"wan27_tool_missing_key_{tool_name}_{id(tool_config)}",
     )
     monkeypatch.setattr(module, "get_tool_config", lambda _name: tool_config)
+    monkeypatch.setattr(
+        module,
+        "resolve_dashscope_api_key",
+        lambda _config: "",
+    )
 
     def unexpected_request(*_args: object, **_kwargs: object) -> None:
         pytest.fail("DashScope request must not run without an API key")

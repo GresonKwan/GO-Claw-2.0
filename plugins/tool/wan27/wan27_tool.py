@@ -19,6 +19,7 @@ from agentscope.message import ToolResultState
 from agentscope.tool import ToolChunk
 from qwenpaw.constant import DEFAULT_MEDIA_DIR
 from qwenpaw.plugins import get_tool_config
+from qwenpaw.plugins.dashscope_credentials import resolve_dashscope_api_key
 
 logger = logging.getLogger(__name__)
 
@@ -27,7 +28,7 @@ _DASHSCOPE_LOCK = threading.Lock()
 
 _DEFAULT_ENDPOINT = "https://dashscope.aliyuncs.com/api/v1"
 _DEFAULT_TIMEOUT = 600.0
-_MISSING_API_KEY_MESSAGE = "请在当前数字员工的工具配置中填写 DashScope API Key"
+_MISSING_API_KEY_MESSAGE = "请在 GO CLAW 批次凭证或当前数字员工工具配置中填写 DashScope API Key"
 
 _VALID_RESOLUTIONS = {"720P", "1080P"}
 _VALID_RATIOS = {"16:9", "9:16", "1:1", "4:3", "3:4"}
@@ -93,7 +94,7 @@ def _extract_config(
     Returns:
         Tuple of (api_key, endpoint, timeout).
     """
-    api_key = str(tool_config.get("api_key") or "").strip()
+    api_key = resolve_dashscope_api_key(tool_config)
     endpoint = tool_config.get("endpoint", "")
     if not endpoint or not endpoint.strip():
         endpoint = _DEFAULT_ENDPOINT
@@ -231,9 +232,7 @@ async def text_to_video_wan(
         ToolChunk: Contains local video path and metadata.
     """
     try:
-        tool_config = get_tool_config("text_to_video_wan")
-        if not tool_config:
-            return _missing_api_key_result()
+        tool_config = get_tool_config("text_to_video_wan") or {}
 
         api_key, endpoint, timeout = _extract_config(tool_config)
         if not api_key:
@@ -425,9 +424,7 @@ async def image_to_video_wan(
         ToolChunk: Contains local video path and metadata.
     """
     try:
-        tool_config = get_tool_config("image_to_video_wan")
-        if not tool_config:
-            return _missing_api_key_result()
+        tool_config = get_tool_config("image_to_video_wan") or {}
 
         api_key, endpoint, timeout = _extract_config(tool_config)
         if not api_key:
@@ -712,9 +709,7 @@ async def reference_to_video_wan(
         reference_videos = []
 
     try:
-        tool_config = get_tool_config("reference_to_video_wan")
-        if not tool_config:
-            return _missing_api_key_result()
+        tool_config = get_tool_config("reference_to_video_wan") or {}
 
         api_key, endpoint, timeout = _extract_config(tool_config)
         if not api_key:

@@ -186,7 +186,8 @@ STANDALONE_AGENT_PATTERN = re.compile(r"(?<![A-Za-z])Agent(?![A-Za-z])")
 SUSPECTED_API_KEY_PATTERN = re.compile(r"sk-[A-Za-z0-9_-]{16,}")
 CHINESE_CHARACTER_PATTERN = re.compile(r"[\u3400-\u9fff]")
 MISSING_DASHSCOPE_KEY_MESSAGE = (
-    "请在当前数字员工的工具配置中填写 DashScope API Key"
+    "请在 GO CLAW 批次凭证或当前数字员工工具配置中填写 "
+    "DashScope API Key"
 )
 MEDIA_PLUGIN_CONTRACTS = {
     "plugins/tool/qwen-image": {

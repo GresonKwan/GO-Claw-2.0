@@ -402,7 +402,7 @@ def test_workspace_template_resolver_rejects_unknown_go_claw_ids() -> None:
         assert get_workspace_md_template_id(template_id) is None
 
 
-def test_content_template_confirms_key_before_media_calls() -> None:
+def test_content_template_describes_media_key_resolution_order() -> None:
     template_path = (
         Path(__file__).parents[3]
         / "src"
@@ -414,9 +414,9 @@ def test_content_template_confirms_key_before_media_calls() -> None:
         / "AGENTS.md"
     )
     text = template_path.read_text(encoding="utf-8")
-    assert "无法从当前对话确认" in text
-    assert "先请用户确认" in text
-    assert "不通过试调用探测" in text
+    assert "当前数字员工的专属 DashScope Key" in text
+    assert "GO CLAW 首次导入的全局 DashScope Key" in text
+    assert "不要通过无意义试调用探测配置状态" in text
 
 
 TEMPLATE_EXPECTATIONS = {
@@ -442,10 +442,10 @@ TEMPLATE_EXPECTATIONS = {
         "图片提示词",
         "视频脚本",
         "分镜",
-        "DashScope API Key",
+        "DashScope Key",
         "Qwen-Image",
         "Wan 2.7",
-        "当前数字员工的工具配置",
+        "GO CLAW 首次导入的全局 DashScope Key",
         "不声称",
     ),
     "data-processing": (
