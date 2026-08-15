@@ -91,6 +91,7 @@ def test_media_plugin_registers_customer_ready_tool_descriptions(
     for tool_name, expected_description in expected_descriptions.items():
         config = configs[tool_name]
         assert isinstance(config, BuiltinToolConfig)
+        assert config.enabled is True
         assert config.description == expected_description
         assert any("\u4e00" <= char <= "\u9fff" for char in config.description)
         assert "QwenPaw" not in config.description

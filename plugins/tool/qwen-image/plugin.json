@@ -11,7 +11,10 @@
   "entry": {
     "backend": "qwen_image.py"
   },
-  "dependencies": ["dashscope>=1.25.16", "httpx>=0.24.0"],
+  "dependencies": [
+    "dashscope>=1.25.16",
+    "httpx>=0.24.0"
+  ],
   "qwenpaw_version": {
     "min": "1.1.6",
     "max": "2.1.0"
@@ -22,15 +25,16 @@
         "name": "generate_image_qwen",
         "description": "使用 Qwen-Image 模型根据文字提示生成高质量图像",
         "icon": "🖼️",
-        "requires_config": true,
+        "enabled_by_default": true,
+        "requires_config": false,
         "config_fields": [
           {
             "name": "api_key",
-            "label": "DashScope API Key（必填）",
+            "label": "DashScope API Key（可选）",
             "type": "password",
-            "required": true,
+            "required": false,
             "placeholder": "请输入 DashScope API Key",
-            "help": "请前往阿里云百炼控制台获取 DashScope API Key"
+            "help": "未填写时使用 GO CLAW 首次导入的全局 DashScope API Key"
           },
           {
             "name": "model",
@@ -76,15 +80,16 @@
         "name": "edit_image_qwen",
         "description": "使用 Qwen-Image 模型编辑图像或融合多张图像",
         "icon": "✏️",
-        "requires_config": true,
+        "enabled_by_default": true,
+        "requires_config": false,
         "config_fields": [
           {
             "name": "api_key",
-            "label": "DashScope API Key（必填）",
+            "label": "DashScope API Key（可选）",
             "type": "password",
-            "required": true,
+            "required": false,
             "placeholder": "请输入 DashScope API Key",
-            "help": "请前往阿里云百炼控制台获取 DashScope API Key"
+            "help": "未填写时使用 GO CLAW 首次导入的全局 DashScope API Key"
           },
           {
             "name": "model",

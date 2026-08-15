@@ -477,6 +477,8 @@ def test_bundled_media_plugin_manifests_are_customer_ready_and_keyless() -> (
         assert [tool["name"] for tool in tools] == contract["tool_names"]
         for tool in tools:
             assert _contains_chinese(tool["description"])
+            assert tool["enabled_by_default"] is True
+            assert tool["requires_config"] is False
             fields = {field["name"]: field for field in tool["config_fields"]}
             assert set(fields) == contract["config_names"]
             for field in fields.values():
@@ -484,7 +486,10 @@ def test_bundled_media_plugin_manifests_are_customer_ready_and_keyless() -> (
                 assert _contains_chinese(field["help"])
             api_key_field = fields["api_key"]
             assert api_key_field["type"] == "password"
-            assert api_key_field["required"] is True
+            assert api_key_field["required"] is False
+            assert "GO CLAW 首次导入的全局 DashScope API Key" in (
+                api_key_field["help"]
+            )
             assert "default" not in api_key_field
 
         assert _contains_chinese(manifest["meta"]["api_key_hint"])

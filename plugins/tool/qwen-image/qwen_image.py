@@ -44,6 +44,7 @@ class QwenImageToolPlugin:
             tool_func=tool.generate_image_qwen,
             description="使用 Qwen-Image 根据文字提示生成图像",
             icon="🖼️",
+            enabled=True,
             tool_type="network",
         )
 
@@ -52,6 +53,7 @@ class QwenImageToolPlugin:
             tool_func=tool.edit_image_qwen,
             description="使用 Qwen-Image 编辑或融合图像",
             icon="✏️",
+            enabled=True,
             tool_type="network",
         )
 

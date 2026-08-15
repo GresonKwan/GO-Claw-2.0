@@ -2019,15 +2019,16 @@ def _add_plugin_tool_default(
     tools: Dict[str, BuiltinToolConfig],
     tool_name: str,
     *,
+    enabled: bool,
     description: str,
     icon: str,
 ) -> None:
-    """Insert a disabled-by-default plugin tool if *tool_name* is absent."""
+    """Insert a manifest-defined plugin tool if *tool_name* is absent."""
     if tool_name in tools:
         return
     tools[tool_name] = BuiltinToolConfig(
         name=tool_name,
-        enabled=False,
+        enabled=enabled,
         description=description,
         display_to_user=True,
         async_execution=False,
@@ -2038,7 +2039,7 @@ def _add_plugin_tool_default(
 def _merge_plugin_manifest_tools(
     tools: Dict[str, BuiltinToolConfig],
 ) -> None:
-    """Merge current plugin manifests into *tools* (disabled by default).
+    """Merge current plugin manifests into *tools* using manifest defaults.
 
     Mutates *tools* in place. Manifests are always read live so late-loaded
     or unloaded plugins are reflected without process restart.
@@ -2058,6 +2059,7 @@ def _merge_plugin_manifest_tools(
             _add_plugin_tool_default(
                 tools,
                 meta["tool_name"],
+                enabled=False,
                 description=meta.get(
                     "tool_description",
                     f"Tool from plugin {plugin_id}",
@@ -2073,6 +2075,7 @@ def _merge_plugin_manifest_tools(
             _add_plugin_tool_default(
                 tools,
                 tool_info["name"],
+                enabled=tool_info.get("enabled_by_default") is True,
                 description=tool_info.get(
                     "description",
                     f"Tool from plugin {plugin_id}",

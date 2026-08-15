@@ -219,42 +219,95 @@ def test_preset_agent_configs_survive_pydantic_round_trip(
         assert restored == config
 
 
-def test_content_preset_enables_only_its_five_explicit_plugin_tools(
+def test_all_preset_configs_receive_default_enabled_media_tools(
+    monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
 ) -> None:
-    content = SPECIALIST_PRESETS["content-production"]
-    config = build_preset_agent_config(
-        content,
-        agent_id="content-employee",
-        workspace_dir=tmp_path / "content-employee",
-    )
-    assert config.tools is not None
-
-    for tool_name in CONTENT_PLUGIN_TOOLS:
-        tool = config.tools.builtin_tools[tool_name]
-        assert type(tool) is BuiltinToolConfig
-        assert tool.name == tool_name
-        assert tool.enabled is True
-        assert tool.config == {}
-
-    serialized_plugin_tools = {
-        name: config.tools.builtin_tools[name].model_dump()
-        for name in CONTENT_PLUGIN_TOOLS
+    manifests = {
+        "qwen-image-tool": {
+            "meta": {
+                "tools": [
+                    {
+                        "name": tool_name,
+                        "enabled_by_default": True,
+                    }
+                    for tool_name in CONTENT_PLUGIN_TOOLS[:2]
+                ],
+            },
+        },
+        "wan27-tool": {
+            "meta": {
+                "tools": [
+                    {
+                        "name": tool_name,
+                        "enabled_by_default": True,
+                    }
+                    for tool_name in CONTENT_PLUGIN_TOOLS[2:]
+                ],
+            },
+        },
     }
-    _assert_no_api_key(serialized_plugin_tools)
+    monkeypatch.setattr(
+        PluginRegistry,
+        "get_all_plugin_manifests",
+        lambda _registry: manifests,
+    )
 
     for preset_id, preset in SPECIALIST_PRESETS.items():
-        if preset_id == "content-production":
-            continue
-        other_config = build_preset_agent_config(
+        config = build_preset_agent_config(
             preset,
             agent_id=f"employee-{preset_id}",
             workspace_dir=tmp_path / preset_id,
         )
-        assert other_config.tools is not None
+        assert config.tools is not None
         for tool_name in CONTENT_PLUGIN_TOOLS:
-            tool = other_config.tools.builtin_tools.get(tool_name)
-            assert tool is None or tool.enabled is False
+            tool = config.tools.builtin_tools[tool_name]
+            assert type(tool) is BuiltinToolConfig
+            assert tool.name == tool_name
+            assert tool.enabled is True
+            assert tool.config == {}
+
+        serialized_plugin_tools = {
+            name: config.tools.builtin_tools[name].model_dump()
+            for name in CONTENT_PLUGIN_TOOLS
+        }
+        _assert_no_api_key(serialized_plugin_tools)
+
+
+def test_saved_media_disable_is_not_overwritten_by_manifest_default(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    tool_name = "generate_image_qwen"
+    monkeypatch.setattr(
+        PluginRegistry,
+        "get_all_plugin_manifests",
+        lambda _registry: {
+            "qwen-image-tool": {
+                "meta": {
+                    "tools": [
+                        {
+                            "name": tool_name,
+                            "enabled_by_default": True,
+                        },
+                    ],
+                },
+            },
+        },
+    )
+
+    config = ToolsConfig.model_validate(
+        {
+            "builtin_tools": {
+                tool_name: {
+                    "name": tool_name,
+                    "enabled": False,
+                    "config": {},
+                },
+            },
+        },
+    )
+
+    assert config.builtin_tools[tool_name].enabled is False
 
 
 def test_content_plugin_manifest_metadata_is_preserved(
