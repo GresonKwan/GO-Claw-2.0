@@ -20,6 +20,14 @@ API 与模型
 启动本地核心和客户端页面不要求 API Key。调用在线模型时，仍需在客户端中配置相应服务商的 API Key。
 本压缩包不包含本地大模型权重；本地模型可能需要额外数 GB 空间。
 
+批次 API 凭证（可选）
+--------------------
+1. 复制 GO-CLAW-Config\credentials.example.json 为 credentials.json。
+2. 填入本批次 LLM 与 DashScope API Key，再将整个文件夹写入 U 盘。
+3. GO CLAW 只在该 U 盘数据目录尚无导入标记时导入一次；导入成功后，客户端中的后续修改不会被 credentials.json 覆盖。
+4. 需要明确重新导入时，关闭 GO CLAW，删除 data\.go-claw-credentials-imported.json，再启动。
+5. credentials.json 是明文文件。请设置服务商额度并妥善保管 U 盘，不要把它上传到 Git、公共网盘或公开构建产物。
+
 安全说明
 --------
 secrets 与应用数据保存在同一 U 盘。U 盘遗失可能导致离线数据泄露，敏感场景建议使用 BitLocker To Go。

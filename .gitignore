@@ -138,6 +138,7 @@ src/.hypothesis/
 # Local File
 /localfile/
 local-docs/
+**/GO-CLAW-Config/credentials.json
 
 # E2E test artifacts
 e2e/reports/

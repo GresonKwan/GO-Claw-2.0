@@ -48,6 +48,7 @@ from .migration import (
     migrate_legacy_workspace_to_default_agent,
 )
 from .go_claw_presets import ensure_go_claw_presets
+from .go_claw_credentials import import_go_claw_batch_credentials
 from .routers import create_agent_scoped_router
 from .routers import router as api_router
 from .routers.agent_scoped import AgentContextMiddleware
@@ -148,6 +149,7 @@ async def lifespan(  # pylint: disable=too-many-statements,too-many-branches
 
     # Create core managers (instant — no I/O)
     provider_manager = ProviderManager.get_instance()
+    await import_go_claw_batch_credentials(provider_manager)
     local_model_manager = LocalModelManager.get_instance()
 
     # --- AppServiceManager + WorkspaceRegistry ---

@@ -79,6 +79,7 @@ def stage_portable(
     dist: Path,
     license_file: Path,
     readme_file: Path,
+    credentials_example_file: Path,
     repository_root: Path | None = None,
 ) -> PortableOutput:
     """Create a versioned portable directory, ZIP and SHA-256 sidecar."""
@@ -87,6 +88,10 @@ def stage_portable(
     exe = _require_file(exe, "Tauri executable")
     license_file = _require_file(license_file, "license file")
     readme_file = _require_file(readme_file, "portable readme")
+    credentials_example_file = _require_file(
+        credentials_example_file,
+        "credential example",
+    )
     binaries = binaries.expanduser().resolve()
     for relative in REQUIRED_RUNTIME_ENTRIES:
         _require_file(binaries / relative, str(relative))
@@ -111,6 +116,12 @@ def stage_portable(
     shutil.copytree(binaries, stage_dir / "binaries")
     shutil.copy2(license_file, stage_dir / "LICENSE")
     shutil.copy2(readme_file, stage_dir / "README-PORTABLE.zh-CN.txt")
+    credentials_dir = stage_dir / "GO-CLAW-Config"
+    credentials_dir.mkdir()
+    shutil.copy2(
+        credentials_example_file,
+        credentials_dir / "credentials.example.json",
+    )
     (stage_dir / "portable.json").write_text(
         json.dumps(
             {"schemaVersion": 1, "clientMode": "browser"},
@@ -160,6 +171,13 @@ def main(argv: list[str] | None = None) -> int:
         readme_file=(
             args.readme_file
             or repository_root / "scripts" / "pack-tauri" / "README-PORTABLE.zh-CN.txt"
+        ),
+        credentials_example_file=(
+            repository_root
+            / "scripts"
+            / "pack-tauri"
+            / "GO-CLAW-Config"
+            / "credentials.example.json"
         ),
         repository_root=repository_root,
     )

@@ -369,3 +369,15 @@ async def test_marker_and_logs_never_contain_keys(
         "sourceSha256",
         "importedAt",
     }
+
+
+def test_app_imports_credentials_after_provider_and_presets_initialization():
+    app_source = (
+        Path(__file__).resolve().parents[3] / "src/qwenpaw/app/_app.py"
+    ).read_text(encoding="utf-8")
+    assert app_source.index("_run_agent_profile_startup_migrations()") < (
+        app_source.index("ProviderManager.get_instance()")
+    )
+    assert app_source.index("ProviderManager.get_instance()") < (
+        app_source.index("await import_go_claw_batch_credentials(")
+    )
