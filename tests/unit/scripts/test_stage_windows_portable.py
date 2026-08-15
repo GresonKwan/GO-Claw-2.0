@@ -45,9 +45,13 @@ def _write_credentials_example(tmp_path: Path) -> Path:
                 "llm": {
                     "providerId": "kimi-cn",
                     "modelId": "kimi-k2.5",
+                    "baseUrl": "https://api.tokenbyte.ai/v1",
                     "apiKey": "填写批次 LLM API Key",
                 },
-                "dashscope": {"apiKey": "填写批次 DashScope API Key"},
+                "dashscope": {
+                    "compatibleBaseUrl": ("https://example.invalid/compatible-mode/v1"),
+                    "apiKey": "填写批次 DashScope API Key",
+                },
             },
             ensure_ascii=False,
         ),
@@ -125,6 +129,43 @@ def test_stage_rejects_missing_runtime_entry(tmp_path):
             readme_file=readme_file,
             credentials_example_file=credentials_example_file,
         )
+
+
+def test_stage_includes_explicit_batch_credentials(tmp_path):
+    exe = tmp_path / "qwenpaw-desktop.exe"
+    exe.write_bytes(b"MZ-test")
+    binaries = tmp_path / "binaries"
+    _write_runtime_layout(binaries)
+    license_file = tmp_path / "LICENSE"
+    readme_file = tmp_path / "README.txt"
+    license_file.write_text("license", encoding="utf-8")
+    readme_file.write_text("readme", encoding="utf-8")
+    example = _write_credentials_example(tmp_path)
+    credentials = tmp_path / "credentials.json"
+    credentials.write_text('{"schemaVersion": 1}', encoding="utf-8")
+
+    output = stage_portable(
+        version="2.0.1",
+        exe=exe,
+        binaries=binaries,
+        dist=tmp_path / "dist",
+        license_file=license_file,
+        readme_file=readme_file,
+        credentials_example_file=example,
+        credentials_file=credentials,
+    )
+
+    delivered = output.stage_dir / "GO-CLAW-Config/credentials.json"
+    assert delivered.read_text(encoding="utf-8") == '{"schemaVersion": 1}'
+
+
+def test_windows_workflow_materializes_batch_credentials_from_secrets():
+    workflow = (
+        Path(__file__).parents[3] / ".github/workflows/desktop-build.yml"
+    ).read_text(encoding="utf-8")
+    assert "GO_CLAW_LLM_API_KEY" in workflow
+    assert "GO_CLAW_DASHSCOPE_API_KEY" in workflow
+    assert '"$configDir/credentials.json"' in workflow
 
 
 def test_stage_refuses_repository_root_as_dist(tmp_path):

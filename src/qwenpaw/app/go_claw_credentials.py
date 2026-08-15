@@ -51,18 +51,29 @@ class _StrictModel(BaseModel):
 class LlmCredentials(_StrictModel):
     provider_id: str = Field(alias="providerId", min_length=1)
     model_id: str = Field(alias="modelId", min_length=1)
+    base_url: str = Field(alias="baseUrl", min_length=1)
     api_key: str = Field(alias="apiKey", min_length=1)
 
-    @field_validator("provider_id", "model_id", "api_key", mode="before")
+    @field_validator(
+        "provider_id",
+        "model_id",
+        "base_url",
+        "api_key",
+        mode="before",
+    )
     @classmethod
     def _strip_strings(cls, value: object) -> object:
         return value.strip() if isinstance(value, str) else value
 
 
 class DashScopeCredentials(_StrictModel):
+    compatible_base_url: str = Field(
+        alias="compatibleBaseUrl",
+        min_length=1,
+    )
     api_key: str = Field(alias="apiKey", min_length=1)
 
-    @field_validator("api_key", mode="before")
+    @field_validator("compatible_base_url", "api_key", mode="before")
     @classmethod
     def _strip_key(cls, value: object) -> object:
         return value.strip() if isinstance(value, str) else value
@@ -117,6 +128,12 @@ def _validate_providers(
     manager: ProviderManager,
     credentials: BatchCredentials,
 ) -> None:
+    for base_url in (
+        credentials.llm.base_url,
+        credentials.dashscope.compatible_base_url,
+    ):
+        if not base_url.startswith("https://"):
+            raise RuntimeError("Configured provider URL must use HTTPS")
     llm_provider = manager.get_provider(credentials.llm.provider_id)
     if llm_provider is None:
         raise RuntimeError("Configured LLM provider is unavailable")
@@ -178,12 +195,19 @@ def _verify_persisted_state(
         credentials.llm.provider_id,
     )
     dashscope_provider = _load_persisted_provider(manager, "dashscope")
+    # fmt: off
+    dashscope_base_url = (
+        dashscope_provider.base_url if dashscope_provider else None
+    )
+    # fmt: on
     active_model = manager.load_active_model()
     if (
         llm_provider is None
         or llm_provider.api_key != credentials.llm.api_key
+        or llm_provider.base_url != credentials.llm.base_url
         or dashscope_provider is None
         or dashscope_provider.api_key != credentials.dashscope.api_key
+        or dashscope_base_url != credentials.dashscope.compatible_base_url
         or active_model is None
         or active_model.provider_id != credentials.llm.provider_id
         or active_model.model != credentials.llm.model_id
@@ -242,12 +266,18 @@ async def _import_go_claw_batch_credentials(
     _validate_providers(manager, credentials)
     if not manager.update_provider(
         credentials.llm.provider_id,
-        {"api_key": credentials.llm.api_key},
+        {
+            "api_key": credentials.llm.api_key,
+            "base_url": credentials.llm.base_url,
+        },
     ):
         raise RuntimeError("LLM provider update failed")
     if not manager.update_provider(
         "dashscope",
-        {"api_key": credentials.dashscope.api_key},
+        {
+            "api_key": credentials.dashscope.api_key,
+            "base_url": credentials.dashscope.compatible_base_url,
+        },
     ):
         raise RuntimeError("DashScope provider update failed")
     await manager.activate_model(

@@ -80,6 +80,7 @@ def stage_portable(
     license_file: Path,
     readme_file: Path,
     credentials_example_file: Path,
+    credentials_file: Path | None = None,
     repository_root: Path | None = None,
 ) -> PortableOutput:
     """Create a versioned portable directory, ZIP and SHA-256 sidecar."""
@@ -122,6 +123,15 @@ def stage_portable(
         credentials_example_file,
         credentials_dir / "credentials.example.json",
     )
+    if credentials_file is not None:
+        credentials_file = _require_file(
+            credentials_file,
+            "batch credentials",
+        )
+        shutil.copy2(
+            credentials_file,
+            credentials_dir / "credentials.json",
+        )
     (stage_dir / "portable.json").write_text(
         json.dumps(
             {"schemaVersion": 1, "clientMode": "browser"},
@@ -162,6 +172,13 @@ def _parser() -> argparse.ArgumentParser:
 def main(argv: list[str] | None = None) -> int:
     args = _parser().parse_args(argv)
     repository_root = Path(__file__).resolve().parents[2]
+    credentials_file = (
+        repository_root
+        / "scripts"
+        / "pack-tauri"
+        / "GO-CLAW-Config"
+        / "credentials.json"
+    )
     output = stage_portable(
         version=args.version,
         exe=args.exe,
@@ -179,6 +196,7 @@ def main(argv: list[str] | None = None) -> int:
             / "GO-CLAW-Config"
             / "credentials.example.json"
         ),
+        credentials_file=(credentials_file if credentials_file.is_file() else None),
         repository_root=repository_root,
     )
     print(f"Portable directory: {output.stage_dir}")

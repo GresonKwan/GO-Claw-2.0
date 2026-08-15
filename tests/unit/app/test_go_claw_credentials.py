@@ -28,9 +28,13 @@ VALID_PAYLOAD = {
     "llm": {
         "providerId": "kimi-cn",
         "modelId": "kimi-k2.5",
+        "baseUrl": "https://api.tokenbyte.example/v1",
         "apiKey": "unit-test-llm-key",
     },
-    "dashscope": {"apiKey": "unit-test-dashscope-key"},
+    "dashscope": {
+        "compatibleBaseUrl": "https://dashscope.example/compatible-mode/v1",
+        "apiKey": "unit-test-dashscope-key",
+    },
 }
 UpdateCall = tuple[str, dict[str, str]]
 
@@ -40,6 +44,7 @@ class FakeProvider:
     id: str
     models: tuple[str, ...]
     api_key: str = ""
+    base_url: str = ""
 
     def has_model(self, model_id: str) -> bool:
         return model_id in self.models
@@ -76,6 +81,7 @@ class FakeProviderManager:
         if provider is None:
             return False
         provider.api_key = config["api_key"].strip()
+        provider.base_url = config["base_url"].strip()
         self.update_calls.append((provider_id, dict(config)))
         return True
 
@@ -194,8 +200,20 @@ async def test_valid_file_imports_providers_model_and_existing_agents(
     credential_env.write_payload()
     assert await credential_env.run() is True
     assert credential_env.manager.update_calls == [
-        ("kimi-cn", {"api_key": "unit-test-llm-key"}),
-        ("dashscope", {"api_key": "unit-test-dashscope-key"}),
+        (
+            "kimi-cn",
+            {
+                "api_key": "unit-test-llm-key",
+                "base_url": "https://api.tokenbyte.example/v1",
+            },
+        ),
+        (
+            "dashscope",
+            {
+                "api_key": "unit-test-dashscope-key",
+                "base_url": ("https://dashscope.example/compatible-mode/v1"),
+            },
+        ),
     ]
     assert credential_env.manager.activate_calls == [("kimi-cn", "kimi-k2.5")]
     assert credential_env.save_calls == ["default", "user-created"]
@@ -204,6 +222,12 @@ async def test_valid_file_imports_providers_model_and_existing_agents(
             tool = profile.tools.builtin_tools[tool_name]
             assert tool.enabled is True
             assert tool.config == {}
+
+
+def test_deepseek_provider_allows_batch_gateway_base_url() -> None:
+    from qwenpaw.providers.provider_manager import PROVIDER_DEEPSEEK
+
+    assert PROVIDER_DEEPSEEK.freeze_url is False
 
 
 @pytest.mark.asyncio

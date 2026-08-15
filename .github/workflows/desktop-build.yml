@@ -86,6 +86,43 @@ jobs:
           }
           New-Item -ItemType Directory -Force -Path dist | Out-Null
 
+      - name: Materialize optional GO CLAW batch credentials
+        shell: pwsh
+        env:
+          GO_CLAW_LLM_API_KEY: ${{ secrets.GO_CLAW_LLM_API_KEY }}
+          GO_CLAW_DASHSCOPE_API_KEY: ${{ secrets.GO_CLAW_DASHSCOPE_API_KEY }}
+        run: |
+          if (
+            [string]::IsNullOrWhiteSpace($env:GO_CLAW_LLM_API_KEY) -or
+            [string]::IsNullOrWhiteSpace($env:GO_CLAW_DASHSCOPE_API_KEY)
+          ) {
+            Write-Host "Batch credentials not configured; packaging template only"
+          } else {
+            $configDir = "scripts/pack-tauri/GO-CLAW-Config"
+            New-Item -ItemType Directory -Force -Path $configDir | Out-Null
+            $payload = [ordered]@{
+              schemaVersion = 1
+              batchId = "go-claw-20260815-batch-01"
+              llm = [ordered]@{
+                providerId = "deepseek"
+                modelId = "deepseek-v4-flash"
+                baseUrl = "https://api.tokenbyte.ai/v1"
+                apiKey = $env:GO_CLAW_LLM_API_KEY
+              }
+              dashscope = [ordered]@{
+                compatibleBaseUrl = "https://llm-y0my8cwttd6ojm5b.cn-beijing.maas.aliyuncs.com/compatible-mode/v1"
+                apiKey = $env:GO_CLAW_DASHSCOPE_API_KEY
+              }
+            }
+            $json = $payload | ConvertTo-Json -Depth 4
+            [IO.File]::WriteAllText(
+              "$configDir/credentials.json",
+              $json,
+              [Text.UTF8Encoding]::new($false)
+            )
+            Write-Host "Batch credentials staged without displaying secret values"
+          }
+
       - name: Build Tauri Windows package
         shell: pwsh
         env:

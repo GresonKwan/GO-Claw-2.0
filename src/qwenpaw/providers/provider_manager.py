@@ -1171,7 +1171,7 @@ PROVIDER_DEEPSEEK = OpenAIProvider(
     base_url="https://api.deepseek.com",
     api_key_prefix="sk-",
     models=DEEPSEEK_MODELS,
-    freeze_url=True,
+    freeze_url=False,
 )
 
 PROVIDER_ANTHROPIC = AnthropicProvider(

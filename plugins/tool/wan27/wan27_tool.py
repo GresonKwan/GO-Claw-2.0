@@ -19,7 +19,10 @@ from agentscope.message import ToolResultState
 from agentscope.tool import ToolChunk
 from qwenpaw.constant import DEFAULT_MEDIA_DIR
 from qwenpaw.plugins import get_tool_config
-from qwenpaw.plugins.dashscope_credentials import resolve_dashscope_api_key
+from qwenpaw.plugins.dashscope_credentials import (
+    resolve_dashscope_api_key,
+    resolve_dashscope_endpoint,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -95,9 +98,7 @@ def _extract_config(
         Tuple of (api_key, endpoint, timeout).
     """
     api_key = resolve_dashscope_api_key(tool_config)
-    endpoint = tool_config.get("endpoint", "")
-    if not endpoint or not endpoint.strip():
-        endpoint = _DEFAULT_ENDPOINT
+    endpoint = resolve_dashscope_endpoint(tool_config)
 
     timeout_raw = tool_config.get("timeout")
     if timeout_raw is None or float(timeout_raw) <= 0:

@@ -12,7 +12,10 @@ from agentscope.message import ToolResultState
 from agentscope.tool import ToolChunk
 
 from qwenpaw.config.config import BuiltinToolConfig
-from qwenpaw.plugins.dashscope_credentials import resolve_dashscope_api_key
+from qwenpaw.plugins.dashscope_credentials import (
+    resolve_dashscope_api_key,
+    resolve_dashscope_endpoint,
+)
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[3]
 MISSING_KEY_MESSAGE = (
@@ -55,13 +58,14 @@ class _RecordingPluginApi:
 
 
 class _Provider:
-    def __init__(self, api_key: str) -> None:
+    def __init__(self, api_key: str, base_url: str = "") -> None:
         self.api_key = api_key
+        self.base_url = base_url
 
 
 class _ProviderManager:
-    def __init__(self, api_key: str) -> None:
-        self.provider = _Provider(api_key)
+    def __init__(self, api_key: str, base_url: str = "") -> None:
+        self.provider = _Provider(api_key, base_url)
 
     def get_provider(self, provider_id: str) -> _Provider | None:
         assert provider_id == "dashscope"
@@ -80,6 +84,26 @@ def test_global_dashscope_key_is_used_when_employee_key_is_blank() -> None:
         {"api_key": "  "},
         manager=_ProviderManager(" global-key "),
     ) == "global-key"
+
+
+def test_global_dashscope_compatible_url_maps_to_native_media_endpoint() -> None:
+    manager = _ProviderManager(
+        "global-key",
+        "https://dashscope.example/compatible-mode/v1",
+    )
+    assert resolve_dashscope_endpoint({}, manager=manager) == (
+        "https://dashscope.example/api/v1"
+    )
+
+
+def test_employee_dashscope_endpoint_wins_over_global_endpoint() -> None:
+    assert resolve_dashscope_endpoint(
+        {"endpoint": " https://employee.example/api/v1 "},
+        manager=_ProviderManager(
+            "global-key",
+            "https://dashscope.example/compatible-mode/v1",
+        ),
+    ) == "https://employee.example/api/v1"
 
 
 @pytest.mark.parametrize(
