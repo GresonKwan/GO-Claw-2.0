@@ -183,6 +183,7 @@ a = Analysis(
         "qwenpaw.app.multi_agent_manager",
         "qwenpaw.app.chats",
         "qwenpaw.app.task_tracker",
+        "qwenpaw.plugins.dashscope_credentials",
         "qwenpaw.runtime.commands",
         # Backup modules are exposed through qwenpaw.backup.__getattr__, which
         # PyInstaller cannot discover from static imports.

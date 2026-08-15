@@ -559,6 +559,12 @@ def test_pyinstaller_spec_bundles_media_plugins_and_dashscope() -> None:
         for keyword in analysis_call.keywords
         if keyword.arg == "hiddenimports"
     )
+    explicit_hiddenimports = {
+        ast.literal_eval(node)
+        for node in hiddenimports.elts
+        if isinstance(node, ast.Constant) and isinstance(node.value, str)
+    }
+    assert "qwenpaw.plugins.dashscope_credentials" in explicit_hiddenimports
     assert any(
         isinstance(call, ast.Call)
         and _call_name(call) == "collect_submodules"
