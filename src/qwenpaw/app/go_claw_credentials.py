@@ -265,11 +265,12 @@ async def _import_go_claw_batch_credentials(
         agent_ids,
         load_profile=load_profile,
     )
+    imported_at = datetime.now(timezone.utc).isoformat()
     marker_payload = {
         "schemaVersion": 1,
         "batchId": credentials.batch_id,
         "sourceSha256": hashlib.sha256(source_bytes).hexdigest(),
-        "importedAt": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
+        "importedAt": imported_at.replace("+00:00", "Z"),
     }
     write_json_atomic(marker_path, marker_payload, durable=True)
     return True

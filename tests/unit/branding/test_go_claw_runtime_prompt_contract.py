@@ -30,10 +30,16 @@ def _customer_prose(path: str) -> str:
 
 
 def test_runtime_prompt_sources_use_go_claw_customer_identity():
+    # fmt: off
     offenders = {
-        path: [line for line in _customer_prose(path).splitlines() if "QwenPaw" in line]
+        path: [
+            line
+            for line in _customer_prose(path).splitlines()
+            if "QwenPaw" in line
+        ]
         for path in PROMPT_SOURCE_PATHS
     }
+    # fmt: on
     offenders = {path: lines for path, lines in offenders.items() if lines}
 
     assert offenders == {}
@@ -42,14 +48,20 @@ def test_runtime_prompt_sources_use_go_claw_customer_identity():
         and "qwenpaw.agentscope.io" not in _customer_prose(path)
         for path in PROMPT_SOURCE_PATHS
     )
+    # fmt: off
     exact_forbidden_fallbacks = {
-        "src/qwenpaw/runtime/builder.py": ('name=agent_config.name or "QwenPaw"',),
+        "src/qwenpaw/runtime/builder.py": (
+            'name=agent_config.name or "QwenPaw"',
+        ),
         "src/qwenpaw/runtime/builtin_commands.py": (
             'else "QwenPaw"',
             'agent_name = "QwenPaw"',
         ),
-        "src/qwenpaw/runtime/commands/daemon.py": ('agent_name: str = "QwenPaw"',),
+        "src/qwenpaw/runtime/commands/daemon.py": (
+            'agent_name: str = "QwenPaw"',
+        ),
     }
+    # fmt: on
     for path, forbidden in exact_forbidden_fallbacks.items():
         source = (REPOSITORY_ROOT / path).read_text(encoding="utf-8")
         assert all(token not in source for token in forbidden)

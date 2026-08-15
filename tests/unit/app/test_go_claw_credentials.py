@@ -32,6 +32,7 @@ VALID_PAYLOAD = {
     },
     "dashscope": {"apiKey": "unit-test-dashscope-key"},
 }
+UpdateCall = tuple[str, dict[str, str]]
 
 
 @dataclass
@@ -52,7 +53,7 @@ class FakeProviderManager:
             "dashscope": FakeProvider("dashscope", ("qwen-max",)),
         },
     )
-    update_calls: list[tuple[str, dict[str, str]]] = field(default_factory=list)
+    update_calls: list[UpdateCall] = field(default_factory=list)
     activate_calls: list[tuple[str, str]] = field(default_factory=list)
     active_model: ModelSlotConfig | None = None
     fail_update_for: str | None = None
