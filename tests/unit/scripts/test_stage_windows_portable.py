@@ -22,6 +22,9 @@ MODULE = importlib.util.module_from_spec(SPEC)
 sys.modules[SPEC.name] = MODULE
 SPEC.loader.exec_module(MODULE)
 stage_portable = MODULE.stage_portable
+VALID_DASHSCOPE_KEY = (
+    "sk-unit-test-dashscope-key-abcdefghijklmnopqrstuvwxyz-0123456789"
+)
 
 
 def _write_runtime_layout(binaries: Path) -> None:
@@ -54,6 +57,35 @@ def _write_credentials_example(tmp_path: Path) -> Path:
                 },
             },
             ensure_ascii=False,
+        ),
+        encoding="utf-8",
+    )
+    return path
+
+
+def _write_batch_credentials(
+    tmp_path: Path,
+    dashscope_key: str = VALID_DASHSCOPE_KEY,
+) -> Path:
+    path = tmp_path / "credentials.json"
+    path.write_text(
+        json.dumps(
+            {
+                "schemaVersion": 1,
+                "batchId": "unit-test-batch",
+                "llm": {
+                    "providerId": "deepseek",
+                    "modelId": "deepseek-v4-flash",
+                    "baseUrl": "https://api.tokenbyte.example/v1",
+                    "apiKey": "unit-test-llm-key",
+                },
+                "dashscope": {
+                    "compatibleBaseUrl": (
+                        "https://dashscope.example/compatible-mode/v1"
+                    ),
+                    "apiKey": dashscope_key,
+                },
+            }
         ),
         encoding="utf-8",
     )
@@ -141,8 +173,7 @@ def test_stage_includes_explicit_batch_credentials(tmp_path):
     license_file.write_text("license", encoding="utf-8")
     readme_file.write_text("readme", encoding="utf-8")
     example = _write_credentials_example(tmp_path)
-    credentials = tmp_path / "credentials.json"
-    credentials.write_text('{"schemaVersion": 1}', encoding="utf-8")
+    credentials = _write_batch_credentials(tmp_path)
 
     output = stage_portable(
         version="2.0.1",
@@ -156,7 +187,41 @@ def test_stage_includes_explicit_batch_credentials(tmp_path):
     )
 
     delivered = output.stage_dir / "GO-CLAW-Config/credentials.json"
-    assert delivered.read_text(encoding="utf-8") == '{"schemaVersion": 1}'
+    assert delivered.read_text(encoding="utf-8") == credentials.read_text(
+        encoding="utf-8"
+    )
+
+
+def test_stage_rejects_truncated_dashscope_credentials(tmp_path):
+    exe = tmp_path / "qwenpaw-desktop.exe"
+    exe.write_bytes(b"MZ-test")
+    binaries = tmp_path / "binaries"
+    _write_runtime_layout(binaries)
+    license_file = tmp_path / "LICENSE"
+    readme_file = tmp_path / "README.txt"
+    license_file.write_text("license", encoding="utf-8")
+    readme_file.write_text("readme", encoding="utf-8")
+    example = _write_credentials_example(tmp_path)
+    credentials = _write_batch_credentials(
+        tmp_path,
+        dashscope_key="fragment-without-sk-prefix-" + "x" * 48,
+    )
+
+    with pytest.raises(ValueError, match="DashScope API key"):
+        stage_portable(
+            version="2.0.1",
+            exe=exe,
+            binaries=binaries,
+            dist=tmp_path / "dist",
+            license_file=license_file,
+            readme_file=readme_file,
+            credentials_example_file=example,
+            credentials_file=credentials,
+        )
+
+    assert not (
+        tmp_path / "dist/GO-CLAW-Portable-2.0.1-Windows-x64.zip"
+    ).exists()
 
 
 def test_windows_workflow_materializes_batch_credentials_from_secrets():
@@ -166,6 +231,9 @@ def test_windows_workflow_materializes_batch_credentials_from_secrets():
     assert "GO_CLAW_LLM_API_KEY" in workflow
     assert "GO_CLAW_DASHSCOPE_API_KEY" in workflow
     assert '"$configDir/credentials.json"' in workflow
+    assert "Invoke-RestMethod" in workflow
+    assert 'TrimEnd(\'/\'))/models"' in workflow
+    assert 'notcontains "qwen-image-3.0"' in workflow
 
 
 def test_stage_refuses_repository_root_as_dist(tmp_path):

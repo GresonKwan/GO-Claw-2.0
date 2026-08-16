@@ -120,6 +120,20 @@ jobs:
               $json,
               [Text.UTF8Encoding]::new($false)
             )
+            $headers = @{
+              Authorization = "Bearer $($payload.dashscope.apiKey)"
+            }
+            $modelsUrl = "$($payload.dashscope.compatibleBaseUrl.TrimEnd('/'))/models"
+            $models = Invoke-RestMethod `
+              -Method Get `
+              -Uri $modelsUrl `
+              -Headers $headers `
+              -TimeoutSec 30
+            $modelIds = @($models.data | ForEach-Object { $_.id })
+            if ($modelIds -notcontains "qwen-image-3.0") {
+              throw "DashScope credential is valid but qwen-image-3.0 is unavailable"
+            }
+            Write-Host "DashScope credential preflight passed"
             Write-Host "Batch credentials staged without displaying secret values"
           }
 

@@ -73,10 +73,25 @@ class DashScopeCredentials(_StrictModel):
     )
     api_key: str = Field(alias="apiKey", min_length=1)
 
-    @field_validator("compatible_base_url", "api_key", mode="before")
+    @field_validator("compatible_base_url", mode="before")
     @classmethod
-    def _strip_key(cls, value: object) -> object:
+    def _strip_base_url(cls, value: object) -> object:
         return value.strip() if isinstance(value, str) else value
+
+    @field_validator("api_key", mode="before")
+    @classmethod
+    def _validate_api_key(cls, value: object) -> object:
+        if not isinstance(value, str):
+            return value
+        normalized = value.strip()
+        if (
+            not normalized.startswith("sk-")
+            or len(normalized) < 64
+            or "\\" in normalized
+            or any(char.isspace() for char in normalized)
+        ):
+            raise ValueError("DashScope API key is structurally invalid")
+        return normalized
 
 
 class BatchCredentials(_StrictModel):

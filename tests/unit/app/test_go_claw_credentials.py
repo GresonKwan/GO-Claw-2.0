@@ -22,6 +22,9 @@ from qwenpaw.config.config import (
     ToolsConfig,
 )
 
+VALID_DASHSCOPE_KEY = (
+    "sk-unit-test-dashscope-key-abcdefghijklmnopqrstuvwxyz-0123456789"
+)
 VALID_PAYLOAD = {
     "schemaVersion": 1,
     "batchId": "test-batch",
@@ -33,7 +36,7 @@ VALID_PAYLOAD = {
     },
     "dashscope": {
         "compatibleBaseUrl": "https://dashscope.example/compatible-mode/v1",
-        "apiKey": "unit-test-dashscope-key",
+        "apiKey": VALID_DASHSCOPE_KEY,
     },
 }
 UpdateCall = tuple[str, dict[str, str]]
@@ -210,7 +213,7 @@ async def test_valid_file_imports_providers_model_and_existing_agents(
         (
             "dashscope",
             {
-                "api_key": "unit-test-dashscope-key",
+                "api_key": VALID_DASHSCOPE_KEY,
                 "base_url": ("https://dashscope.example/compatible-mode/v1"),
             },
         ),
@@ -313,6 +316,30 @@ async def test_invalid_input_writes_nothing_and_no_marker(
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "invalid_key",
+    [
+        "fragment-without-sk-prefix-" + "x" * 48,
+        "sk-too-short",
+        "sk-" + "x" * 32 + "\\display-separator-" + "y" * 32,
+        "sk-" + "x" * 32 + " embedded-space " + "y" * 32,
+    ],
+)
+async def test_structurally_invalid_dashscope_key_writes_nothing(
+    credential_env: CredentialHarness,
+    invalid_key: str,
+) -> None:
+    payload = deepcopy(VALID_PAYLOAD)
+    payload["dashscope"]["apiKey"] = invalid_key
+    credential_env.write_payload(payload)
+
+    assert await credential_env.run() is False
+    assert credential_env.manager.update_calls == []
+    assert credential_env.save_calls == []
+    assert not credential_env.marker_path.exists()
+
+
+@pytest.mark.asyncio
 async def test_dashscope_chat_provider_rejects_conflicting_keys(
     credential_env: CredentialHarness,
 ) -> None:
@@ -387,7 +414,7 @@ async def test_marker_and_logs_never_contain_keys(
     marker_text = credential_env.marker_path.read_text(encoding="utf-8")
     combined = marker_text + caplog.text
     assert "unit-test-llm-key" not in combined
-    assert "unit-test-dashscope-key" not in combined
+    assert VALID_DASHSCOPE_KEY not in combined
     assert set(json.loads(marker_text)) == {
         "schemaVersion",
         "batchId",

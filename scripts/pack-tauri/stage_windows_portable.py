@@ -36,6 +36,24 @@ def _require_file(path: Path, label: str) -> Path:
     return resolved
 
 
+def _validate_batch_credentials_file(credentials_file: Path) -> None:
+    try:
+        payload = json.loads(credentials_file.read_text(encoding="utf-8"))
+        api_key = payload["dashscope"]["apiKey"]
+    except (json.JSONDecodeError, KeyError, TypeError) as exc:
+        raise ValueError(
+            "DashScope API key is structurally invalid"
+        ) from exc
+    if (
+        not isinstance(api_key, str)
+        or not api_key.startswith("sk-")
+        or len(api_key) < 64
+        or "\\" in api_key
+        or any(char.isspace() for char in api_key)
+    ):
+        raise ValueError("DashScope API key is structurally invalid")
+
+
 def _validate_dist(dist: Path, repository_root: Path | None) -> Path:
     if not str(dist).strip():
         raise ValueError("dist path must not be empty")
@@ -128,6 +146,7 @@ def stage_portable(
             credentials_file,
             "batch credentials",
         )
+        _validate_batch_credentials_file(credentials_file)
         shutil.copy2(
             credentials_file,
             credentials_dir / "credentials.json",
