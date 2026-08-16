@@ -52,21 +52,23 @@ export default function BackendLoadingPage({
       style={style}
     >
       <div className={styles.card}>
-        <img src="/go-claw-mark.svg" alt="GO CLAW" className={styles.logo} />
+        <div className={styles.visualStack}>
+          <img src="/go-claw-mark.svg" alt="GO CLAW" className={styles.logo} />
 
-        <Progress
-          type="dashboard"
-          percent={percent}
-          status={hasFailed ? "exception" : "active"}
-          strokeColor={BRAND_COLOR}
-          trailColor={isDark ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.04)"}
-          gapPosition="bottom"
-          format={() => (
-            <div className={styles.progressLabel}>{`${elapsed}s`}</div>
-          )}
-          size={160}
-          strokeWidth={8}
-        />
+          <Progress
+            type="dashboard"
+            percent={percent}
+            status={hasFailed ? "exception" : "active"}
+            strokeColor={BRAND_COLOR}
+            trailColor={isDark ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.04)"}
+            gapPosition="bottom"
+            format={() => (
+              <div className={styles.progressLabel}>{`${elapsed}s`}</div>
+            )}
+            size={160}
+            strokeWidth={8}
+          />
+        </div>
 
         <p
           className={`${styles.statusText} ${
