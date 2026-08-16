@@ -22,9 +22,7 @@ MODULE = importlib.util.module_from_spec(SPEC)
 sys.modules[SPEC.name] = MODULE
 SPEC.loader.exec_module(MODULE)
 stage_portable = MODULE.stage_portable
-VALID_DASHSCOPE_KEY = (
-    "sk-unit-test-dashscope-key-abcdefghijklmnopqrstuvwxyz-0123456789"
-)
+VALID_DASHSCOPE_KEY = "sk-unit-test-dashscope-key-abcdefghijklmnopqrstuvwxyz-0123456789"
 
 
 def _write_runtime_layout(binaries: Path) -> None:
@@ -219,9 +217,7 @@ def test_stage_rejects_truncated_dashscope_credentials(tmp_path):
             credentials_file=credentials,
         )
 
-    assert not (
-        tmp_path / "dist/GO-CLAW-Portable-2.0.1-Windows-x64.zip"
-    ).exists()
+    assert not (tmp_path / "dist/GO-CLAW-Portable-2.0.1-Windows-x64.zip").exists()
 
 
 def test_windows_workflow_materializes_batch_credentials_from_secrets():
@@ -232,7 +228,7 @@ def test_windows_workflow_materializes_batch_credentials_from_secrets():
     assert "GO_CLAW_DASHSCOPE_API_KEY" in workflow
     assert '"$configDir/credentials.json"' in workflow
     assert "Invoke-RestMethod" in workflow
-    assert 'TrimEnd(\'/\'))/models"' in workflow
+    assert "TrimEnd('/'))/models\"" in workflow
     assert 'notcontains "qwen-image-3.0"' in workflow
 
 

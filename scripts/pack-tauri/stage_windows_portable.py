@@ -41,9 +41,7 @@ def _validate_batch_credentials_file(credentials_file: Path) -> None:
         payload = json.loads(credentials_file.read_text(encoding="utf-8"))
         api_key = payload["dashscope"]["apiKey"]
     except (json.JSONDecodeError, KeyError, TypeError) as exc:
-        raise ValueError(
-            "DashScope API key is structurally invalid"
-        ) from exc
+        raise ValueError("DashScope API key is structurally invalid") from exc
     if (
         not isinstance(api_key, str)
         or not api_key.startswith("sk-")
