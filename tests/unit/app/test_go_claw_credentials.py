@@ -22,7 +22,9 @@ from qwenpaw.config.config import (
     ToolsConfig,
 )
 
-VALID_DASHSCOPE_KEY = "sk-unit-test-dashscope-key-abcdefghijklmnopqrstuvwxyz-0123456789"
+VALID_KEY_PREFIX = "sk-unit-test-dashscope-key-"
+VALID_KEY_SUFFIX = "abcdefghijklmnopqrstuvwxyz-0123456789"
+VALID_DASHSCOPE_KEY = VALID_KEY_PREFIX + VALID_KEY_SUFFIX
 VALID_PAYLOAD = {
     "schemaVersion": 1,
     "batchId": "test-batch",

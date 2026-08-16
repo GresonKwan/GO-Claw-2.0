@@ -10,9 +10,8 @@ from pathlib import Path
 
 import pytest
 
-MODULE_PATH = (
-    Path(__file__).parents[3] / "scripts" / "pack-tauri" / "stage_windows_portable.py"
-)
+PACKAGING_SCRIPTS = Path(__file__).parents[3] / "scripts" / "pack-tauri"
+MODULE_PATH = PACKAGING_SCRIPTS / "stage_windows_portable.py"
 SPEC = importlib.util.spec_from_file_location(
     "stage_windows_portable",
     MODULE_PATH,
@@ -22,7 +21,10 @@ MODULE = importlib.util.module_from_spec(SPEC)
 sys.modules[SPEC.name] = MODULE
 SPEC.loader.exec_module(MODULE)
 stage_portable = MODULE.stage_portable
-VALID_DASHSCOPE_KEY = "sk-unit-test-dashscope-key-abcdefghijklmnopqrstuvwxyz-0123456789"
+VALID_KEY_PREFIX = "sk-unit-test-dashscope-key-"
+VALID_KEY_SUFFIX = "abcdefghijklmnopqrstuvwxyz-0123456789"
+VALID_DASHSCOPE_KEY = VALID_KEY_PREFIX + VALID_KEY_SUFFIX
+EXAMPLE_DASHSCOPE_BASE_URL = "https://example.invalid/compatible-mode/v1"
 
 
 def _write_runtime_layout(binaries: Path) -> None:
@@ -50,7 +52,7 @@ def _write_credentials_example(tmp_path: Path) -> Path:
                     "apiKey": "填写批次 LLM API Key",
                 },
                 "dashscope": {
-                    "compatibleBaseUrl": ("https://example.invalid/compatible-mode/v1"),
+                    "compatibleBaseUrl": EXAMPLE_DASHSCOPE_BASE_URL,
                     "apiKey": "填写批次 DashScope API Key",
                 },
             },
@@ -217,7 +219,8 @@ def test_stage_rejects_truncated_dashscope_credentials(tmp_path):
             credentials_file=credentials,
         )
 
-    assert not (tmp_path / "dist/GO-CLAW-Portable-2.0.1-Windows-x64.zip").exists()
+    expected_zip = tmp_path / "dist" / "GO-CLAW-Portable-2.0.1-Windows-x64.zip"
+    assert not expected_zip.exists()
 
 
 def test_windows_workflow_materializes_batch_credentials_from_secrets():
