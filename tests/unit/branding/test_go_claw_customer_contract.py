@@ -565,6 +565,7 @@ def test_pyinstaller_spec_bundles_media_plugins_and_dashscope() -> None:
         if isinstance(node, ast.Constant) and isinstance(node.value, str)
     }
     assert "qwenpaw.plugins.dashscope_credentials" in explicit_hiddenimports
+    assert "qwenpaw.plugins.media_quota" in explicit_hiddenimports
     assert any(
         isinstance(call, ast.Call)
         and _call_name(call) == "collect_submodules"

@@ -23,6 +23,7 @@ from qwenpaw.plugins.dashscope_credentials import (
     resolve_dashscope_api_key,
     resolve_dashscope_endpoint,
 )
+from qwenpaw.plugins.media_quota import media_quota
 
 logger = logging.getLogger(__name__)
 
@@ -122,6 +123,13 @@ def _missing_api_key_result() -> ToolChunk:
                 text=_MISSING_API_KEY_MESSAGE,
             ),
         ],
+    )
+
+
+def _quota_denied_result(message: str) -> ToolChunk:
+    return ToolChunk(
+        state=ToolResultState.ERROR,
+        content=[TextBlock(type="text", text=message)],
     )
 
 
@@ -235,6 +243,7 @@ async def text_to_video_wan(
     Returns:
         ToolChunk: Contains local video path and metadata.
     """
+    video_lease = None
     try:
         tool_config = get_tool_config("text_to_video_wan") or {}
 
@@ -303,6 +312,10 @@ async def text_to_video_wan(
         if audio_url:
             kwargs["audio_url"] = audio_url
 
+        video_lease = media_quota.acquire_video()
+        if not video_lease.allowed:
+            return _quota_denied_result(video_lease.message)
+
         rsp = await asyncio.to_thread(
             _call_video_synthesis,
             api_key=api_key,
@@ -365,7 +378,6 @@ async def text_to_video_wan(
                 ),
             ],
         )
-
     except Exception as e:
         logger.error(
             f"Text-to-video generation failed: {e}",
@@ -380,6 +392,9 @@ async def text_to_video_wan(
                 ),
             ],
         )
+    finally:
+        if video_lease is not None and video_lease.allowed:
+            video_lease.release()
 
 
 async def image_to_video_wan(
@@ -427,6 +442,7 @@ async def image_to_video_wan(
     Returns:
         ToolChunk: Contains local video path and metadata.
     """
+    video_lease = None
     try:
         tool_config = get_tool_config("image_to_video_wan") or {}
 
@@ -578,6 +594,10 @@ async def image_to_video_wan(
             f"resolution={resolution}, duration={duration}s",
         )
 
+        video_lease = media_quota.acquire_video()
+        if not video_lease.allowed:
+            return _quota_denied_result(video_lease.message)
+
         rsp = await asyncio.to_thread(
             _call_video_synthesis,
             api_key=api_key,
@@ -643,7 +663,6 @@ async def image_to_video_wan(
                 ),
             ],
         )
-
     except Exception as e:
         logger.error(
             f"Image-to-video generation failed: {e}",
@@ -660,6 +679,9 @@ async def image_to_video_wan(
                 ),
             ],
         )
+    finally:
+        if video_lease is not None and video_lease.allowed:
+            video_lease.release()
 
 
 async def reference_to_video_wan(
@@ -712,6 +734,7 @@ async def reference_to_video_wan(
     if reference_videos is None:
         reference_videos = []
 
+    video_lease = None
     try:
         tool_config = get_tool_config("reference_to_video_wan") or {}
 
@@ -846,6 +869,10 @@ async def reference_to_video_wan(
             f"duration={duration}s",
         )
 
+        video_lease = media_quota.acquire_video()
+        if not video_lease.allowed:
+            return _quota_denied_result(video_lease.message)
+
         rsp = await asyncio.to_thread(
             _call_video_synthesis,
             api_key=api_key,
@@ -914,7 +941,6 @@ async def reference_to_video_wan(
                 ),
             ],
         )
-
     except Exception as e:
         logger.error(
             f"Reference-to-video generation failed: {e}",
@@ -932,3 +958,6 @@ async def reference_to_video_wan(
                 ),
             ],
         )
+    finally:
+        if video_lease is not None and video_lease.allowed:
+            video_lease.release()

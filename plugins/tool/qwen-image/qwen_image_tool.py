@@ -22,6 +22,7 @@ from qwenpaw.plugins.dashscope_credentials import (
     resolve_dashscope_api_key,
     resolve_dashscope_endpoint,
 )
+from qwenpaw.plugins.media_quota import media_quota
 
 logger = logging.getLogger(__name__)
 
@@ -147,6 +148,13 @@ def _missing_api_key_result() -> ToolChunk:
                 text=_MISSING_API_KEY_MESSAGE,
             ),
         ],
+    )
+
+
+def _quota_denied_result(message: str) -> ToolChunk:
+    return ToolChunk(
+        state=ToolResultState.ERROR,
+        content=[TextBlock(type="text", text=message)],
     )
 
 
@@ -359,6 +367,10 @@ async def generate_image_qwen(
             f"Generating image with Qwen-Image: "
             f"model={model}, size={size}, n={n}",
         )
+
+        quota_lease = media_quota.acquire_image(n)
+        if not quota_lease.allowed:
+            return _quota_denied_result(quota_lease.message)
 
         rsp = await asyncio.to_thread(
             _call_multimodal_conversation,
@@ -614,6 +626,10 @@ async def edit_image_qwen(
             f"model={model}, "
             f"reference_images={len(reference_images)}, n={n}",
         )
+
+        quota_lease = media_quota.acquire_image(n)
+        if not quota_lease.allowed:
+            return _quota_denied_result(quota_lease.message)
 
         rsp = await asyncio.to_thread(
             _call_multimodal_conversation,

@@ -273,6 +273,96 @@ async def test_wan_never_requests_without_a_nonblank_api_key(
     assert MISSING_KEY_MESSAGE in result.content[0].text
 
 
+class _DeniedMediaQuota:
+    def acquire_image(self, _requested_outputs: int) -> SimpleNamespace:
+        return SimpleNamespace(
+            allowed=False,
+            message="媒体生成频次已受限，请在 60 秒后重试。",
+        )
+
+    def acquire_video(self) -> SimpleNamespace:
+        return SimpleNamespace(
+            allowed=False,
+            message="媒体生成频次已受限，请在 60 秒后重试。",
+        )
+
+
+class _AllowedMediaQuota:
+    def acquire_image(self, _requested_outputs: int) -> SimpleNamespace:
+        return SimpleNamespace(allowed=True)
+
+    def acquire_video(self) -> SimpleNamespace:
+        return SimpleNamespace(allowed=True, release=lambda: None)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("relative_path", "module_name", "tool_name", "arguments"),
+    [
+        (
+            "plugins/tool/qwen-image/qwen_image_tool.py",
+            "qwen_generate_quota",
+            "generate_image_qwen",
+            ("GO CLAW poster",),
+        ),
+        (
+            "plugins/tool/qwen-image/qwen_image_tool.py",
+            "qwen_edit_quota",
+            "edit_image_qwen",
+            ("add a headline", ["https://example.com/reference.png"]),
+        ),
+        (
+            "plugins/tool/wan27/wan27_tool.py",
+            "wan_text_quota",
+            "text_to_video_wan",
+            ("GO CLAW launch animation",),
+        ),
+        (
+            "plugins/tool/wan27/wan27_tool.py",
+            "wan_image_quota",
+            "image_to_video_wan",
+            ("animate the scene", "https://example.com/first.png"),
+        ),
+        (
+            "plugins/tool/wan27/wan27_tool.py",
+            "wan_reference_quota",
+            "reference_to_video_wan",
+            ("keep 图1 consistent", ["https://example.com/reference.png"]),
+        ),
+    ],
+)
+async def test_media_quota_denial_never_dispatches_provider_request(
+    monkeypatch: pytest.MonkeyPatch,
+    relative_path: str,
+    module_name: str,
+    tool_name: str,
+    arguments: tuple[object, ...],
+) -> None:
+    module = _load_tool_module(relative_path, module_name)
+    monkeypatch.setattr(module, "get_tool_config", lambda _name: {})
+    monkeypatch.setattr(
+        module,
+        "resolve_dashscope_api_key",
+        lambda _config: "unit-test-key",
+    )
+    monkeypatch.setattr(module, "media_quota", _DeniedMediaQuota())
+
+    def unexpected_request(*_args: object, **_kwargs: object) -> None:
+        pytest.fail("quota denial must stop the DashScope request")
+
+    provider_call = (
+        "_call_multimodal_conversation"
+        if relative_path.endswith("qwen_image_tool.py")
+        else "_call_video_synthesis"
+    )
+    monkeypatch.setattr(module, provider_call, unexpected_request)
+
+    result = await getattr(module, tool_name)(*arguments)
+
+    assert result.state is ToolResultState.ERROR
+    assert "60 秒后重试" in result.content[0].text
+
+
 @pytest.mark.asyncio
 async def test_qwen_generation_uses_requested_default_model_and_2k(
     monkeypatch: pytest.MonkeyPatch,
@@ -294,6 +384,7 @@ async def test_qwen_generation_uses_requested_default_model_and_2k(
         "resolve_dashscope_endpoint",
         lambda _config: "https://dashscope.example/api/v1",
     )
+    monkeypatch.setattr(module, "media_quota", _AllowedMediaQuota())
 
     def record_request(**kwargs: object) -> SimpleNamespace:
         calls.append(kwargs)
@@ -394,6 +485,7 @@ async def test_wan_tools_use_requested_default_model_and_720p(
         "resolve_dashscope_endpoint",
         lambda _config: "https://dashscope.example/api/v1",
     )
+    monkeypatch.setattr(module, "media_quota", _AllowedMediaQuota())
 
     def record_request(**kwargs: object) -> SimpleNamespace:
         calls.append(kwargs)
