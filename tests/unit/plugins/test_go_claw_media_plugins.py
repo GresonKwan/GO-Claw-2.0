@@ -3,9 +3,10 @@
 from __future__ import annotations
 
 import importlib.util
+import json
 from collections.abc import Awaitable, Callable
 from pathlib import Path
-from types import ModuleType
+from types import ModuleType, SimpleNamespace
 
 import pytest
 from agentscope.message import ToolResultState
@@ -86,7 +87,7 @@ def test_global_dashscope_key_is_used_when_employee_key_is_blank() -> None:
     ) == "global-key"
 
 
-def test_global_dashscope_compatible_url_maps_to_native_media_endpoint() -> None:
+def test_global_dashscope_url_maps_to_native_endpoint() -> None:
     manager = _ProviderManager(
         "global-key",
         "https://dashscope.example/compatible-mode/v1",
@@ -270,3 +271,146 @@ async def test_wan_never_requests_without_a_nonblank_api_key(
 
     assert result.state is ToolResultState.ERROR
     assert MISSING_KEY_MESSAGE in result.content[0].text
+
+
+@pytest.mark.asyncio
+async def test_qwen_generation_uses_requested_default_model_and_2k(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    module = _load_tool_module(
+        "plugins/tool/qwen-image/qwen_image_tool.py",
+        "qwen_image_requested_defaults",
+    )
+    calls: list[dict[str, object]] = []
+    image_url = "https://example.com/image.png"
+    monkeypatch.setattr(module, "get_tool_config", lambda _name: {})
+    monkeypatch.setattr(
+        module,
+        "resolve_dashscope_api_key",
+        lambda _config: "unit-test-key",
+    )
+    monkeypatch.setattr(
+        module,
+        "resolve_dashscope_endpoint",
+        lambda _config: "https://dashscope.example/api/v1",
+    )
+
+    def record_request(**kwargs: object) -> SimpleNamespace:
+        calls.append(kwargs)
+        return SimpleNamespace(
+            status_code=200,
+            output=SimpleNamespace(
+                choices=[
+                    SimpleNamespace(
+                        message=SimpleNamespace(
+                            content=[{"image": image_url}]
+                        )
+                    )
+                ]
+            ),
+        )
+
+    async def fake_download(*_args: object, **_kwargs: object) -> Path:
+        return Path("/tmp/qwen-image-default.png")
+
+    monkeypatch.setattr(
+        module,
+        "_call_multimodal_conversation",
+        record_request,
+    )
+    monkeypatch.setattr(module, "_download_image", fake_download)
+
+    result = await module.generate_image_qwen("GO CLAW product poster")
+
+    assert result.state is ToolResultState.SUCCESS
+    assert len(calls) == 1
+    assert calls[0]["model"] == "qwen-image-3.0"
+    assert calls[0]["size"] == "2048*2048"
+    assert calls[0]["n"] == 1
+
+
+def test_qwen_manifest_uses_requested_default_model() -> None:
+    manifest = json.loads(
+        (REPOSITORY_ROOT / "plugins/tool/qwen-image/plugin.json").read_text(
+            encoding="utf-8"
+        )
+    )
+    generate_tool = next(
+        tool
+        for tool in manifest["meta"]["tools"]
+        if tool["name"] == "generate_image_qwen"
+    )
+    model_field = next(
+        field
+        for field in generate_tool["config_fields"]
+        if field["name"] == "model"
+    )
+
+    assert model_field["default"] == "qwen-image-3.0"
+    assert "qwen-image-3.0" in model_field["options"]
+    assert "qwen-image-3.0" in model_field["help"]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("tool_name", "arguments", "expected_model"),
+    [
+        (
+            "text_to_video_wan",
+            ("GO CLAW launch animation",),
+            "wan2.7-t2v-2026-06-12",
+        ),
+        (
+            "image_to_video_wan",
+            ("animate the logo", "https://example.com/first.png"),
+            "wan2.7-i2v-2026-04-25",
+        ),
+        (
+            "reference_to_video_wan",
+            ("keep 图1 consistent", ["https://example.com/reference.png"]),
+            "wan2.7-r2v-2026-06-12",
+        ),
+    ],
+)
+async def test_wan_tools_use_requested_default_model_and_720p(
+    monkeypatch: pytest.MonkeyPatch,
+    tool_name: str,
+    arguments: tuple[object, ...],
+    expected_model: str,
+) -> None:
+    module = _load_tool_module(
+        "plugins/tool/wan27/wan27_tool.py",
+        f"wan27_requested_defaults_{tool_name}",
+    )
+    calls: list[dict[str, object]] = []
+    monkeypatch.setattr(module, "get_tool_config", lambda _name: {})
+    monkeypatch.setattr(
+        module,
+        "resolve_dashscope_api_key",
+        lambda _config: "unit-test-key",
+    )
+    monkeypatch.setattr(
+        module,
+        "resolve_dashscope_endpoint",
+        lambda _config: "https://dashscope.example/api/v1",
+    )
+
+    def record_request(**kwargs: object) -> SimpleNamespace:
+        calls.append(kwargs)
+        return SimpleNamespace(
+            status_code=200,
+            output=SimpleNamespace(video_url="https://example.com/video.mp4"),
+        )
+
+    async def fake_download(*_args: object, **_kwargs: object) -> Path:
+        return Path("/tmp/wan27-default.mp4")
+
+    monkeypatch.setattr(module, "_call_video_synthesis", record_request)
+    monkeypatch.setattr(module, "_download_video", fake_download)
+
+    result = await getattr(module, tool_name)(*arguments)
+
+    assert result.state is ToolResultState.SUCCESS
+    assert len(calls) == 1
+    assert calls[0]["model"] == expected_model
+    assert calls[0]["resolution"] == "720P"

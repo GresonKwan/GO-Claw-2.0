@@ -32,6 +32,9 @@ _DASHSCOPE_LOCK = threading.Lock()
 _DEFAULT_ENDPOINT = "https://dashscope.aliyuncs.com/api/v1"
 _DEFAULT_TIMEOUT = 600.0
 _MISSING_API_KEY_MESSAGE = "请在 GO CLAW 批次凭证或当前数字员工工具配置中填写 DashScope API Key"
+_TEXT_TO_VIDEO_MODEL = "wan2.7-t2v-2026-06-12"
+_IMAGE_TO_VIDEO_MODEL = "wan2.7-i2v-2026-04-25"
+_REFERENCE_TO_VIDEO_MODEL = "wan2.7-r2v-2026-06-12"
 
 _VALID_RESOLUTIONS = {"720P", "1080P"}
 _VALID_RATIOS = {"16:9", "9:16", "1:1", "4:3", "3:4"}
@@ -284,7 +287,7 @@ async def text_to_video_wan(
             )
 
         logger.info(
-            f"Generating text-to-video: model=wan2.7-t2v-2026-04-25, "
+            f"Generating text-to-video: model={_TEXT_TO_VIDEO_MODEL}, "
             f"resolution={resolution}, ratio={ratio}, "
             f"duration={duration}s",
         )
@@ -304,7 +307,7 @@ async def text_to_video_wan(
             _call_video_synthesis,
             api_key=api_key,
             endpoint=endpoint,
-            model="wan2.7-t2v-2026-04-25",
+            model=_TEXT_TO_VIDEO_MODEL,
             prompt=prompt,
             **kwargs,
         )
@@ -352,7 +355,7 @@ async def text_to_video_wan(
                     type="text",
                     text=(
                         f"Video generated successfully using Wan 2.7\n"
-                        f"Model: wan2.7-t2v-2026-04-25\n"
+                        f"Model: {_TEXT_TO_VIDEO_MODEL}\n"
                         f"Prompt: {prompt}\n"
                         f"Resolution: {resolution}, Ratio: {ratio}, "
                         f"Duration: {duration}s\n"
@@ -571,7 +574,7 @@ async def image_to_video_wan(
 
         logger.info(
             f"Generating image-to-video: mode={mode_desc}, "
-            f"model=wan2.7-i2v-2026-04-25, "
+            f"model={_IMAGE_TO_VIDEO_MODEL}, "
             f"resolution={resolution}, duration={duration}s",
         )
 
@@ -579,7 +582,7 @@ async def image_to_video_wan(
             _call_video_synthesis,
             api_key=api_key,
             endpoint=endpoint,
-            model="wan2.7-i2v-2026-04-25",
+            model=_IMAGE_TO_VIDEO_MODEL,
             prompt=prompt,
             media=media,
             resolution=resolution,
@@ -630,7 +633,7 @@ async def image_to_video_wan(
                     type="text",
                     text=(
                         f"Video generated successfully using Wan 2.7\n"
-                        f"Model: wan2.7-i2v-2026-04-25\n"
+                        f"Model: {_IMAGE_TO_VIDEO_MODEL}\n"
                         f"Mode: {mode_desc}\n"
                         f"Prompt: {prompt}\n"
                         f"Resolution: {resolution}, Duration: {duration}s\n"
@@ -836,7 +839,7 @@ async def reference_to_video_wan(
 
         logger.info(
             f"Generating reference-to-video: "
-            f"model=wan2.7-r2v, "
+            f"model={_REFERENCE_TO_VIDEO_MODEL}, "
             f"reference_images={len(reference_images)}, "
             f"reference_videos={len(reference_videos)}, "
             f"resolution={resolution}, ratio={ratio}, "
@@ -847,7 +850,7 @@ async def reference_to_video_wan(
             _call_video_synthesis,
             api_key=api_key,
             endpoint=endpoint,
-            model="wan2.7-r2v",
+            model=_REFERENCE_TO_VIDEO_MODEL,
             prompt=prompt,
             media=media,
             resolution=resolution,
@@ -899,7 +902,7 @@ async def reference_to_video_wan(
                     type="text",
                     text=(
                         f"Video generated successfully using Wan 2.7\n"
-                        f"Model: wan2.7-r2v\n"
+                        f"Model: {_REFERENCE_TO_VIDEO_MODEL}\n"
                         f"Reference images: {len(reference_images)}, "
                         f"Reference videos: {len(reference_videos)}\n"
                         f"Prompt: {prompt}\n"

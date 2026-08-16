@@ -40,6 +40,7 @@ _IMAGE_MIME_TYPES = {
 }
 
 _VALID_MODELS_GENERATE = {
+    "qwen-image-3.0",
     "qwen-image-2.0-pro",
     "qwen-image-2.0-pro-2026-04-22",
     "qwen-image-2.0-pro-2026-03-03",
@@ -270,7 +271,7 @@ async def generate_image_qwen(
     and precise semantic adherence.
 
     The model is selected via the tool's configuration settings.
-    Available models: qwen-image-2.0-pro (default), qwen-image-2.0,
+    Available models: qwen-image-3.0 (default), qwen-image-2.0-pro,
     qwen-image-max, qwen-image-plus, and dated snapshot versions.
 
     Args:
@@ -303,7 +304,7 @@ async def generate_image_qwen(
 
         api_key, endpoint, timeout, model = _extract_config(
             tool_config,
-            default_model="qwen-image-2.0-pro",
+            default_model="qwen-image-3.0",
         )
         if not api_key:
             return _missing_api_key_result()

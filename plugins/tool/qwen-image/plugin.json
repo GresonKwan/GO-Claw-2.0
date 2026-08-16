@@ -41,8 +41,9 @@
             "label": "模型",
             "type": "select",
             "required": false,
-            "default": "qwen-image-2.0-pro",
+            "default": "qwen-image-3.0",
             "options": [
+              "qwen-image-3.0",
               "qwen-image-2.0-pro",
               "qwen-image-2.0-pro-2026-04-22",
               "qwen-image-2.0-pro-2026-03-03",
@@ -54,7 +55,7 @@
               "qwen-image-plus-2026-01-09",
               "qwen-image"
             ],
-            "help": "选择图像生成模型（默认：qwen-image-2.0-pro）"
+            "help": "选择图像生成模型（默认：qwen-image-3.0）"
           },
           {
             "name": "endpoint",
