@@ -139,6 +139,9 @@ src/.hypothesis/
 /localfile/
 local-docs/
 **/GO-CLAW-Config/credentials.json
+**/GO-CLAW-Config/provision.json
+scripts/provisioning/.env
+scripts/provisioning/provision.db
 
 # E2E test artifacts
 e2e/reports/

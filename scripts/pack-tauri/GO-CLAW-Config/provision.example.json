@@ -1,0 +1,4 @@
+{
+  "provisionUrl": "https://你的服务器域名/api/provision",
+  "hmacSecret": "构建时替换为真实密钥（至少16位，勿提交本文件）"
+}

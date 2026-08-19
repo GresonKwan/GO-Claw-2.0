@@ -86,6 +86,32 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: ./scripts/pack-tauri/build_pyinstaller.ps1
 
+      - name: Materialize optional GO CLAW provision config
+        shell: pwsh
+        env:
+          GO_CLAW_PROVISION_URL: ${{ secrets.GO_CLAW_PROVISION_URL }}
+          GO_CLAW_PROVISION_HMAC_SECRET: ${{ secrets.GO_CLAW_PROVISION_HMAC_SECRET }}
+        run: |
+          if (
+            [string]::IsNullOrWhiteSpace($env:GO_CLAW_PROVISION_URL) -or
+            [string]::IsNullOrWhiteSpace($env:GO_CLAW_PROVISION_HMAC_SECRET)
+          ) {
+            Write-Host "Provision config not configured; skipping"
+          } else {
+            $configDir = "scripts/pack-tauri/GO-CLAW-Config"
+            New-Item -ItemType Directory -Force -Path $configDir | Out-Null
+            $payload = [ordered]@{
+              provisionUrl = $env:GO_CLAW_PROVISION_URL
+              hmacSecret = $env:GO_CLAW_PROVISION_HMAC_SECRET
+            }
+            [IO.File]::WriteAllText(
+              "$configDir/provision.json",
+              ($payload | ConvertTo-Json),
+              [Text.UTF8Encoding]::new($false)
+            )
+            Write-Host "Provision config staged without displaying secret values"
+          }
+
       - name: Replace backend and restage portable ZIP
         shell: pwsh
         run: |

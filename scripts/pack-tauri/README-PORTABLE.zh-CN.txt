@@ -6,6 +6,9 @@ GO CLAW Portable 2.0.1（Windows 10/11 x64）
 1. 将 ZIP 完整解压到 NTFS 或 exFAT 格式的 U 盘目录。
 2. 双击 GO-CLAW-Portable.exe。
 3. 首次启动需要初始化，通常等待 10–120 秒；准备完成后会自动打开系统默认浏览器。
+4. 若本包附带 GO-CLAW-Config\provision.json（自动开通配置），首次启动时请保持联网：
+   软件会自动为你的这份拷贝开通专属 API 额度并写好配置，无需手动填写 Key。
+   首次启动时未联网不影响使用，联网后重启软件会自动补开通。
 
 请勿只复制 EXE。binaries、portable.json 与 EXE 必须保持在同一完整目录结构中。
 
@@ -22,6 +25,7 @@ API 与模型
 
 批次 API 凭证（可选）
 --------------------
+若包内已有 provision.json（自动开通），无需本节操作，软件会在首次启动时自动生成 credentials.json。
 1. 复制 GO-CLAW-Config\credentials.example.json 为 credentials.json。
 2. 填入本批次 LLM 与 DashScope API Key，再将整个文件夹写入 U 盘。
 3. GO CLAW 只在该 U 盘数据目录尚无导入标记时导入一次；导入成功后，客户端中的后续修改不会被 credentials.json 覆盖。

@@ -45,11 +45,27 @@ def _validate_batch_credentials_file(credentials_file: Path) -> None:
     if (
         not isinstance(api_key, str)
         or not api_key.startswith("sk-")
-        or len(api_key) < 64
+        or len(api_key) < 20
         or "\\" in api_key
         or any(char.isspace() for char in api_key)
     ):
         raise ValueError("DashScope API key is structurally invalid")
+
+
+def _validate_provision_file(provision_file: Path) -> None:
+    try:
+        payload = json.loads(provision_file.read_text(encoding="utf-8"))
+        url = payload["provisionUrl"]
+        secret = payload["hmacSecret"]
+    except (json.JSONDecodeError, KeyError, TypeError) as exc:
+        raise ValueError("Provisioning config is structurally invalid") from exc
+    if (
+        not isinstance(url, str)
+        or not url.startswith("https://")
+        or not isinstance(secret, str)
+        or len(secret) < 16
+    ):
+        raise ValueError("Provisioning config is structurally invalid")
 
 
 def _validate_dist(dist: Path, repository_root: Path | None) -> Path:
@@ -97,6 +113,7 @@ def stage_portable(
     readme_file: Path,
     credentials_example_file: Path,
     credentials_file: Path | None = None,
+    provision_file: Path | None = None,
     repository_root: Path | None = None,
 ) -> PortableOutput:
     """Create a versioned portable directory, ZIP and SHA-256 sidecar."""
@@ -149,6 +166,16 @@ def stage_portable(
             credentials_file,
             credentials_dir / "credentials.json",
         )
+    if provision_file is not None:
+        provision_file = _require_file(
+            provision_file,
+            "provisioning config",
+        )
+        _validate_provision_file(provision_file)
+        shutil.copy2(
+            provision_file,
+            credentials_dir / "provision.json",
+        )
     (stage_dir / "portable.json").write_text(
         json.dumps(
             {"schemaVersion": 1, "clientMode": "browser"},
@@ -196,6 +223,13 @@ def main(argv: list[str] | None = None) -> int:
         / "GO-CLAW-Config"
         / "credentials.json"
     )
+    provision_file = (
+        repository_root
+        / "scripts"
+        / "pack-tauri"
+        / "GO-CLAW-Config"
+        / "provision.json"
+    )
     output = stage_portable(
         version=args.version,
         exe=args.exe,
@@ -214,6 +248,7 @@ def main(argv: list[str] | None = None) -> int:
             / "credentials.example.json"
         ),
         credentials_file=(credentials_file if credentials_file.is_file() else None),
+        provision_file=(provision_file if provision_file.is_file() else None),
         repository_root=repository_root,
     )
     print(f"Portable directory: {output.stage_dir}")
