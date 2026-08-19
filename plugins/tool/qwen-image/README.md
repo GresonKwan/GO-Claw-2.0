@@ -2,6 +2,11 @@
 
 Generate and edit images using Alibaba Cloud's Qwen-Image models via DashScope SDK.
 
+The plugin also supports OpenAI-compatible relay gateways (e.g. a self-hosted
+NewAPI): when the configured endpoint host is not `aliyuncs.com`, requests are
+sent through `POST {root}/v1/images/generations` instead of the native
+DashScope SDK.
+
 ## Tools
 
 ### `generate_image_qwen` - 文生图
@@ -72,15 +77,22 @@ Each tool has independent configuration fields:
 | Field | Description | Default |
 |-------|-------------|---------|
 | `api_key` | DashScope API key (required) | — |
-| `endpoint` | Regional API endpoint | `https://dashscope.aliyuncs.com/api/v1` |
+| `endpoint` | Regional API endpoint, or NewAPI relay URL | `https://dashscope.aliyuncs.com/api/v1` |
 | `timeout` | Request timeout in seconds | 120 |
-| `model` | Model name for image generation/editing | `qwen-image-2.0-pro` |
+| `model` | Model name for image generation/editing | `qwen-image-2.0` (generate) / `qwen-image-2.0-pro` (edit) |
 
 **Endpoints:**
 - Beijing: `https://dashscope.aliyuncs.com/api/v1`
 - Singapore: `https://dashscope-intl.aliyuncs.com/api/v1`
+- NewAPI relay: `https://your-newapi-host/v1` (any non-`aliyuncs.com` host
+  switches the plugin to the OpenAI-compatible protocol)
 
 > Note: API key and endpoint must be from the same region.
+
+> In NewAPI relay mode, `edit_image_qwen` sends the first reference image as
+> the `image` field (extra images via `metadata.images`) together with the
+> prompt to `/v1/images/generations`, instead of the multipart `/images/edits`
+> interface.
 
 Get your API key at: https://bailian.console.aliyun.com/
 

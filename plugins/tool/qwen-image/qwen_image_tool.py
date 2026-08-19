@@ -18,10 +18,7 @@ from agentscope.message import ToolResultState
 from agentscope.tool import ToolChunk
 from qwenpaw.constant import DEFAULT_MEDIA_DIR
 from qwenpaw.plugins import get_tool_config
-from qwenpaw.plugins.dashscope_credentials import (
-    resolve_dashscope_api_key,
-    resolve_dashscope_endpoint,
-)
+from qwenpaw.plugins.dashscope_credentials import resolve_media_api
 from qwenpaw.plugins.media_quota import media_quota
 
 logger = logging.getLogger(__name__)
@@ -114,18 +111,19 @@ def _resolve_image_url(path_or_url: str) -> str:
 def _extract_config(
     tool_config: dict,
     default_model: str,
-) -> tuple[str, str, float, str]:
-    """Extract api_key, endpoint, timeout and model from tool config.
+) -> tuple[str, str, str, float, str]:
+    """Extract mode, api_key, base_url, timeout and model from config.
 
     Args:
         tool_config: Tool configuration dict.
         default_model: Fallback model name when not set in config.
 
     Returns:
-        Tuple of (api_key, endpoint, timeout, model).
+        Tuple of (mode, api_key, base_url, timeout, model). ``mode`` is
+        "dashscope" (native SDK) or "openai" (OpenAI-compatible relay);
+        ``base_url`` matches the resolved mode.
     """
-    api_key = resolve_dashscope_api_key(tool_config)
-    endpoint = resolve_dashscope_endpoint(tool_config)
+    mode, base_url, api_key = resolve_media_api(tool_config)
 
     timeout_raw = tool_config.get("timeout")
     if timeout_raw is None or float(timeout_raw) <= 0:
@@ -135,7 +133,7 @@ def _extract_config(
 
     model = tool_config.get("model", "") or default_model
 
-    return api_key, endpoint, timeout, model
+    return mode, api_key, base_url, timeout, model
 
 
 def _missing_api_key_result() -> ToolChunk:
@@ -193,6 +191,75 @@ async def _download_image(
 
     logger.info(f"Image saved to {image_path}")
     return image_path
+
+
+async def _generate_images_openai(
+    base_url: str,
+    api_key: str,
+    model: str,
+    prompt: str,
+    *,
+    size: str = "",
+    n: int = 1,
+    image: str = "",
+    extra_images: List[str] | None = None,
+    timeout: float,
+) -> List[str]:
+    """Call an OpenAI-compatible images/generations endpoint (NewAPI).
+
+    NewAPI does not forward DashScope native paths, so media requests
+    must go through the OpenAI-compatible ``POST {base_url}/images/
+    generations`` interface. For edit/fusion requests the reference
+    image rides along as the ``image`` field (URL or base64 data URI),
+    which the upstream qwen-image-2.0 model accepts.
+
+    Args:
+        base_url: OpenAI-compatible base URL ending in ``/v1``.
+        api_key: API key for the gateway.
+        model: Model name.
+        prompt: Text prompt.
+        size: Output size in "width*height" format (optional).
+        n: Number of images.
+        image: Optional reference image (URL or base64 data URI).
+        extra_images: Additional reference images for fusion.
+        timeout: HTTP timeout in seconds.
+
+    Returns:
+        List of generated image URL strings.
+
+    Raises:
+        RuntimeError: If the gateway returns an error or no images.
+    """
+    payload = {
+        "model": model,
+        "prompt": prompt,
+        "n": n,
+    }
+    if size:
+        payload["size"] = size
+    if image:
+        payload["image"] = image
+        if extra_images:
+            payload["metadata"] = {"images": list(extra_images)}
+
+    headers = {"Authorization": f"Bearer {api_key}"}
+    url = f"{base_url}/images/generations"
+    logger.info(f"OpenAI-compatible image request: model={model}, url={url}")
+
+    async with httpx.AsyncClient(timeout=timeout) as client:
+        response = await client.post(url, json=payload, headers=headers)
+
+    if response.status_code != 200:
+        raise RuntimeError(
+            f"OpenAI-compatible image API error: "
+            f"{response.status_code} - {response.text[:500]}",
+        )
+
+    data = response.json().get("data") or []
+    urls = [
+        item.get("url") for item in data if isinstance(item, dict)
+    ]
+    return [url for url in urls if url]
 
 
 def _call_multimodal_conversation(
@@ -279,8 +346,13 @@ async def generate_image_qwen(
     and precise semantic adherence.
 
     The model is selected via the tool's configuration settings.
-    Available models: qwen-image-3.0 (default), qwen-image-2.0-pro,
+    Available models: qwen-image-2.0 (default), qwen-image-2.0-pro,
     qwen-image-max, qwen-image-plus, and dated snapshot versions.
+
+    When the configured endpoint points to an OpenAI-compatible relay
+    (e.g. a NewAPI gateway, any non-aliyuncs.com host), the request is
+    sent through ``POST {root}/v1/images/generations`` instead of the
+    native DashScope SDK.
 
     Args:
         prompt (str):
@@ -310,9 +382,9 @@ async def generate_image_qwen(
     try:
         tool_config = get_tool_config("generate_image_qwen") or {}
 
-        api_key, endpoint, timeout, model = _extract_config(
+        mode, api_key, base_url, timeout, model = _extract_config(
             tool_config,
-            default_model="qwen-image-3.0",
+            default_model="qwen-image-2.0",
         )
         if not api_key:
             return _missing_api_key_result()
@@ -346,58 +418,72 @@ async def generate_image_qwen(
                 ],
             )
 
-        messages = [
-            {
-                "role": "user",
-                "content": [{"text": prompt}],
-            },
-        ]
-
-        call_kwargs = {
-            "watermark": False,
-            "prompt_extend": prompt_extend,
-            "n": n,
-        }
-        if size:
-            call_kwargs["size"] = size
-        if negative_prompt:
-            call_kwargs["negative_prompt"] = negative_prompt
-
         logger.info(
             f"Generating image with Qwen-Image: "
-            f"model={model}, size={size}, n={n}",
+            f"mode={mode}, model={model}, size={size}, n={n}",
         )
 
         quota_lease = media_quota.acquire_image(n)
         if not quota_lease.allowed:
             return _quota_denied_result(quota_lease.message)
 
-        rsp = await asyncio.to_thread(
-            _call_multimodal_conversation,
-            api_key=api_key,
-            endpoint=endpoint,
-            model=model,
-            messages=messages,
-            **call_kwargs,
-        )
-
-        if rsp.status_code != 200:
-            error_msg = (
-                f"DashScope API error: {rsp.status_code} - "
-                f"{rsp.code}: {rsp.message}"
+        if mode == "openai":
+            # OpenAI-compatible relay (e.g. NewAPI): POST /v1/images/
+            # generations and read the URL from data[0].
+            image_urls = await _generate_images_openai(
+                base_url=base_url,
+                api_key=api_key,
+                model=model,
+                prompt=prompt,
+                size=size or "1024*1024",
+                n=n,
+                timeout=timeout,
             )
-            logger.error(error_msg)
-            return ToolChunk(
-                state=ToolResultState.ERROR,
-                content=[
-                    TextBlock(
-                        type="text",
-                        text=f"Error: {error_msg}",
-                    ),
-                ],
+        else:
+            messages = [
+                {
+                    "role": "user",
+                    "content": [{"text": prompt}],
+                },
+            ]
+
+            call_kwargs = {
+                "watermark": False,
+                "prompt_extend": prompt_extend,
+                "n": n,
+            }
+            if size:
+                call_kwargs["size"] = size
+            if negative_prompt:
+                call_kwargs["negative_prompt"] = negative_prompt
+
+            rsp = await asyncio.to_thread(
+                _call_multimodal_conversation,
+                api_key=api_key,
+                endpoint=base_url,
+                model=model,
+                messages=messages,
+                **call_kwargs,
             )
 
-        image_urls = _parse_image_urls(rsp)
+            if rsp.status_code != 200:
+                error_msg = (
+                    f"DashScope API error: {rsp.status_code} - "
+                    f"{rsp.code}: {rsp.message}"
+                )
+                logger.error(error_msg)
+                return ToolChunk(
+                    state=ToolResultState.ERROR,
+                    content=[
+                        TextBlock(
+                            type="text",
+                            text=f"Error: {error_msg}",
+                        ),
+                    ],
+                )
+
+            image_urls = _parse_image_urls(rsp)
+
         if not image_urls:
             return ToolChunk(
                 state=ToolResultState.ERROR,
@@ -502,6 +588,12 @@ async def edit_image_qwen(
     text rendering) and multi-image fusion (combine elements from
     multiple images).
 
+    When the configured endpoint points to an OpenAI-compatible relay
+    (e.g. a NewAPI gateway, any non-aliyuncs.com host), the reference
+    image is sent as the ``image`` field together with the prompt to
+    ``POST {root}/v1/images/generations`` instead of the native
+    DashScope SDK.
+
     The model is selected via the tool's configuration settings.
     Available models: qwen-image-2.0-pro (default), qwen-image-2.0,
     qwen-image-edit-max, qwen-image-edit-plus, qwen-image-edit,
@@ -551,7 +643,7 @@ async def edit_image_qwen(
 
         tool_config = get_tool_config("edit_image_qwen") or {}
 
-        api_key, endpoint, timeout, model = _extract_config(
+        mode, api_key, base_url, timeout, model = _extract_config(
             tool_config,
             default_model="qwen-image-2.0-pro",
         )
@@ -587,8 +679,8 @@ async def edit_image_qwen(
                 ],
             )
 
-        # Build message content: images first, then prompt text
-        content = []
+        # Resolve reference images first (shared by both API modes)
+        resolved_images = []
         for img_input in reference_images:
             try:
                 resolved = _resolve_image_url(img_input)
@@ -605,25 +697,11 @@ async def edit_image_qwen(
                         ),
                     ],
                 )
-            content.append({"image": resolved})
-
-        content.append({"text": prompt})
-
-        messages = [{"role": "user", "content": content}]
-
-        call_kwargs = {
-            "watermark": False,
-            "prompt_extend": prompt_extend,
-            "n": n,
-        }
-        if size:
-            call_kwargs["size"] = size
-        if negative_prompt:
-            call_kwargs["negative_prompt"] = negative_prompt
+            resolved_images.append(resolved)
 
         logger.info(
             f"Editing image with Qwen-Image: "
-            f"model={model}, "
+            f"mode={mode}, model={model}, "
             f"reference_images={len(reference_images)}, n={n}",
         )
 
@@ -631,32 +709,66 @@ async def edit_image_qwen(
         if not quota_lease.allowed:
             return _quota_denied_result(quota_lease.message)
 
-        rsp = await asyncio.to_thread(
-            _call_multimodal_conversation,
-            api_key=api_key,
-            endpoint=endpoint,
-            model=model,
-            messages=messages,
-            **call_kwargs,
-        )
-
-        if rsp.status_code != 200:
-            error_msg = (
-                f"DashScope API error: {rsp.status_code} - "
-                f"{rsp.code}: {rsp.message}"
+        if mode == "openai":
+            # OpenAI-compatible relay (e.g. NewAPI): send the reference
+            # image(s) together with the prompt to /v1/images/generations.
+            # The upstream qwen-image-2.0 model accepts reference images
+            # via the ``image`` field; extras go to ``metadata.images``.
+            image_urls = await _generate_images_openai(
+                base_url=base_url,
+                api_key=api_key,
+                model=model,
+                prompt=prompt,
+                size=size,
+                n=n,
+                image=resolved_images[0],
+                extra_images=resolved_images[1:] or None,
+                timeout=timeout,
             )
-            logger.error(error_msg)
-            return ToolChunk(
-                state=ToolResultState.ERROR,
-                content=[
-                    TextBlock(
-                        type="text",
-                        text=f"Error: {error_msg}",
-                    ),
-                ],
+        else:
+            # Build message content: images first, then prompt text
+            content = [{"image": url} for url in resolved_images]
+            content.append({"text": prompt})
+
+            messages = [{"role": "user", "content": content}]
+
+            call_kwargs = {
+                "watermark": False,
+                "prompt_extend": prompt_extend,
+                "n": n,
+            }
+            if size:
+                call_kwargs["size"] = size
+            if negative_prompt:
+                call_kwargs["negative_prompt"] = negative_prompt
+
+            rsp = await asyncio.to_thread(
+                _call_multimodal_conversation,
+                api_key=api_key,
+                endpoint=base_url,
+                model=model,
+                messages=messages,
+                **call_kwargs,
             )
 
-        image_urls = _parse_image_urls(rsp)
+            if rsp.status_code != 200:
+                error_msg = (
+                    f"DashScope API error: {rsp.status_code} - "
+                    f"{rsp.code}: {rsp.message}"
+                )
+                logger.error(error_msg)
+                return ToolChunk(
+                    state=ToolResultState.ERROR,
+                    content=[
+                        TextBlock(
+                            type="text",
+                            text=f"Error: {error_msg}",
+                        ),
+                    ],
+                )
+
+            image_urls = _parse_image_urls(rsp)
+
         if not image_urls:
             return ToolChunk(
                 state=ToolResultState.ERROR,

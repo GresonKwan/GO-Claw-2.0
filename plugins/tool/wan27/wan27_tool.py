@@ -19,10 +19,7 @@ from agentscope.message import ToolResultState
 from agentscope.tool import ToolChunk
 from qwenpaw.constant import DEFAULT_MEDIA_DIR
 from qwenpaw.plugins import get_tool_config
-from qwenpaw.plugins.dashscope_credentials import (
-    resolve_dashscope_api_key,
-    resolve_dashscope_endpoint,
-)
+from qwenpaw.plugins.dashscope_credentials import resolve_media_api
 from qwenpaw.plugins.media_quota import media_quota
 
 logger = logging.getLogger(__name__)
@@ -33,9 +30,12 @@ _DASHSCOPE_LOCK = threading.Lock()
 _DEFAULT_ENDPOINT = "https://dashscope.aliyuncs.com/api/v1"
 _DEFAULT_TIMEOUT = 600.0
 _MISSING_API_KEY_MESSAGE = "请在 GO CLAW 批次凭证或当前数字员工工具配置中填写 DashScope API Key"
-_TEXT_TO_VIDEO_MODEL = "wan2.7-t2v-2026-06-12"
-_IMAGE_TO_VIDEO_MODEL = "wan2.7-i2v-2026-04-25"
-_REFERENCE_TO_VIDEO_MODEL = "wan2.7-r2v-2026-06-12"
+_TEXT_TO_VIDEO_MODEL = "wan2.7-t2v"
+_IMAGE_TO_VIDEO_MODEL = "wan2.7-i2v"
+_REFERENCE_TO_VIDEO_MODEL = "wan2.7-r2v"
+
+# Polling interval (seconds) for OpenAI-compatible video tasks
+_OPENAI_POLL_INTERVAL = 5.0
 
 _VALID_RESOLUTIONS = {"720P", "1080P"}
 _VALID_RATIOS = {"16:9", "9:16", "1:1", "4:3", "3:4"}
@@ -92,17 +92,20 @@ def _resolve_image_url(path_or_url: str) -> str:
 
 def _extract_config(
     tool_config: dict,
-) -> tuple[str, str, float]:
-    """Extract api_key, endpoint and timeout from tool config.
+    default_model: str,
+) -> tuple[str, str, str, float, str]:
+    """Extract mode, api_key, base_url, timeout and model from config.
 
     Args:
         tool_config: Tool configuration dict.
+        default_model: Fallback model name when not set in config.
 
     Returns:
-        Tuple of (api_key, endpoint, timeout).
+        Tuple of (mode, api_key, base_url, timeout, model). ``mode`` is
+        "dashscope" (native SDK) or "openai" (OpenAI-compatible relay);
+        ``base_url`` matches the resolved mode.
     """
-    api_key = resolve_dashscope_api_key(tool_config)
-    endpoint = resolve_dashscope_endpoint(tool_config)
+    mode, base_url, api_key = resolve_media_api(tool_config)
 
     timeout_raw = tool_config.get("timeout")
     if timeout_raw is None or float(timeout_raw) <= 0:
@@ -110,7 +113,9 @@ def _extract_config(
     else:
         timeout = float(timeout_raw)
 
-    return api_key, endpoint, timeout
+    model = tool_config.get("model", "") or default_model
+
+    return mode, api_key, base_url, timeout, model
 
 
 def _missing_api_key_result() -> ToolChunk:
@@ -168,6 +173,86 @@ async def _download_video(
 
     logger.info(f"Video saved to {video_path}")
     return video_path
+
+
+async def _run_video_task_openai(
+    base_url: str,
+    api_key: str,
+    payload: dict,
+    timeout: float,
+) -> str:
+    """Create and poll an OpenAI-compatible video task (NewAPI relay).
+
+    NewAPI does not forward DashScope native paths, so video requests
+    go through ``POST {base_url}/video/generations`` followed by
+    polling ``GET {base_url}/video/generations/{task_id}`` until the
+    task succeeds, fails, or the total timeout budget runs out.
+
+    Args:
+        base_url: OpenAI-compatible base URL ending in ``/v1``.
+        api_key: API key for the gateway.
+        payload: JSON body for the create request.
+        timeout: Total timeout budget in seconds.
+
+    Returns:
+        The result video URL.
+
+    Raises:
+        RuntimeError: If the gateway or the task reports an error.
+        TimeoutError: If the task does not finish within ``timeout``.
+    """
+    headers = {"Authorization": f"Bearer {api_key}"}
+    create_url = f"{base_url}/video/generations"
+
+    async with httpx.AsyncClient(timeout=timeout) as client:
+        response = await client.post(
+            create_url,
+            json=payload,
+            headers=headers,
+        )
+        if response.status_code != 200:
+            raise RuntimeError(
+                f"OpenAI-compatible video API error: "
+                f"{response.status_code} - {response.text[:500]}",
+            )
+        body = response.json()
+        task_id = body.get("task_id") or body.get("id")
+        if not task_id:
+            raise RuntimeError(
+                "OpenAI-compatible video API did not return a task id: "
+                f"{body}",
+            )
+
+        poll_url = f"{create_url}/{task_id}"
+        deadline = time.monotonic() + timeout
+        while True:
+            poll = await client.get(poll_url, headers=headers)
+            if poll.status_code != 200:
+                raise RuntimeError(
+                    f"OpenAI-compatible video poll error: "
+                    f"{poll.status_code} - {poll.text[:500]}",
+                )
+            data = poll.json().get("data") or {}
+            status = str(data.get("status") or "").upper()
+            if status == "SUCCESS":
+                result_url = data.get("result_url")
+                if not result_url:
+                    raise RuntimeError(
+                        "OpenAI-compatible video task succeeded but "
+                        "returned no result_url",
+                    )
+                return result_url
+            if status == "FAILED":
+                raise RuntimeError(
+                    f"Video generation failed: "
+                    f"{data.get('fail_reason') or 'unknown reason'}",
+                )
+            if time.monotonic() >= deadline:
+                raise TimeoutError(
+                    f"Video generation timed out after {timeout}s "
+                    f"(task {task_id})",
+                )
+            await asyncio.sleep(_OPENAI_POLL_INTERVAL)
 
 
 def _call_video_synthesis(
@@ -247,7 +332,10 @@ async def text_to_video_wan(
     try:
         tool_config = get_tool_config("text_to_video_wan") or {}
 
-        api_key, endpoint, timeout = _extract_config(tool_config)
+        mode, api_key, base_url, timeout, model = _extract_config(
+            tool_config,
+            default_model=_TEXT_TO_VIDEO_MODEL,
+        )
         if not api_key:
             return _missing_api_key_result()
 
@@ -296,52 +384,78 @@ async def text_to_video_wan(
             )
 
         logger.info(
-            f"Generating text-to-video: model={_TEXT_TO_VIDEO_MODEL}, "
+            f"Generating text-to-video: mode={mode}, model={model}, "
             f"resolution={resolution}, ratio={ratio}, "
             f"duration={duration}s",
         )
-
-        kwargs = {
-            "resolution": resolution,
-            "ratio": ratio,
-            "duration": duration,
-            "prompt_extend": prompt_extend,
-        }
-        if negative_prompt:
-            kwargs["negative_prompt"] = negative_prompt
-        if audio_url:
-            kwargs["audio_url"] = audio_url
 
         video_lease = media_quota.acquire_video()
         if not video_lease.allowed:
             return _quota_denied_result(video_lease.message)
 
-        rsp = await asyncio.to_thread(
-            _call_video_synthesis,
-            api_key=api_key,
-            endpoint=endpoint,
-            model=_TEXT_TO_VIDEO_MODEL,
-            prompt=prompt,
-            **kwargs,
-        )
-
-        if rsp.status_code != HTTPStatus.OK:
-            error_msg = (
-                f"DashScope API error: {rsp.status_code} - "
-                f"{rsp.code}: {rsp.message}"
+        if mode == "openai":
+            # OpenAI-compatible relay (e.g. NewAPI): vendor parameters
+            # ride inside the metadata object.
+            metadata = {
+                "resolution": resolution,
+                "ratio": ratio,
+                "prompt_extend": prompt_extend,
+            }
+            if negative_prompt:
+                metadata["negative_prompt"] = negative_prompt
+            if audio_url:
+                metadata["audio_url"] = audio_url
+            payload = {
+                "model": model,
+                "prompt": prompt,
+                "duration": duration,
+                "metadata": metadata,
+            }
+            video_url = await _run_video_task_openai(
+                base_url,
+                api_key,
+                payload,
+                timeout,
             )
-            logger.error(error_msg)
-            return ToolChunk(
-                state=ToolResultState.ERROR,
-                content=[
-                    TextBlock(
-                        type="text",
-                        text=f"Error: {error_msg}",
-                    ),
-                ],
+        else:
+            kwargs = {
+                "resolution": resolution,
+                "ratio": ratio,
+                "duration": duration,
+                "prompt_extend": prompt_extend,
+            }
+            if negative_prompt:
+                kwargs["negative_prompt"] = negative_prompt
+            if audio_url:
+                kwargs["audio_url"] = audio_url
+
+            rsp = await asyncio.to_thread(
+                _call_video_synthesis,
+                api_key=api_key,
+                endpoint=base_url,
+                model=model,
+                prompt=prompt,
+                **kwargs,
             )
 
-        video_url = rsp.output.video_url
+            if rsp.status_code != HTTPStatus.OK:
+                error_msg = (
+                    f"DashScope API error: {rsp.status_code} - "
+                    f"{rsp.code}: {rsp.message}"
+                )
+                logger.error(error_msg)
+                return ToolChunk(
+                    state=ToolResultState.ERROR,
+                    content=[
+                        TextBlock(
+                            type="text",
+                            text=f"Error: {error_msg}",
+                        ),
+                    ],
+                )
+
+            video_url = rsp.output.video_url
+
         logger.info(
             f"Text-to-video generated, downloading: {video_url}",
         )
@@ -368,7 +482,7 @@ async def text_to_video_wan(
                     type="text",
                     text=(
                         f"Video generated successfully using Wan 2.7\n"
-                        f"Model: {_TEXT_TO_VIDEO_MODEL}\n"
+                        f"Model: {model}\n"
                         f"Prompt: {prompt}\n"
                         f"Resolution: {resolution}, Ratio: {ratio}, "
                         f"Duration: {duration}s\n"
@@ -446,7 +560,10 @@ async def image_to_video_wan(
     try:
         tool_config = get_tool_config("image_to_video_wan") or {}
 
-        api_key, endpoint, timeout = _extract_config(tool_config)
+        mode, api_key, base_url, timeout, model = _extract_config(
+            tool_config,
+            default_model=_IMAGE_TO_VIDEO_MODEL,
+        )
         if not api_key:
             return _missing_api_key_result()
 
@@ -589,8 +706,8 @@ async def image_to_video_wan(
         )
 
         logger.info(
-            f"Generating image-to-video: mode={mode_desc}, "
-            f"model={_IMAGE_TO_VIDEO_MODEL}, "
+            f"Generating image-to-video: api_mode={mode}, "
+            f"mode={mode_desc}, model={model}, "
             f"resolution={resolution}, duration={duration}s",
         )
 
@@ -598,35 +715,69 @@ async def image_to_video_wan(
         if not video_lease.allowed:
             return _quota_denied_result(video_lease.message)
 
-        rsp = await asyncio.to_thread(
-            _call_video_synthesis,
-            api_key=api_key,
-            endpoint=endpoint,
-            model=_IMAGE_TO_VIDEO_MODEL,
-            prompt=prompt,
-            media=media,
-            resolution=resolution,
-            duration=duration,
-            prompt_extend=prompt_extend,
-        )
-
-        if rsp.status_code != HTTPStatus.OK:
-            error_msg = (
-                f"DashScope API error: {rsp.status_code} - "
-                f"{rsp.code}: {rsp.message}"
+        if mode == "openai":
+            # OpenAI-compatible relay (e.g. NewAPI): the first frame is
+            # sent as the top-level ``image`` field, extra media ride
+            # inside the metadata object.
+            metadata = {
+                "resolution": resolution,
+                "prompt_extend": prompt_extend,
+            }
+            image_field = ""
+            for item in media:
+                if item["type"] == "first_frame" and not image_field:
+                    image_field = item["url"]
+                elif item["type"] == "last_frame":
+                    metadata["last_frame"] = item["url"]
+                elif item["type"] == "driving_audio":
+                    metadata["audio_url"] = item["url"]
+                elif item["type"] == "first_clip":
+                    metadata["first_clip"] = item["url"]
+            payload = {
+                "model": model,
+                "prompt": prompt,
+                "duration": duration,
+                "metadata": metadata,
+            }
+            if image_field:
+                payload["image"] = image_field
+            video_url = await _run_video_task_openai(
+                base_url,
+                api_key,
+                payload,
+                timeout,
             )
-            logger.error(error_msg)
-            return ToolChunk(
-                state=ToolResultState.ERROR,
-                content=[
-                    TextBlock(
-                        type="text",
-                        text=f"Error: {error_msg}",
-                    ),
-                ],
+        else:
+            rsp = await asyncio.to_thread(
+                _call_video_synthesis,
+                api_key=api_key,
+                endpoint=base_url,
+                model=model,
+                prompt=prompt,
+                media=media,
+                resolution=resolution,
+                duration=duration,
+                prompt_extend=prompt_extend,
             )
 
-        video_url = rsp.output.video_url
+            if rsp.status_code != HTTPStatus.OK:
+                error_msg = (
+                    f"DashScope API error: {rsp.status_code} - "
+                    f"{rsp.code}: {rsp.message}"
+                )
+                logger.error(error_msg)
+                return ToolChunk(
+                    state=ToolResultState.ERROR,
+                    content=[
+                        TextBlock(
+                            type="text",
+                            text=f"Error: {error_msg}",
+                        ),
+                    ],
+                )
+
+            video_url = rsp.output.video_url
+
         logger.info(
             f"Image-to-video generated, downloading: {video_url}",
         )
@@ -653,7 +804,7 @@ async def image_to_video_wan(
                     type="text",
                     text=(
                         f"Video generated successfully using Wan 2.7\n"
-                        f"Model: {_IMAGE_TO_VIDEO_MODEL}\n"
+                        f"Model: {model}\n"
                         f"Mode: {mode_desc}\n"
                         f"Prompt: {prompt}\n"
                         f"Resolution: {resolution}, Duration: {duration}s\n"
@@ -738,7 +889,10 @@ async def reference_to_video_wan(
     try:
         tool_config = get_tool_config("reference_to_video_wan") or {}
 
-        api_key, endpoint, timeout = _extract_config(tool_config)
+        mode, api_key, base_url, timeout, model = _extract_config(
+            tool_config,
+            default_model=_REFERENCE_TO_VIDEO_MODEL,
+        )
         if not api_key:
             return _missing_api_key_result()
 
@@ -862,7 +1016,7 @@ async def reference_to_video_wan(
 
         logger.info(
             f"Generating reference-to-video: "
-            f"model={_REFERENCE_TO_VIDEO_MODEL}, "
+            f"api_mode={mode}, model={model}, "
             f"reference_images={len(reference_images)}, "
             f"reference_videos={len(reference_videos)}, "
             f"resolution={resolution}, ratio={ratio}, "
@@ -873,36 +1027,81 @@ async def reference_to_video_wan(
         if not video_lease.allowed:
             return _quota_denied_result(video_lease.message)
 
-        rsp = await asyncio.to_thread(
-            _call_video_synthesis,
-            api_key=api_key,
-            endpoint=endpoint,
-            model=_REFERENCE_TO_VIDEO_MODEL,
-            prompt=prompt,
-            media=media,
-            resolution=resolution,
-            ratio=ratio,
-            duration=duration,
-            prompt_extend=prompt_extend,
-        )
-
-        if rsp.status_code != HTTPStatus.OK:
-            error_msg = (
-                f"DashScope API error: {rsp.status_code} - "
-                f"{rsp.code}: {rsp.message}"
+        if mode == "openai":
+            # OpenAI-compatible relay (e.g. NewAPI): the first reference
+            # image is sent as the top-level ``image`` field, remaining
+            # references ride inside ``metadata.images`` / ``videos``.
+            ref_images = [
+                item["url"]
+                for item in media
+                if item["type"] == "reference_image"
+            ]
+            ref_videos = [
+                item["url"]
+                for item in media
+                if item["type"] == "reference_video"
+            ]
+            first_frames = [
+                item["url"]
+                for item in media
+                if item["type"] == "first_frame"
+            ]
+            metadata = {
+                "resolution": resolution,
+                "ratio": ratio,
+                "prompt_extend": prompt_extend,
+            }
+            if len(ref_images) > 1:
+                metadata["images"] = ref_images[1:]
+            if ref_videos:
+                metadata["videos"] = ref_videos
+            if first_frames:
+                metadata["first_frame"] = first_frames[0]
+            payload = {
+                "model": model,
+                "prompt": prompt,
+                "image": ref_images[0],
+                "duration": duration,
+                "metadata": metadata,
+            }
+            video_url = await _run_video_task_openai(
+                base_url,
+                api_key,
+                payload,
+                timeout,
             )
-            logger.error(error_msg)
-            return ToolChunk(
-                state=ToolResultState.ERROR,
-                content=[
-                    TextBlock(
-                        type="text",
-                        text=f"Error: {error_msg}",
-                    ),
-                ],
+        else:
+            rsp = await asyncio.to_thread(
+                _call_video_synthesis,
+                api_key=api_key,
+                endpoint=base_url,
+                model=model,
+                prompt=prompt,
+                media=media,
+                resolution=resolution,
+                ratio=ratio,
+                duration=duration,
+                prompt_extend=prompt_extend,
             )
 
-        video_url = rsp.output.video_url
+            if rsp.status_code != HTTPStatus.OK:
+                error_msg = (
+                    f"DashScope API error: {rsp.status_code} - "
+                    f"{rsp.code}: {rsp.message}"
+                )
+                logger.error(error_msg)
+                return ToolChunk(
+                    state=ToolResultState.ERROR,
+                    content=[
+                        TextBlock(
+                            type="text",
+                            text=f"Error: {error_msg}",
+                        ),
+                    ],
+                )
+
+            video_url = rsp.output.video_url
+
         logger.info(
             f"Reference-to-video generated, downloading: " f"{video_url}",
         )
@@ -929,7 +1128,7 @@ async def reference_to_video_wan(
                     type="text",
                     text=(
                         f"Video generated successfully using Wan 2.7\n"
-                        f"Model: {_REFERENCE_TO_VIDEO_MODEL}\n"
+                        f"Model: {model}\n"
                         f"Reference images: {len(reference_images)}, "
                         f"Reference videos: {len(reference_videos)}\n"
                         f"Prompt: {prompt}\n"

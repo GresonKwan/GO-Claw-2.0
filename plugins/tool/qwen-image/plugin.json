@@ -41,13 +41,13 @@
             "label": "模型",
             "type": "select",
             "required": false,
-            "default": "qwen-image-3.0",
+            "default": "qwen-image-2.0",
             "options": [
-              "qwen-image-3.0",
+              "qwen-image-2.0",
               "qwen-image-2.0-pro",
+              "qwen-image-3.0",
               "qwen-image-2.0-pro-2026-04-22",
               "qwen-image-2.0-pro-2026-03-03",
-              "qwen-image-2.0",
               "qwen-image-2.0-2026-03-03",
               "qwen-image-max",
               "qwen-image-max-2025-12-30",
@@ -55,7 +55,7 @@
               "qwen-image-plus-2026-01-09",
               "qwen-image"
             ],
-            "help": "选择图像生成模型（默认：qwen-image-3.0）"
+            "help": "选择图像生成模型（默认：qwen-image-2.0）"
           },
           {
             "name": "endpoint",
@@ -63,7 +63,7 @@
             "type": "text",
             "required": false,
             "placeholder": "https://dashscope.aliyuncs.com/api/v1",
-            "help": "北京区域：https://dashscope.aliyuncs.com/api/v1；新加坡区域：https://dashscope-intl.aliyuncs.com/api/v1"
+            "help": "北京区域：https://dashscope.aliyuncs.com/api/v1；新加坡区域：https://dashscope-intl.aliyuncs.com/api/v1；NewAPI 中转：填 https://你的newapi域名/v1"
           },
           {
             "name": "timeout",
@@ -119,7 +119,7 @@
             "type": "text",
             "required": false,
             "placeholder": "https://dashscope.aliyuncs.com/api/v1",
-            "help": "北京区域：https://dashscope.aliyuncs.com/api/v1；新加坡区域：https://dashscope-intl.aliyuncs.com/api/v1"
+            "help": "北京区域：https://dashscope.aliyuncs.com/api/v1；新加坡区域：https://dashscope-intl.aliyuncs.com/api/v1；NewAPI 中转：填 https://你的newapi域名/v1"
           },
           {
             "name": "timeout",

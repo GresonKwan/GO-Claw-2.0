@@ -2,6 +2,12 @@
 
 Generate high-quality videos using Alibaba Cloud's Wan 2.7 models via DashScope SDK.
 
+The plugin also supports OpenAI-compatible relay gateways (e.g. a self-hosted
+NewAPI): when the configured endpoint host is not `aliyuncs.com`, tasks are
+created via `POST {root}/v1/video/generations` and polled via
+`GET {root}/v1/video/generations/{task_id}` (every 5s, bounded by the
+configured timeout) instead of the native DashScope SDK.
+
 ## Tools
 
 ### `text_to_video_wan` - 文生视频
@@ -74,14 +80,22 @@ Each tool has independent configuration fields:
 | Field | Description | Default |
 |-------|-------------|---------|
 | `api_key` | DashScope API key (required) | — |
-| `endpoint` | Regional API endpoint | `https://dashscope.aliyuncs.com/api/v1` |
+| `endpoint` | Regional API endpoint, or NewAPI relay URL | `https://dashscope.aliyuncs.com/api/v1` |
 | `timeout` | Request timeout in seconds | 600 |
+| `model` | Model name per tool | `wan2.7-t2v` / `wan2.7-i2v` / `wan2.7-r2v` |
 
 **Endpoints:**
 - Beijing: `https://dashscope.aliyuncs.com/api/v1`
 - Singapore: `https://dashscope-intl.aliyuncs.com/api/v1`
+- NewAPI relay: `https://your-newapi-host/v1` (any non-`aliyuncs.com` host
+  switches the plugin to the OpenAI-compatible protocol)
 
 > Note: API key and endpoint must be from the same region.
+
+> In NewAPI relay mode, the first frame / first reference image is sent as
+> the top-level `image` field (URL or base64 data URI); extra reference
+> images go to `metadata.images`, reference videos to `metadata.videos`, and
+> vendor parameters such as `negative_prompt` are passed via `metadata`.
 
 Get your API key at: https://bailian.console.aliyun.com/
 

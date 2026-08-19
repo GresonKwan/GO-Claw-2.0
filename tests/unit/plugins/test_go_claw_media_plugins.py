@@ -113,12 +113,12 @@ def test_employee_dashscope_endpoint_wins_over_global_endpoint() -> None:
         (
             "plugins/tool/qwen-image/qwen_image_tool.py",
             "qwen_image_global_key",
-            {"default_model": "qwen-image-2.0-pro"},
+            {"default_model": "qwen-image-2.0"},
         ),
         (
             "plugins/tool/wan27/wan27_tool.py",
             "wan27_global_key",
-            {},
+            {"default_model": "wan2.7-t2v"},
         ),
     ],
 )
@@ -130,15 +130,21 @@ def test_both_media_plugins_use_the_shared_global_key_resolver(
 ) -> None:
     module = _load_tool_module(relative_path, module_name)
     calls: list[dict] = []
-    monkeypatch.setattr(
-        module,
-        "resolve_dashscope_api_key",
-        lambda config: calls.append(config) or "global-key",
-    )
+
+    def fake_resolve(config: dict) -> tuple[str, str, str]:
+        calls.append(config)
+        return (
+            "dashscope",
+            "https://dashscope.aliyuncs.com/api/v1",
+            "global-key",
+        )
+
+    monkeypatch.setattr(module, "resolve_media_api", fake_resolve)
 
     extracted = module._extract_config({}, **extract_args)
 
-    assert extracted[0] == "global-key"
+    assert extracted[0] == "dashscope"
+    assert extracted[1] == "global-key"
     assert calls == [{}]
 
 
@@ -206,8 +212,12 @@ async def test_qwen_image_never_requests_without_a_nonblank_api_key(
     monkeypatch.setattr(module, "get_tool_config", lambda _name: tool_config)
     monkeypatch.setattr(
         module,
-        "resolve_dashscope_api_key",
-        lambda _config: "",
+        "resolve_media_api",
+        lambda _config: (
+            "dashscope",
+            "https://dashscope.aliyuncs.com/api/v1",
+            "",
+        ),
     )
 
     def unexpected_request(*_args: object, **_kwargs: object) -> None:
@@ -247,8 +257,12 @@ async def test_wan_never_requests_without_a_nonblank_api_key(
     monkeypatch.setattr(module, "get_tool_config", lambda _name: tool_config)
     monkeypatch.setattr(
         module,
-        "resolve_dashscope_api_key",
-        lambda _config: "",
+        "resolve_media_api",
+        lambda _config: (
+            "dashscope",
+            "https://dashscope.aliyuncs.com/api/v1",
+            "",
+        ),
     )
 
     def unexpected_request(*_args: object, **_kwargs: object) -> None:
@@ -342,8 +356,12 @@ async def test_media_quota_denial_never_dispatches_provider_request(
     monkeypatch.setattr(module, "get_tool_config", lambda _name: {})
     monkeypatch.setattr(
         module,
-        "resolve_dashscope_api_key",
-        lambda _config: "unit-test-key",
+        "resolve_media_api",
+        lambda _config: (
+            "dashscope",
+            "https://dashscope.aliyuncs.com/api/v1",
+            "unit-test-key",
+        ),
     )
     monkeypatch.setattr(module, "media_quota", _DeniedMediaQuota())
 
@@ -376,13 +394,12 @@ async def test_qwen_generation_uses_requested_default_model_and_2k(
     monkeypatch.setattr(module, "get_tool_config", lambda _name: {})
     monkeypatch.setattr(
         module,
-        "resolve_dashscope_api_key",
-        lambda _config: "unit-test-key",
-    )
-    monkeypatch.setattr(
-        module,
-        "resolve_dashscope_endpoint",
-        lambda _config: "https://dashscope.example/api/v1",
+        "resolve_media_api",
+        lambda _config: (
+            "dashscope",
+            "https://dashscope.aliyuncs.com/api/v1",
+            "unit-test-key",
+        ),
     )
     monkeypatch.setattr(module, "media_quota", _AllowedMediaQuota())
 
@@ -415,7 +432,7 @@ async def test_qwen_generation_uses_requested_default_model_and_2k(
 
     assert result.state is ToolResultState.SUCCESS
     assert len(calls) == 1
-    assert calls[0]["model"] == "qwen-image-3.0"
+    assert calls[0]["model"] == "qwen-image-2.0"
     assert calls[0]["size"] == "2048*2048"
     assert calls[0]["n"] == 1
 
@@ -437,9 +454,9 @@ def test_qwen_manifest_uses_requested_default_model() -> None:
         if field["name"] == "model"
     )
 
-    assert model_field["default"] == "qwen-image-3.0"
-    assert "qwen-image-3.0" in model_field["options"]
-    assert "qwen-image-3.0" in model_field["help"]
+    assert model_field["default"] == "qwen-image-2.0"
+    assert "qwen-image-2.0" in model_field["options"]
+    assert "qwen-image-2.0" in model_field["help"]
 
 
 @pytest.mark.asyncio
@@ -449,17 +466,17 @@ def test_qwen_manifest_uses_requested_default_model() -> None:
         (
             "text_to_video_wan",
             ("GO CLAW launch animation",),
-            "wan2.7-t2v-2026-06-12",
+            "wan2.7-t2v",
         ),
         (
             "image_to_video_wan",
             ("animate the logo", "https://example.com/first.png"),
-            "wan2.7-i2v-2026-04-25",
+            "wan2.7-i2v",
         ),
         (
             "reference_to_video_wan",
             ("keep 图1 consistent", ["https://example.com/reference.png"]),
-            "wan2.7-r2v-2026-06-12",
+            "wan2.7-r2v",
         ),
     ],
 )
@@ -477,13 +494,12 @@ async def test_wan_tools_use_requested_default_model_and_720p(
     monkeypatch.setattr(module, "get_tool_config", lambda _name: {})
     monkeypatch.setattr(
         module,
-        "resolve_dashscope_api_key",
-        lambda _config: "unit-test-key",
-    )
-    monkeypatch.setattr(
-        module,
-        "resolve_dashscope_endpoint",
-        lambda _config: "https://dashscope.example/api/v1",
+        "resolve_media_api",
+        lambda _config: (
+            "dashscope",
+            "https://dashscope.aliyuncs.com/api/v1",
+            "unit-test-key",
+        ),
     )
     monkeypatch.setattr(module, "media_quota", _AllowedMediaQuota())
 
