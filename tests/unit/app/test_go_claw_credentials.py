@@ -48,9 +48,14 @@ class FakeProvider:
     models: tuple[str, ...]
     api_key: str = ""
     base_url: str = ""
+    extra_models: list = field(default_factory=list)
 
     def has_model(self, model_id: str) -> bool:
-        return model_id in self.models
+        extra_ids = [
+            model["id"] if isinstance(model, dict) else model.id
+            for model in self.extra_models
+        ]
+        return model_id in self.models or model_id in extra_ids
 
 
 @dataclass
@@ -85,6 +90,8 @@ class FakeProviderManager:
             return False
         provider.api_key = config["api_key"].strip()
         provider.base_url = config["base_url"].strip()
+        if "extra_models" in config:
+            provider.extra_models = list(config["extra_models"])
         self.update_calls.append((provider_id, dict(config)))
         return True
 
@@ -278,10 +285,6 @@ def _set_missing_provider(payload: dict) -> None:
     payload["llm"]["providerId"] = "missing"
 
 
-def _set_missing_model(payload: dict) -> None:
-    payload["llm"]["modelId"] = "missing"
-
-
 def _blank_llm_key(payload: dict) -> None:
     payload["llm"]["apiKey"] = "   "
 
@@ -297,7 +300,6 @@ def _blank_dashscope_key(payload: dict) -> None:
         _set_schema_2,
         _add_unknown_field,
         _set_missing_provider,
-        _set_missing_model,
         _blank_llm_key,
         _blank_dashscope_key,
     ],
@@ -337,6 +339,37 @@ async def test_structurally_invalid_dashscope_key_writes_nothing(
     assert credential_env.manager.update_calls == []
     assert credential_env.save_calls == []
     assert not credential_env.marker_path.exists()
+
+
+@pytest.mark.asyncio
+async def test_unknown_model_is_registered_into_extra_models(
+    credential_env: CredentialHarness,
+) -> None:
+    payload = deepcopy(VALID_PAYLOAD)
+    payload["llm"]["modelId"] = "qwen-plus"
+    credential_env.write_payload(payload)
+
+    assert await credential_env.run() is True
+    llm_call = credential_env.manager.update_calls[0]
+    assert llm_call[0] == "kimi-cn"
+    assert llm_call[1]["extra_models"] == [
+        {"id": "qwen-plus", "name": "qwen-plus"},
+    ]
+    assert credential_env.manager.activate_calls == [("kimi-cn", "qwen-plus")]
+    assert credential_env.marker_path.is_file()
+
+
+@pytest.mark.asyncio
+async def test_newapi_length_dashscope_key_is_accepted(
+    credential_env: CredentialHarness,
+) -> None:
+    """NewAPI-issued keys (sk- + 48 chars) must pass validation."""
+    payload = deepcopy(VALID_PAYLOAD)
+    payload["dashscope"]["apiKey"] = "sk-" + "x" * 48
+    credential_env.write_payload(payload)
+
+    assert await credential_env.run() is True
+    assert credential_env.marker_path.is_file()
 
 
 @pytest.mark.asyncio

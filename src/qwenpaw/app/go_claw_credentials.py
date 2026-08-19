@@ -9,7 +9,7 @@ import os
 from collections.abc import Callable
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Literal
+from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
@@ -84,9 +84,11 @@ class DashScopeCredentials(_StrictModel):
         if not isinstance(value, str):
             return value
         normalized = value.strip()
+        # NewAPI-issued keys (sk- + 48 chars = 51 chars total) are valid
+        # delivery credentials, so only enforce a modest minimum length.
         if (
             not normalized.startswith("sk-")
-            or len(normalized) < 64
+            or len(normalized) < 20
             or "\\" in normalized
             or any(char.isspace() for char in normalized)
         ):
@@ -152,8 +154,8 @@ def _validate_providers(
     llm_provider = manager.get_provider(credentials.llm.provider_id)
     if llm_provider is None:
         raise RuntimeError("Configured LLM provider is unavailable")
-    if not llm_provider.has_model(credentials.llm.model_id):
-        raise RuntimeError("Configured LLM model is unavailable")
+    # A missing model is not fatal: the import step appends it to the
+    # provider's extra_models so NewAPI-proxied model names can activate.
     if manager.get_provider("dashscope") is None:
         raise RuntimeError("DashScope provider is unavailable")
     if (
@@ -279,12 +281,29 @@ async def _import_go_claw_batch_credentials(
         return True
     credentials, source_bytes = _read_delivery(portable_root, credentials_path)
     _validate_providers(manager, credentials)
+    llm_provider = manager.get_provider(credentials.llm.provider_id)
+    llm_update: dict[str, Any] = {
+        "api_key": credentials.llm.api_key,
+        "base_url": credentials.llm.base_url,
+    }
+    if llm_provider is not None and not llm_provider.has_model(
+        credentials.llm.model_id,
+    ):
+        # Auto-register the delivery model (e.g. a NewAPI-proxied model
+        # name) into extra_models so activation succeeds.
+        existing_extra = [
+            model.model_dump()
+            if hasattr(model, "model_dump")
+            else model
+            for model in getattr(llm_provider, "extra_models", [])
+        ]
+        llm_update["extra_models"] = [
+            *existing_extra,
+            {"id": credentials.llm.model_id, "name": credentials.llm.model_id},
+        ]
     if not manager.update_provider(
         credentials.llm.provider_id,
-        {
-            "api_key": credentials.llm.api_key,
-            "base_url": credentials.llm.base_url,
-        },
+        llm_update,
     ):
         raise RuntimeError("LLM provider update failed")
     if not manager.update_provider(
