@@ -97,7 +97,7 @@
             "label": "模型",
             "type": "select",
             "required": false,
-            "default": "qwen-image-2.0-pro",
+            "default": "qwen-image-2.0",
             "options": [
               "qwen-image-2.0-pro",
               "qwen-image-2.0-pro-2026-04-22",

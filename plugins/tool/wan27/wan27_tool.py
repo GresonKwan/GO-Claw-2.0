@@ -37,6 +37,37 @@ _REFERENCE_TO_VIDEO_MODEL = "wan2.7-r2v"
 # Polling interval (seconds) for OpenAI-compatible video tasks
 _OPENAI_POLL_INTERVAL = 5.0
 
+
+class _ModelUnavailableError(Exception):
+    """The requested model is unavailable on the resolved endpoint."""
+
+
+_MODEL_UNAVAILABLE_MARKERS = (
+    "no available channel",
+    "model_not_found",
+    "model not found",
+    "does not exist",
+    "url error",
+)
+
+_T2V_MODEL_FALLBACKS = ("wan2.7-t2v",)
+_I2V_MODEL_FALLBACKS = ("wan2.7-i2v",)
+_R2V_MODEL_FALLBACKS = ("wan2.7-r2v",)
+
+
+def _is_model_unavailable(message: str) -> bool:
+    lowered = message.lower()
+    return any(marker in lowered for marker in _MODEL_UNAVAILABLE_MARKERS)
+
+
+def _model_candidates(primary: str, fallbacks: tuple) -> list:
+    seen, out = set(), []
+    for name in (primary, *fallbacks):
+        if name and name not in seen:
+            seen.add(name)
+            out.append(name)
+    return out
+
 _VALID_RESOLUTIONS = {"720P", "1080P"}
 _VALID_RATIOS = {"16:9", "9:16", "1:1", "4:3", "3:4"}
 
@@ -211,10 +242,13 @@ async def _run_video_task_openai(
             headers=headers,
         )
         if response.status_code != 200:
-            raise RuntimeError(
+            message = (
                 f"OpenAI-compatible video API error: "
-                f"{response.status_code} - {response.text[:500]}",
+                f"{response.status_code} - {response.text[:500]}"
             )
+            if _is_model_unavailable(message):
+                raise _ModelUnavailableError(message)
+            raise RuntimeError(message)
         body = response.json()
         task_id = body.get("task_id") or body.get("id")
         if not task_id:
@@ -393,68 +427,101 @@ async def text_to_video_wan(
         if not video_lease.allowed:
             return _quota_denied_result(video_lease.message)
 
-        if mode == "openai":
-            # OpenAI-compatible relay (e.g. NewAPI): vendor parameters
-            # ride inside the metadata object.
-            metadata = {
-                "resolution": resolution,
-                "ratio": ratio,
-                "prompt_extend": prompt_extend,
-            }
-            if negative_prompt:
-                metadata["negative_prompt"] = negative_prompt
-            if audio_url:
-                metadata["audio_url"] = audio_url
-            payload = {
-                "model": model,
-                "prompt": prompt,
-                "duration": duration,
-                "metadata": metadata,
-            }
-            video_url = await _run_video_task_openai(
-                base_url,
-                api_key,
-                payload,
-                timeout,
-            )
+        candidates = _model_candidates(model, _T2V_MODEL_FALLBACKS)
+        fallback_note = ""
+        last_unavailable = ""
+        for candidate in candidates:
+            try:
+                if mode == "openai":
+                    # OpenAI-compatible relay (e.g. NewAPI): vendor parameters
+                    # ride inside the metadata object.
+                    metadata = {
+                        "resolution": resolution,
+                        "ratio": ratio,
+                        "prompt_extend": prompt_extend,
+                    }
+                    if negative_prompt:
+                        metadata["negative_prompt"] = negative_prompt
+                    if audio_url:
+                        metadata["audio_url"] = audio_url
+                    payload = {
+                        "model": candidate,
+                        "prompt": prompt,
+                        "duration": duration,
+                        "metadata": metadata,
+                    }
+                    video_url = await _run_video_task_openai(
+                        base_url,
+                        api_key,
+                        payload,
+                        timeout,
+                    )
+                else:
+                    kwargs = {
+                        "resolution": resolution,
+                        "ratio": ratio,
+                        "duration": duration,
+                        "prompt_extend": prompt_extend,
+                    }
+                    if negative_prompt:
+                        kwargs["negative_prompt"] = negative_prompt
+                    if audio_url:
+                        kwargs["audio_url"] = audio_url
+
+                    rsp = await asyncio.to_thread(
+                        _call_video_synthesis,
+                        api_key=api_key,
+                        endpoint=base_url,
+                        model=candidate,
+                        prompt=prompt,
+                        **kwargs,
+                    )
+
+                    if rsp.status_code != HTTPStatus.OK:
+                        error_msg = (
+                            f"DashScope API error: {rsp.status_code} - "
+                            f"{rsp.code}: {rsp.message}"
+                        )
+                        if _is_model_unavailable(error_msg):
+                            raise _ModelUnavailableError(error_msg)
+                        logger.error(error_msg)
+                        return ToolChunk(
+                            state=ToolResultState.ERROR,
+                            content=[
+                                TextBlock(
+                                    type="text",
+                                    text=f"Error: {error_msg}",
+                                ),
+                            ],
+                        )
+
+                    video_url = rsp.output.video_url
+                if candidate != model:
+                    fallback_note = (
+                        f"（默认模型 {model} 不可用，已自动改用 {candidate}）"
+                    )
+                break
+            except _ModelUnavailableError as exc:
+                last_unavailable = str(exc)
+                logger.warning(
+                    "video model %s unavailable, trying next fallback: %s",
+                    candidate,
+                    exc,
+                )
         else:
-            kwargs = {
-                "resolution": resolution,
-                "ratio": ratio,
-                "duration": duration,
-                "prompt_extend": prompt_extend,
-            }
-            if negative_prompt:
-                kwargs["negative_prompt"] = negative_prompt
-            if audio_url:
-                kwargs["audio_url"] = audio_url
-
-            rsp = await asyncio.to_thread(
-                _call_video_synthesis,
-                api_key=api_key,
-                endpoint=base_url,
-                model=model,
-                prompt=prompt,
-                **kwargs,
-            )
-
-            if rsp.status_code != HTTPStatus.OK:
-                error_msg = (
-                    f"DashScope API error: {rsp.status_code} - "
-                    f"{rsp.code}: {rsp.message}"
-                )
-                logger.error(error_msg)
-                return ToolChunk(
-                    state=ToolResultState.ERROR,
-                    content=[
-                        TextBlock(
-                            type="text",
-                            text=f"Error: {error_msg}",
+            return ToolChunk(
+                state=ToolResultState.ERROR,
+                content=[
+                    TextBlock(
+                        type="text",
+                        text=(
+                            "Error: 所有候选视频模型均不可用："
+                            f"{'、'.join(candidates)}。"
+                            f"最后一次错误：{last_unavailable}"
                         ),
-                    ],
-                )
-
-            video_url = rsp.output.video_url
+                    ),
+                ],
+            )
 
         logger.info(
             f"Text-to-video generated, downloading: {video_url}",
@@ -481,7 +548,8 @@ async def text_to_video_wan(
                 TextBlock(
                     type="text",
                     text=(
-                        f"Video generated successfully using Wan 2.7\n"
+                        f"Video generated successfully using "
+                        f"Wan 2.7{fallback_note}\n"
                         f"Model: {model}\n"
                         f"Prompt: {prompt}\n"
                         f"Resolution: {resolution}, Ratio: {ratio}, "
@@ -715,68 +783,101 @@ async def image_to_video_wan(
         if not video_lease.allowed:
             return _quota_denied_result(video_lease.message)
 
-        if mode == "openai":
-            # OpenAI-compatible relay (e.g. NewAPI): the first frame is
-            # sent as the top-level ``image`` field, extra media ride
-            # inside the metadata object.
-            metadata = {
-                "resolution": resolution,
-                "prompt_extend": prompt_extend,
-            }
-            image_field = ""
-            for item in media:
-                if item["type"] == "first_frame" and not image_field:
-                    image_field = item["url"]
-                elif item["type"] == "last_frame":
-                    metadata["last_frame"] = item["url"]
-                elif item["type"] == "driving_audio":
-                    metadata["audio_url"] = item["url"]
-                elif item["type"] == "first_clip":
-                    metadata["first_clip"] = item["url"]
-            payload = {
-                "model": model,
-                "prompt": prompt,
-                "duration": duration,
-                "metadata": metadata,
-            }
-            if image_field:
-                payload["image"] = image_field
-            video_url = await _run_video_task_openai(
-                base_url,
-                api_key,
-                payload,
-                timeout,
-            )
+        candidates = _model_candidates(model, _I2V_MODEL_FALLBACKS)
+        fallback_note = ""
+        last_unavailable = ""
+        for candidate in candidates:
+            try:
+                if mode == "openai":
+                    # OpenAI-compatible relay (e.g. NewAPI): the first frame is
+                    # sent as the top-level ``image`` field, extra media ride
+                    # inside the metadata object.
+                    metadata = {
+                        "resolution": resolution,
+                        "prompt_extend": prompt_extend,
+                    }
+                    image_field = ""
+                    for item in media:
+                        if item["type"] == "first_frame" and not image_field:
+                            image_field = item["url"]
+                        elif item["type"] == "last_frame":
+                            metadata["last_frame"] = item["url"]
+                        elif item["type"] == "driving_audio":
+                            metadata["audio_url"] = item["url"]
+                        elif item["type"] == "first_clip":
+                            metadata["first_clip"] = item["url"]
+                    payload = {
+                        "model": candidate,
+                        "prompt": prompt,
+                        "duration": duration,
+                        "metadata": metadata,
+                    }
+                    if image_field:
+                        payload["image"] = image_field
+                    video_url = await _run_video_task_openai(
+                        base_url,
+                        api_key,
+                        payload,
+                        timeout,
+                    )
+                else:
+                    rsp = await asyncio.to_thread(
+                        _call_video_synthesis,
+                        api_key=api_key,
+                        endpoint=base_url,
+                        model=candidate,
+                        prompt=prompt,
+                        media=media,
+                        resolution=resolution,
+                        duration=duration,
+                        prompt_extend=prompt_extend,
+                    )
+
+                    if rsp.status_code != HTTPStatus.OK:
+                        error_msg = (
+                            f"DashScope API error: {rsp.status_code} - "
+                            f"{rsp.code}: {rsp.message}"
+                        )
+                        if _is_model_unavailable(error_msg):
+                            raise _ModelUnavailableError(error_msg)
+                        logger.error(error_msg)
+                        return ToolChunk(
+                            state=ToolResultState.ERROR,
+                            content=[
+                                TextBlock(
+                                    type="text",
+                                    text=f"Error: {error_msg}",
+                                ),
+                            ],
+                        )
+
+                    video_url = rsp.output.video_url
+                if candidate != model:
+                    fallback_note = (
+                        f"（默认模型 {model} 不可用，已自动改用 {candidate}）"
+                    )
+                break
+            except _ModelUnavailableError as exc:
+                last_unavailable = str(exc)
+                logger.warning(
+                    "video model %s unavailable, trying next fallback: %s",
+                    candidate,
+                    exc,
+                )
         else:
-            rsp = await asyncio.to_thread(
-                _call_video_synthesis,
-                api_key=api_key,
-                endpoint=base_url,
-                model=model,
-                prompt=prompt,
-                media=media,
-                resolution=resolution,
-                duration=duration,
-                prompt_extend=prompt_extend,
-            )
-
-            if rsp.status_code != HTTPStatus.OK:
-                error_msg = (
-                    f"DashScope API error: {rsp.status_code} - "
-                    f"{rsp.code}: {rsp.message}"
-                )
-                logger.error(error_msg)
-                return ToolChunk(
-                    state=ToolResultState.ERROR,
-                    content=[
-                        TextBlock(
-                            type="text",
-                            text=f"Error: {error_msg}",
+            return ToolChunk(
+                state=ToolResultState.ERROR,
+                content=[
+                    TextBlock(
+                        type="text",
+                        text=(
+                            "Error: 所有候选视频模型均不可用："
+                            f"{'、'.join(candidates)}。"
+                            f"最后一次错误：{last_unavailable}"
                         ),
-                    ],
-                )
-
-            video_url = rsp.output.video_url
+                    ),
+                ],
+            )
 
         logger.info(
             f"Image-to-video generated, downloading: {video_url}",
@@ -803,7 +904,8 @@ async def image_to_video_wan(
                 TextBlock(
                     type="text",
                     text=(
-                        f"Video generated successfully using Wan 2.7\n"
+                        f"Video generated successfully using "
+                        f"Wan 2.7{fallback_note}\n"
                         f"Model: {model}\n"
                         f"Mode: {mode_desc}\n"
                         f"Prompt: {prompt}\n"
@@ -1027,80 +1129,113 @@ async def reference_to_video_wan(
         if not video_lease.allowed:
             return _quota_denied_result(video_lease.message)
 
-        if mode == "openai":
-            # OpenAI-compatible relay (e.g. NewAPI): the first reference
-            # image is sent as the top-level ``image`` field, remaining
-            # references ride inside ``metadata.images`` / ``videos``.
-            ref_images = [
-                item["url"]
-                for item in media
-                if item["type"] == "reference_image"
-            ]
-            ref_videos = [
-                item["url"]
-                for item in media
-                if item["type"] == "reference_video"
-            ]
-            first_frames = [
-                item["url"]
-                for item in media
-                if item["type"] == "first_frame"
-            ]
-            metadata = {
-                "resolution": resolution,
-                "ratio": ratio,
-                "prompt_extend": prompt_extend,
-            }
-            if len(ref_images) > 1:
-                metadata["images"] = ref_images[1:]
-            if ref_videos:
-                metadata["videos"] = ref_videos
-            if first_frames:
-                metadata["first_frame"] = first_frames[0]
-            payload = {
-                "model": model,
-                "prompt": prompt,
-                "image": ref_images[0],
-                "duration": duration,
-                "metadata": metadata,
-            }
-            video_url = await _run_video_task_openai(
-                base_url,
-                api_key,
-                payload,
-                timeout,
-            )
+        candidates = _model_candidates(model, _R2V_MODEL_FALLBACKS)
+        fallback_note = ""
+        last_unavailable = ""
+        for candidate in candidates:
+            try:
+                if mode == "openai":
+                    # OpenAI-compatible relay (e.g. NewAPI): the first reference
+                    # image is sent as the top-level ``image`` field, remaining
+                    # references ride inside ``metadata.images`` / ``videos``.
+                    ref_images = [
+                        item["url"]
+                        for item in media
+                        if item["type"] == "reference_image"
+                    ]
+                    ref_videos = [
+                        item["url"]
+                        for item in media
+                        if item["type"] == "reference_video"
+                    ]
+                    first_frames = [
+                        item["url"]
+                        for item in media
+                        if item["type"] == "first_frame"
+                    ]
+                    metadata = {
+                        "resolution": resolution,
+                        "ratio": ratio,
+                        "prompt_extend": prompt_extend,
+                    }
+                    if len(ref_images) > 1:
+                        metadata["images"] = ref_images[1:]
+                    if ref_videos:
+                        metadata["videos"] = ref_videos
+                    if first_frames:
+                        metadata["first_frame"] = first_frames[0]
+                    payload = {
+                        "model": candidate,
+                        "prompt": prompt,
+                        "image": ref_images[0],
+                        "duration": duration,
+                        "metadata": metadata,
+                    }
+                    video_url = await _run_video_task_openai(
+                        base_url,
+                        api_key,
+                        payload,
+                        timeout,
+                    )
+                else:
+                    rsp = await asyncio.to_thread(
+                        _call_video_synthesis,
+                        api_key=api_key,
+                        endpoint=base_url,
+                        model=candidate,
+                        prompt=prompt,
+                        media=media,
+                        resolution=resolution,
+                        ratio=ratio,
+                        duration=duration,
+                        prompt_extend=prompt_extend,
+                    )
+
+                    if rsp.status_code != HTTPStatus.OK:
+                        error_msg = (
+                            f"DashScope API error: {rsp.status_code} - "
+                            f"{rsp.code}: {rsp.message}"
+                        )
+                        if _is_model_unavailable(error_msg):
+                            raise _ModelUnavailableError(error_msg)
+                        logger.error(error_msg)
+                        return ToolChunk(
+                            state=ToolResultState.ERROR,
+                            content=[
+                                TextBlock(
+                                    type="text",
+                                    text=f"Error: {error_msg}",
+                                ),
+                            ],
+                        )
+
+                    video_url = rsp.output.video_url
+                if candidate != model:
+                    fallback_note = (
+                        f"（默认模型 {model} 不可用，已自动改用 {candidate}）"
+                    )
+                break
+            except _ModelUnavailableError as exc:
+                last_unavailable = str(exc)
+                logger.warning(
+                    "video model %s unavailable, trying next fallback: %s",
+                    candidate,
+                    exc,
+                )
         else:
-            rsp = await asyncio.to_thread(
-                _call_video_synthesis,
-                api_key=api_key,
-                endpoint=base_url,
-                model=model,
-                prompt=prompt,
-                media=media,
-                resolution=resolution,
-                ratio=ratio,
-                duration=duration,
-                prompt_extend=prompt_extend,
-            )
-
-            if rsp.status_code != HTTPStatus.OK:
-                error_msg = (
-                    f"DashScope API error: {rsp.status_code} - "
-                    f"{rsp.code}: {rsp.message}"
-                )
-                logger.error(error_msg)
-                return ToolChunk(
-                    state=ToolResultState.ERROR,
-                    content=[
-                        TextBlock(
-                            type="text",
-                            text=f"Error: {error_msg}",
+            return ToolChunk(
+                state=ToolResultState.ERROR,
+                content=[
+                    TextBlock(
+                        type="text",
+                        text=(
+                            "Error: 所有候选视频模型均不可用："
+                            f"{'、'.join(candidates)}。"
+                            f"最后一次错误：{last_unavailable}"
                         ),
-                    ],
-                )
-
-            video_url = rsp.output.video_url
+                    ),
+                ],
+            )
 
         logger.info(
             f"Reference-to-video generated, downloading: " f"{video_url}",
@@ -1127,7 +1262,8 @@ async def reference_to_video_wan(
                 TextBlock(
                     type="text",
                     text=(
-                        f"Video generated successfully using Wan 2.7\n"
+                        f"Video generated successfully using "
+                        f"Wan 2.7{fallback_note}\n"
                         f"Model: {model}\n"
                         f"Reference images: {len(reference_images)}, "
                         f"Reference videos: {len(reference_videos)}\n"

@@ -321,7 +321,7 @@ async def test_edit_image_openai_mode_sends_reference_images(
     assert len(calls) == 1
     _method, url, payload, _headers = calls[0]
     assert url == "https://newapi.example/v1/images/generations"
-    assert payload["model"] == "qwen-image-2.0-pro"
+    assert payload["model"] == "qwen-image-2.0"
     assert payload["image"] == "https://cdn.example/ref1.png"
     assert payload["metadata"] == {"images": ["https://cdn.example/ref2.png"]}
 
@@ -549,3 +549,117 @@ async def test_video_openai_mode_failed_status_returns_friendly_error(
 
     assert result.state is ToolResultState.ERROR
     assert "content moderated" in result.content[0].text
+
+
+# ---------------------------------------------------------------------------
+# Model fallback on unavailable models
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_generate_image_falls_back_when_default_model_unavailable(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    module = _load_tool_module(
+        "plugins/tool/qwen-image/qwen_image_tool.py",
+        "qwen_image_fallback_generate",
+    )
+    monkeypatch.setattr(
+        module,
+        "get_tool_config",
+        lambda _name: NEWAPI_TOOL_CONFIG,
+    )
+    monkeypatch.setattr(module, "media_quota", _allowed_image_quota())
+
+    async def fake_download(*_args: object, **_kwargs: object) -> Path:
+        return Path("/tmp/qwen-fallback.png")
+
+    monkeypatch.setattr(module, "_download_image", fake_download)
+
+    script = [
+        _FakeResponse(
+            status_code=503,
+            text=(
+                '{"error": {"code": "model_not_found", "message": '
+                '"No available channel for model qwen-image-2.0"}}'
+            ),
+        ),
+        _FakeResponse(
+            payload={"data": [{"url": "https://cdn.example/fallback.png"}]}
+        ),
+    ]
+    calls: list[tuple] = []
+    _patch_httpx(monkeypatch, module, script, calls)
+
+    result = await module.generate_image_qwen("a red panda")
+
+    assert result.state is ToolResultState.SUCCESS
+    assert len(calls) == 2
+    assert calls[0][2]["model"] == "qwen-image-2.0"
+    assert calls[1][2]["model"] == "wan2.7-image"
+    assert "已自动改用 wan2.7-image" in result.content[-1].text
+
+
+@pytest.mark.asyncio
+async def test_generate_image_does_not_fallback_on_content_error(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    module = _load_tool_module(
+        "plugins/tool/qwen-image/qwen_image_tool.py",
+        "qwen_image_no_fallback",
+    )
+    monkeypatch.setattr(
+        module,
+        "get_tool_config",
+        lambda _name: NEWAPI_TOOL_CONFIG,
+    )
+    monkeypatch.setattr(module, "media_quota", _allowed_image_quota())
+
+    script = [
+        _FakeResponse(
+            status_code=400,
+            text='{"error": {"message": "content policy violation"}}',
+        ),
+    ]
+    calls: list[tuple] = []
+    _patch_httpx(monkeypatch, module, script, calls)
+
+    result = await module.generate_image_qwen("a red panda")
+
+    assert result.state is ToolResultState.ERROR
+    assert len(calls) == 1
+    assert "已自动改用" not in result.content[0].text
+
+
+@pytest.mark.asyncio
+async def test_video_reports_all_candidates_unavailable(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    module = _load_tool_module(
+        "plugins/tool/wan27/wan27_tool.py",
+        "wan27_fallback_exhausted",
+    )
+    monkeypatch.setattr(
+        module,
+        "get_tool_config",
+        lambda _name: NEWAPI_TOOL_CONFIG,
+    )
+    monkeypatch.setattr(module, "media_quota", _allowed_video_quota())
+
+    script = [
+        _FakeResponse(
+            status_code=503,
+            text=(
+                '{"error": {"code": "model_not_found", "message": '
+                '"No available channel for model wan2.7-t2v"}}'
+            ),
+        ),
+    ]
+    calls: list[tuple] = []
+    _patch_httpx(monkeypatch, module, script, calls)
+
+    result = await module.text_to_video_wan("a red panda dancing")
+
+    assert result.state is ToolResultState.ERROR
+    assert len(calls) == 1
+    assert "所有候选视频模型均不可用" in result.content[0].text

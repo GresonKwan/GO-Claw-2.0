@@ -66,6 +66,36 @@ _VALID_MODELS_EDIT = {
 }
 
 
+class _ModelUnavailableError(Exception):
+    """The requested model is unavailable on the resolved endpoint."""
+
+
+_MODEL_UNAVAILABLE_MARKERS = (
+    "no available channel",
+    "model_not_found",
+    "model not found",
+    "does not exist",
+    "url error",
+)
+
+_GENERATE_MODEL_FALLBACKS = ("qwen-image-2.0", "wan2.7-image")
+_EDIT_MODEL_FALLBACKS = ("qwen-image-2.0",)
+
+
+def _is_model_unavailable(message: str) -> bool:
+    lowered = message.lower()
+    return any(marker in lowered for marker in _MODEL_UNAVAILABLE_MARKERS)
+
+
+def _model_candidates(primary: str, fallbacks: tuple) -> list:
+    seen, out = set(), []
+    for name in (primary, *fallbacks):
+        if name and name not in seen:
+            seen.add(name)
+            out.append(name)
+    return out
+
+
 def _resolve_image_url(path_or_url: str) -> str:
     """Resolve an image path or URL to a usable string.
 
@@ -250,10 +280,13 @@ async def _generate_images_openai(
         response = await client.post(url, json=payload, headers=headers)
 
     if response.status_code != 200:
-        raise RuntimeError(
+        message = (
             f"OpenAI-compatible image API error: "
-            f"{response.status_code} - {response.text[:500]}",
+            f"{response.status_code} - {response.text[:500]}"
         )
+        if _is_model_unavailable(message):
+            raise _ModelUnavailableError(message)
+        raise RuntimeError(message)
 
     data = response.json().get("data") or []
     urls = [
@@ -427,62 +460,95 @@ async def generate_image_qwen(
         if not quota_lease.allowed:
             return _quota_denied_result(quota_lease.message)
 
-        if mode == "openai":
-            # OpenAI-compatible relay (e.g. NewAPI): POST /v1/images/
-            # generations and read the URL from data[0].
-            image_urls = await _generate_images_openai(
-                base_url=base_url,
-                api_key=api_key,
-                model=model,
-                prompt=prompt,
-                size=size or "1024*1024",
-                n=n,
-                timeout=timeout,
-            )
+        candidates = _model_candidates(model, _GENERATE_MODEL_FALLBACKS)
+        fallback_note = ""
+        last_unavailable = ""
+        for candidate in candidates:
+            try:
+                if mode == "openai":
+                    # OpenAI-compatible relay (e.g. NewAPI): POST /v1/images/
+                    # generations and read the URL from data[0].
+                    image_urls = await _generate_images_openai(
+                        base_url=base_url,
+                        api_key=api_key,
+                        model=candidate,
+                        prompt=prompt,
+                        size=size or "1024*1024",
+                        n=n,
+                        timeout=timeout,
+                    )
+                else:
+                    messages = [
+                        {
+                            "role": "user",
+                            "content": [{"text": prompt}],
+                        },
+                    ]
+
+                    call_kwargs = {
+                        "watermark": False,
+                        "prompt_extend": prompt_extend,
+                        "n": n,
+                    }
+                    if size:
+                        call_kwargs["size"] = size
+                    if negative_prompt:
+                        call_kwargs["negative_prompt"] = negative_prompt
+
+                    rsp = await asyncio.to_thread(
+                        _call_multimodal_conversation,
+                        api_key=api_key,
+                        endpoint=base_url,
+                        model=candidate,
+                        messages=messages,
+                        **call_kwargs,
+                    )
+
+                    if rsp.status_code != 200:
+                        error_msg = (
+                            f"DashScope API error: {rsp.status_code} - "
+                            f"{rsp.code}: {rsp.message}"
+                        )
+                        if _is_model_unavailable(error_msg):
+                            raise _ModelUnavailableError(error_msg)
+                        logger.error(error_msg)
+                        return ToolChunk(
+                            state=ToolResultState.ERROR,
+                            content=[
+                                TextBlock(
+                                    type="text",
+                                    text=f"Error: {error_msg}",
+                                ),
+                            ],
+                        )
+
+                    image_urls = _parse_image_urls(rsp)
+                if candidate != model:
+                    fallback_note = (
+                        f"（默认模型 {model} 不可用，已自动改用 {candidate}）"
+                    )
+                break
+            except _ModelUnavailableError as exc:
+                last_unavailable = str(exc)
+                logger.warning(
+                    "image model %s unavailable, trying next fallback: %s",
+                    candidate,
+                    exc,
+                )
         else:
-            messages = [
-                {
-                    "role": "user",
-                    "content": [{"text": prompt}],
-                },
-            ]
-
-            call_kwargs = {
-                "watermark": False,
-                "prompt_extend": prompt_extend,
-                "n": n,
-            }
-            if size:
-                call_kwargs["size"] = size
-            if negative_prompt:
-                call_kwargs["negative_prompt"] = negative_prompt
-
-            rsp = await asyncio.to_thread(
-                _call_multimodal_conversation,
-                api_key=api_key,
-                endpoint=base_url,
-                model=model,
-                messages=messages,
-                **call_kwargs,
-            )
-
-            if rsp.status_code != 200:
-                error_msg = (
-                    f"DashScope API error: {rsp.status_code} - "
-                    f"{rsp.code}: {rsp.message}"
-                )
-                logger.error(error_msg)
-                return ToolChunk(
-                    state=ToolResultState.ERROR,
-                    content=[
-                        TextBlock(
-                            type="text",
-                            text=f"Error: {error_msg}",
+            return ToolChunk(
+                state=ToolResultState.ERROR,
+                content=[
+                    TextBlock(
+                        type="text",
+                        text=(
+                            "Error: 所有候选图像模型均不可用："
+                            f"{'、'.join(candidates)}。"
+                            f"最后一次错误：{last_unavailable}"
                         ),
-                    ],
-                )
-
-            image_urls = _parse_image_urls(rsp)
+                    ),
+                ],
+            )
 
         if not image_urls:
             return ToolChunk(
@@ -547,7 +613,7 @@ async def generate_image_qwen(
                 type="text",
                 text=(
                     f"Generated {len(image_urls)} image(s) using "
-                    f"Qwen-Image\n"
+                    f"Qwen-Image{fallback_note}\n"
                     f"Model: {model}\n"
                     f"Prompt: {prompt}\n"
                     f"Size: {size}, Count: {n}\n"
@@ -645,7 +711,7 @@ async def edit_image_qwen(
 
         mode, api_key, base_url, timeout, model = _extract_config(
             tool_config,
-            default_model="qwen-image-2.0-pro",
+            default_model="qwen-image-2.0",
         )
         if not api_key:
             return _missing_api_key_result()
@@ -709,65 +775,98 @@ async def edit_image_qwen(
         if not quota_lease.allowed:
             return _quota_denied_result(quota_lease.message)
 
-        if mode == "openai":
-            # OpenAI-compatible relay (e.g. NewAPI): send the reference
-            # image(s) together with the prompt to /v1/images/generations.
-            # The upstream qwen-image-2.0 model accepts reference images
-            # via the ``image`` field; extras go to ``metadata.images``.
-            image_urls = await _generate_images_openai(
-                base_url=base_url,
-                api_key=api_key,
-                model=model,
-                prompt=prompt,
-                size=size,
-                n=n,
-                image=resolved_images[0],
-                extra_images=resolved_images[1:] or None,
-                timeout=timeout,
-            )
+        candidates = _model_candidates(model, _EDIT_MODEL_FALLBACKS)
+        fallback_note = ""
+        last_unavailable = ""
+        for candidate in candidates:
+            try:
+                if mode == "openai":
+                    # OpenAI-compatible relay (e.g. NewAPI): send the reference
+                    # image(s) together with the prompt to /v1/images/generations.
+                    # The upstream qwen-image-2.0 model accepts reference images
+                    # via the ``image`` field; extras go to ``metadata.images``.
+                    image_urls = await _generate_images_openai(
+                        base_url=base_url,
+                        api_key=api_key,
+                        model=candidate,
+                        prompt=prompt,
+                        size=size,
+                        n=n,
+                        image=resolved_images[0],
+                        extra_images=resolved_images[1:] or None,
+                        timeout=timeout,
+                    )
+                else:
+                    # Build message content: images first, then prompt text
+                    content = [{"image": url} for url in resolved_images]
+                    content.append({"text": prompt})
+
+                    messages = [{"role": "user", "content": content}]
+
+                    call_kwargs = {
+                        "watermark": False,
+                        "prompt_extend": prompt_extend,
+                        "n": n,
+                    }
+                    if size:
+                        call_kwargs["size"] = size
+                    if negative_prompt:
+                        call_kwargs["negative_prompt"] = negative_prompt
+
+                    rsp = await asyncio.to_thread(
+                        _call_multimodal_conversation,
+                        api_key=api_key,
+                        endpoint=base_url,
+                        model=candidate,
+                        messages=messages,
+                        **call_kwargs,
+                    )
+
+                    if rsp.status_code != 200:
+                        error_msg = (
+                            f"DashScope API error: {rsp.status_code} - "
+                            f"{rsp.code}: {rsp.message}"
+                        )
+                        if _is_model_unavailable(error_msg):
+                            raise _ModelUnavailableError(error_msg)
+                        logger.error(error_msg)
+                        return ToolChunk(
+                            state=ToolResultState.ERROR,
+                            content=[
+                                TextBlock(
+                                    type="text",
+                                    text=f"Error: {error_msg}",
+                                ),
+                            ],
+                        )
+
+                    image_urls = _parse_image_urls(rsp)
+                if candidate != model:
+                    fallback_note = (
+                        f"（默认模型 {model} 不可用，已自动改用 {candidate}）"
+                    )
+                break
+            except _ModelUnavailableError as exc:
+                last_unavailable = str(exc)
+                logger.warning(
+                    "image edit model %s unavailable, trying next fallback: %s",
+                    candidate,
+                    exc,
+                )
         else:
-            # Build message content: images first, then prompt text
-            content = [{"image": url} for url in resolved_images]
-            content.append({"text": prompt})
-
-            messages = [{"role": "user", "content": content}]
-
-            call_kwargs = {
-                "watermark": False,
-                "prompt_extend": prompt_extend,
-                "n": n,
-            }
-            if size:
-                call_kwargs["size"] = size
-            if negative_prompt:
-                call_kwargs["negative_prompt"] = negative_prompt
-
-            rsp = await asyncio.to_thread(
-                _call_multimodal_conversation,
-                api_key=api_key,
-                endpoint=base_url,
-                model=model,
-                messages=messages,
-                **call_kwargs,
-            )
-
-            if rsp.status_code != 200:
-                error_msg = (
-                    f"DashScope API error: {rsp.status_code} - "
-                    f"{rsp.code}: {rsp.message}"
-                )
-                logger.error(error_msg)
-                return ToolChunk(
-                    state=ToolResultState.ERROR,
-                    content=[
-                        TextBlock(
-                            type="text",
-                            text=f"Error: {error_msg}",
+            return ToolChunk(
+                state=ToolResultState.ERROR,
+                content=[
+                    TextBlock(
+                        type="text",
+                        text=(
+                            "Error: 所有候选图像编辑模型均不可用："
+                            f"{'、'.join(candidates)}。"
+                            f"最后一次错误：{last_unavailable}"
                         ),
-                    ],
-                )
-
-            image_urls = _parse_image_urls(rsp)
+                    ),
+                ],
+            )
 
         if not image_urls:
             return ToolChunk(
@@ -832,7 +931,7 @@ async def edit_image_qwen(
                 type="text",
                 text=(
                     f"Edited {len(image_urls)} image(s) using "
-                    f"Qwen-Image\n"
+                    f"Qwen-Image{fallback_note}\n"
                     f"Model: {model}\n"
                     f"Prompt: {prompt}\n"
                     f"Reference images: {len(reference_images)}\n"
