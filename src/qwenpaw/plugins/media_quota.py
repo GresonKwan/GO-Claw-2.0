@@ -10,9 +10,9 @@ from dataclasses import dataclass
 from typing import Callable, Deque, Optional
 
 _WINDOW_SECONDS = 60 * 60
-_IMAGE_COOLDOWN_SECONDS = 60
-_IMAGE_OUTPUTS_PER_HOUR = 6
-_VIDEO_REQUESTS_PER_HOUR = 2
+_IMAGE_COOLDOWN_SECONDS = 20
+_IMAGE_OUTPUTS_PER_HOUR = 15
+_VIDEO_REQUESTS_PER_HOUR = 4
 
 
 @dataclass(frozen=True)
