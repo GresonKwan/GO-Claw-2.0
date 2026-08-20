@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 """GO CLAW auto-provisioning service.
 
 Mints a dedicated NewAPI sub-user + API token for each GO CLAW portable
@@ -38,7 +39,8 @@ logging.basicConfig(level=logging.INFO)
 NEWAPI_BASE_URL = os.environ.get("NEWAPI_BASE_URL", "").rstrip("/")
 # Client-facing public URL in issued credentials; defaults to NEWAPI_BASE_URL.
 PUBLIC_BASE_URL = os.environ.get(
-    "PUBLIC_BASE_URL", NEWAPI_BASE_URL,
+    "PUBLIC_BASE_URL",
+    NEWAPI_BASE_URL,
 ).rstrip("/")
 # When set (SQLite deployments on the same host), token keys are read from
 # the database because the token list API returns masked keys.
@@ -49,8 +51,12 @@ PROVISION_HMAC_SECRET = os.environ.get("PROVISION_HMAC_SECRET", "")
 GIFT_QUOTA = int(os.environ.get("GIFT_QUOTA", "1000000"))  # ~$2 at 500000/$
 CHAT_MODEL_ID = os.environ.get("CHAT_MODEL_ID", "qwen-plus")
 LLM_PROVIDER_ID = os.environ.get("LLM_PROVIDER_ID", "deepseek")
-RATE_LIMIT_PER_IP_PER_DAY = int(os.environ.get("RATE_LIMIT_PER_IP_PER_DAY", "5"))
-SIGNATURE_WINDOW_SECONDS = int(os.environ.get("SIGNATURE_WINDOW_SECONDS", "600"))
+RATE_LIMIT_PER_IP_PER_DAY = int(
+    os.environ.get("RATE_LIMIT_PER_IP_PER_DAY", "5"),
+)
+SIGNATURE_WINDOW_SECONDS = int(
+    os.environ.get("SIGNATURE_WINDOW_SECONDS", "600"),
+)
 DB_PATH = Path(os.environ.get("DB_PATH", "provision.db"))
 # Comma-separated model whitelist for issued tokens; empty = no limit.
 TOKEN_MODEL_LIMITS = [
@@ -61,7 +67,7 @@ TOKEN_MODEL_LIMITS = [
 
 _INSTANCE_ID_RE = re.compile(
     r"^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-"
-    r"[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$"
+    r"[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$",
 )
 
 
@@ -109,8 +115,12 @@ def get_provision(instance_id: str) -> sqlite3.Row | None:
         ).fetchone()
 
 
-def insert_pending(instance_id: str, username: str, password: str,
-                   client_ip: str) -> None:
+def insert_pending(
+    instance_id: str,
+    username: str,
+    password: str,
+    client_ip: str,
+) -> None:
     with closing(_connect()) as conn:
         conn.execute(
             "INSERT OR IGNORE INTO provisions"
@@ -121,8 +131,12 @@ def insert_pending(instance_id: str, username: str, password: str,
         conn.commit()
 
 
-def finalize_provision(instance_id: str, user_id: int, api_key: str,
-                       credentials_json: str) -> None:
+def finalize_provision(
+    instance_id: str,
+    user_id: int,
+    api_key: str,
+    credentials_json: str,
+) -> None:
     with closing(_connect()) as conn:
         conn.execute(
             "UPDATE provisions SET newapi_user_id = ?, api_key = ?,"
@@ -205,8 +219,12 @@ class NewAPIClient:
                     return int(item["id"])
             raise NewAPIError("created user not found in search")
 
-    def create_token_key(self, username: str, password: str,
-                         user_id: int) -> str:
+    def create_token_key(
+        self,
+        username: str,
+        password: str,
+        user_id: int,
+    ) -> str:
         """Log in as the sub-user, mint a limited token, return its key."""
         with httpx.Client(base_url=self.base_url, timeout=15) as client:
             resp = client.post(
@@ -230,13 +248,15 @@ class NewAPIClient:
                 "name": "go-claw-auto",
                 "expired_time": -1,
                 "remain_quota": GIFT_QUOTA,
-                "unlimited_quota": False,
+                "unlimited_quota": True,
             }
             if TOKEN_MODEL_LIMITS:
                 token_body["model_limits_enabled"] = True
                 token_body["model_limits"] = TOKEN_MODEL_LIMITS
             resp = client.post(
-                "/api/token/", headers=user_headers, json=token_body,
+                "/api/token/",
+                headers=user_headers,
+                json=token_body,
             )
             data = resp.json()
             if not data.get("success"):
@@ -267,7 +287,7 @@ class NewAPIClient:
                     if "*" in key:
                         raise NewAPIError(
                             "token list returned a masked key; "
-                            "set NEWAPI_DB_PATH"
+                            "set NEWAPI_DB_PATH",
                         )
                     return key
             raise NewAPIError("minted token not found in list")
@@ -275,8 +295,12 @@ class NewAPIClient:
     @staticmethod
     def _read_key_from_db(user_id: int) -> str:
         """Read the full token key from the NewAPI SQLite database."""
-        with closing(sqlite3.connect(f"file:{NEWAPI_DB_PATH}?mode=ro",
-                                     uri=True)) as conn:
+        with closing(
+            sqlite3.connect(
+                f"file:{NEWAPI_DB_PATH}?mode=ro",
+                uri=True,
+            ),
+        ) as conn:
             row = conn.execute(
                 "SELECT key FROM tokens WHERE user_id = ?"
                 " AND name = 'go-claw-auto' ORDER BY id DESC LIMIT 1",
@@ -348,12 +372,13 @@ def _startup() -> None:
     ]
     if missing:
         raise RuntimeError(
-            "provisioning server misconfigured, missing: " + ", ".join(missing)
+            "provisioning server misconfigured, missing: "
+            + ", ".join(missing),
         )
     if not NEWAPI_DB_PATH:
         logger.warning(
             "NEWAPI_DB_PATH is empty: user quota will NOT be written and "
-            "token keys may come back masked (sk-****) — see README"
+            "token keys may come back masked (sk-****) — see README",
         )
     init_db()
 
@@ -401,19 +426,32 @@ def provision(body: ProvisionRequest, request: Request) -> JSONResponse:
     if existing is None:
         # NewAPI 密码长度限制 8-20 位，token_urlsafe(12) 生成 16 位
         insert_pending(
-            body.instance_id, username, secrets.token_urlsafe(12), client_ip,
+            body.instance_id,
+            username,
+            secrets.token_urlsafe(12),
+            client_ip,
         )
     row = get_provision(body.instance_id)
+    if row is None:
+        logger.error(
+            "Provision row unexpectedly missing for %s",
+            body.instance_id,
+        )
+        return _error(500, "internal_error")
 
     newapi = NewAPIClient(
-        NEWAPI_BASE_URL, NEWAPI_ADMIN_ACCESS_TOKEN, NEWAPI_ADMIN_USER_ID,
+        NEWAPI_BASE_URL,
+        NEWAPI_ADMIN_ACCESS_TOKEN,
+        NEWAPI_ADMIN_USER_ID,
     )
     try:
         user_id = newapi.ensure_user(row["username"], row["password"])
         if NEWAPI_DB_PATH:
             NewAPIClient.set_user_quota_db(user_id, GIFT_QUOTA)
         api_key = newapi.create_token_key(
-            row["username"], row["password"], user_id,
+            row["username"],
+            row["password"],
+            user_id,
         )
     except NewAPIError as exc:
         logger.error("NewAPI provisioning failed: %s", exc)
@@ -421,10 +459,15 @@ def provision(body: ProvisionRequest, request: Request) -> JSONResponse:
 
     payload = build_credentials_payload(body.instance_id, api_key)
     finalize_provision(
-        body.instance_id, user_id, api_key, json.dumps(payload),
+        body.instance_id,
+        user_id,
+        api_key,
+        json.dumps(payload),
     )
     logger.info(
         "Provisioned instance %s as %s (user_id=%s)",
-        body.instance_id, row["username"], user_id,
+        body.instance_id,
+        row["username"],
+        user_id,
     )
     return JSONResponse(content=payload)
