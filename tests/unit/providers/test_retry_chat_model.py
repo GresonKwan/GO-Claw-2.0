@@ -5,7 +5,11 @@ from __future__ import annotations
 from types import SimpleNamespace
 from typing import Any, AsyncGenerator, cast
 
+import asyncio
+
 import pytest
+
+from agentscope.model._model_response import ChatResponse, FinishedReason
 
 from qwenpaw.providers.model_capability_cache import get_capability_cache
 from qwenpaw.providers.rate_limiter import _limiters
@@ -480,3 +484,88 @@ async def test_stream_recovers_missing_reasoning_content_error() -> None:
         assert cache.get(model_key, "needs_reasoning_content") is True
     finally:
         cache.clear(model_key)
+
+
+# ---------------------------------------------------------------------------
+# _reraise_if_interrupted (swallowed CancelledError from agentscope)
+# ---------------------------------------------------------------------------
+
+
+class _InterruptedModel:
+    model = "interrupted-test"
+    stream = False
+    context_size = 32768
+    parameters = None
+    _provider_id = "unit"
+
+    async def __call__(self, *_args: Any, **_kwargs: Any) -> ChatResponse:
+        # Mimic agentscope ChatModelBase.__call__ swallowing CancelledError
+        return ChatResponse(
+            content=[],
+            is_last=True,
+            finished_reason=FinishedReason.INTERRUPTED,
+        )
+
+
+async def _empty_stream() -> AsyncGenerator[Any, None]:
+    for chunk in ():
+        yield chunk
+
+
+class _EmptyStreamModel:
+    model = "empty-stream-test"
+    stream = True
+    context_size = 32768
+    parameters = None
+    _provider_id = "unit"
+
+    async def __call__(
+        self,
+        *_args: Any,
+        **_kwargs: Any,
+    ) -> AsyncGenerator[Any, None]:
+        return _empty_stream()
+
+
+@pytest.mark.asyncio
+async def test_interrupted_response_reraises_cancelled_error() -> None:
+    _limiters.clear()
+    try:
+        model = RetryChatModel(
+            _InterruptedModel(),  # type: ignore[arg-type]
+            retry_config=RetryConfig(enabled=False),
+            rate_limit_config=RateLimitConfig(
+                max_concurrent=1,
+                max_qpm=0,
+                pause_seconds=1.0,
+                jitter_range=0.0,
+                acquire_timeout=10.0,
+            ),
+        )
+        with pytest.raises(asyncio.CancelledError):
+            await model(messages=[{"role": "user", "content": "hi"}])
+    finally:
+        _limiters.clear()
+
+
+@pytest.mark.asyncio
+async def test_empty_stream_raises_runtime_error() -> None:
+    _limiters.clear()
+    try:
+        model = RetryChatModel(
+            _EmptyStreamModel(),  # type: ignore[arg-type]
+            retry_config=RetryConfig(enabled=False),
+            rate_limit_config=RateLimitConfig(
+                max_concurrent=1,
+                max_qpm=0,
+                pause_seconds=1.0,
+                jitter_range=0.0,
+                acquire_timeout=10.0,
+            ),
+        )
+        result = await model(messages=[{"role": "user", "content": "hi"}])
+        stream = cast(AsyncGenerator[Any, None], result)
+        with pytest.raises(RuntimeError, match="zero chunks"):
+            _ = [chunk async for chunk in stream]
+    finally:
+        _limiters.clear()

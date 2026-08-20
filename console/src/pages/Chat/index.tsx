@@ -1869,26 +1869,24 @@ export default function ChatPage() {
   );
 
   const handleQueueInterruptAndSend = useCallback(
-    (item: QueueItem) => {
+    async (item: QueueItem) => {
       if (!isOwnerRef.current) return;
       if (runtimeLoadingBridgeRef.current?.getLoading?.()) {
         const sessionId = window.currentSessionId || chatIdRef.current;
         if (sessionId) {
           const resolvedId =
             sessionApi.getRealIdForSession(sessionId) ?? sessionId;
-          chatApi.stopChat(resolvedId).catch(() => {});
+          await chatApi.stopChat(resolvedId).catch(() => {});
         }
       }
       useMessageQueueStore.getState().remove(queueSessionId, item.id);
-      setTimeout(() => {
-        void withSendLock(queueSessionId, () => {
-          useMessageQueueStore.getState().setCurrentSendingId(item.id);
-          chatRef.current?.input.submit({
-            query: beginLoopModeSubmission(item.text),
-            fileList: buildFileList(item),
-          });
+      await withSendLock(queueSessionId, () => {
+        useMessageQueueStore.getState().setCurrentSendingId(item.id);
+        chatRef.current?.input.submit({
+          query: beginLoopModeSubmission(item.text),
+          fileList: buildFileList(item),
         });
-      }, 600);
+      });
     },
     [queueSessionId, buildFileList],
   );

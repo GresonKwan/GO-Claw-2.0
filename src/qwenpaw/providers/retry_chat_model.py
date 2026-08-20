@@ -31,7 +31,7 @@ from dataclasses import dataclass
 from typing import Any, AsyncGenerator
 
 from agentscope.model import ChatModelBase
-from agentscope.model._model_response import ChatResponse
+from agentscope.model._model_response import ChatResponse, FinishedReason
 from qwenpaw.exceptions import (
     RateLimitExceededException,
 )
@@ -315,6 +315,28 @@ def _compute_backoff(attempt: int, retry_config: RetryConfig) -> float:
     )
 
 
+def _reraise_if_interrupted(result: Any) -> None:
+    """Restore cancellation swallowed by agentscope's ChatModelBase.
+
+    agentscope converts CancelledError into an empty ChatResponse with
+    finished_reason=INTERRUPTED; re-raise so the turn finalizes as
+    cancelled (cancel_envelope) instead of a bogus empty completion.
+
+    Note: ChatResponse is a DictMixin (dict subclass), so constructor/setattr
+    writes land in the dict while attribute reads hit the dataclass class
+    default — the reason must be read via ``.get()``.
+    """
+    if not isinstance(result, ChatResponse) or result.content:
+        return
+    finished_reason = (
+        result.get("finished_reason")
+        if isinstance(result, dict)
+        else getattr(result, "finished_reason", None)
+    )
+    if finished_reason == FinishedReason.INTERRUPTED:
+        raise asyncio.CancelledError()
+
+
 class RetryChatModel(ChatModelBase):
     """Transparent retry wrapper around any :class:`ChatModelBase`.
 
@@ -511,6 +533,8 @@ class RetryChatModel(ChatModelBase):
                     )
                     result = await self._inner(*args, **kwargs)
 
+                _reraise_if_interrupted(result)
+
                 if isinstance(result, AsyncGenerator):
                     # Transfer semaphore ownership to _wrap_stream, which uses
                     # _consume_stream_with_slot internally and handles
@@ -584,12 +608,20 @@ class RetryChatModel(ChatModelBase):
         while True:
             try:
                 if pending_stream is not None:
+                    saw_chunk = False
                     async for chunk in self._consume_stream_with_slot(
                         pending_stream,
                         limiter,
                         pending_acquired_at,
                     ):
+                        saw_chunk = True
                         yield chunk
+                    if not saw_chunk:
+                        raise RuntimeError(
+                            "Model stream completed with zero chunks "
+                            "(possible swallowed cancellation or empty "
+                            "relay stream)"
+                        )
                     return  # stream completed without error
 
                 acquired = False
@@ -616,6 +648,8 @@ class RetryChatModel(ChatModelBase):
                         ) from exc
 
                     result = await self._inner(*call_args, **call_kwargs)
+
+                    _reraise_if_interrupted(result)
 
                     if isinstance(result, AsyncGenerator):
                         owns_semaphore = False
