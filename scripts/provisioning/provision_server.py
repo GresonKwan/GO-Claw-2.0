@@ -263,7 +263,13 @@ class NewAPIClient:
                 items = items.get("items") or []
             for item in items:
                 if item.get("name") == "go-claw-auto" and item.get("key"):
-                    return str(item["key"])
+                    key = str(item["key"])
+                    if "*" in key:
+                        raise NewAPIError(
+                            "token list returned a masked key; "
+                            "set NEWAPI_DB_PATH"
+                        )
+                    return key
             raise NewAPIError("minted token not found in list")
 
     @staticmethod
@@ -331,6 +337,24 @@ app = FastAPI(title="GO CLAW Provisioning", docs_url=None, redoc_url=None)
 
 @app.on_event("startup")
 def _startup() -> None:
+    missing = [
+        name
+        for name, value in (
+            ("NEWAPI_BASE_URL", NEWAPI_BASE_URL),
+            ("NEWAPI_ADMIN_ACCESS_TOKEN", NEWAPI_ADMIN_ACCESS_TOKEN),
+            ("PROVISION_HMAC_SECRET", PROVISION_HMAC_SECRET),
+        )
+        if not value
+    ]
+    if missing:
+        raise RuntimeError(
+            "provisioning server misconfigured, missing: " + ", ".join(missing)
+        )
+    if not NEWAPI_DB_PATH:
+        logger.warning(
+            "NEWAPI_DB_PATH is empty: user quota will NOT be written and "
+            "token keys may come back masked (sk-****) — see README"
+        )
     init_db()
 
 
@@ -367,12 +391,13 @@ def provision(body: ProvisionRequest, request: Request) -> JSONResponse:
     if existing is not None and existing["status"] == "done":
         return JSONResponse(content=json.loads(existing["credentials"]))
 
-    if count_recent_requests(client_ip) >= RATE_LIMIT_PER_IP_PER_DAY:
-        return _error(429, "rate_limited")
-    log_request(client_ip)
+    if existing is None:
+        if count_recent_requests(client_ip) >= RATE_LIMIT_PER_IP_PER_DAY:
+            return _error(429, "rate_limited")
+        log_request(client_ip)
 
     short = body.instance_id.split("-")[0]
-    username = f"gc-{short}"
+    username = f"gc-{short}-{body.instance_id.split('-')[1][:4]}"
     if existing is None:
         # NewAPI 密码长度限制 8-20 位，token_urlsafe(12) 生成 16 位
         insert_pending(

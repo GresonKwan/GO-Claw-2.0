@@ -95,7 +95,9 @@ def test_success_flow_mints_sub_user_and_returns_credentials(service):
     assert payload["dashscope"]["apiKey"] == ISSUED_KEY
 
     fake = FakeNewAPIClient.instances[0]
-    username = f"gc-{instance_id.split('-')[0]}"
+    username = (
+        f"gc-{instance_id.split('-')[0]}-{instance_id.split('-')[1][:4]}"
+    )
     assert fake.ensure_user_calls[0][0] == username
     assert fake.create_token_calls[0] == (
         username, fake.ensure_user_calls[0][1], 42,
@@ -162,3 +164,17 @@ def test_rate_limit_blocks_new_instances_but_not_replays(service):
 def test_healthz(service):
     with TestClient(service.app) as client:
         assert client.get("/healthz").json() == {"ok": True}
+
+
+def test_startup_fails_fast_without_required_env(tmp_path, monkeypatch):
+    monkeypatch.delenv("NEWAPI_BASE_URL", raising=False)
+    monkeypatch.delenv("NEWAPI_ADMIN_ACCESS_TOKEN", raising=False)
+    monkeypatch.delenv("PROVISION_HMAC_SECRET", raising=False)
+    monkeypatch.setenv("DB_PATH", str(tmp_path / "provision.db"))
+
+    import provision_server
+
+    module = importlib.reload(provision_server)
+    with pytest.raises(RuntimeError, match="misconfigured"):
+        with TestClient(module.app):
+            pass
