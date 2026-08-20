@@ -58,6 +58,16 @@ _WECHAT_PROCESSED_IDS_MAX = 2000
 # Time window (seconds) for content-based dedup (same user + same text)
 _TEXT_DEDUP_TTL = 30.0
 
+# Consecutive HTTP 401/403 before declaring the bot token dead
+_MAX_AUTH_FAILURES = 3
+
+
+def _is_auth_error(exc: Exception) -> bool:
+    """True if *exc* carries an HTTP 401/403 response (dead bot token)."""
+    response = getattr(exc, "response", None)
+    return getattr(response, "status_code", None) in (401, 403)
+
+
 # Default token file path
 _DEFAULT_TOKEN_FILE = WORKING_DIR / "wechat_bot_token"
 
@@ -145,6 +155,7 @@ class WeChatChannel(BaseChannel):
         self._poll_thread: Optional[threading.Thread] = None
         self._stop_event = threading.Event()
         self._loop_accepting = threading.Event()  # cleared on stop
+        self._auth_failed = False
 
         # Cursor for long-polling (get_updates_buf)
         self._cursor: str = ""
@@ -399,6 +410,20 @@ class WeChatChannel(BaseChannel):
         except Exception:
             logger.warning("wechat: failed to save token file", exc_info=True)
 
+    def _clear_token_file(self) -> None:
+        """Remove the persisted bot_token so next start re-logins via QR."""
+        try:
+            if self._bot_token_file.exists():
+                self._bot_token_file.unlink()
+                logger.info(
+                    "wechat: removed dead bot_token file %s",
+                    self._bot_token_file,
+                )
+        except Exception:
+            logger.warning(
+                "wechat: failed to remove token file", exc_info=True,
+            )
+
     def _load_context_tokens(self) -> None:
         """Load persisted context_tokens from file into memory."""
         try:
@@ -566,6 +591,7 @@ class WeChatChannel(BaseChannel):
 
         # Circuit breaker: exponential backoff on consecutive failures
         consecutive_failures = 0
+        consecutive_auth_failures = 0
         max_backoff_seconds = 120  # cap at 2 minutes
 
         try:
@@ -583,6 +609,7 @@ class WeChatChannel(BaseChannel):
 
                     # Reset circuit breaker on any successful poll
                     consecutive_failures = 0
+                    consecutive_auth_failures = 0
 
                     # ret=-1 is normal long-poll timeout (no new messages)
                     if ret != 0 and not msgs:
@@ -600,7 +627,28 @@ class WeChatChannel(BaseChannel):
                             await asyncio.sleep(3)
                 except asyncio.CancelledError:
                     break
-                except Exception:
+                except Exception as exc:
+                    if _is_auth_error(exc):
+                        consecutive_auth_failures += 1
+                        logger.warning(
+                            "wechat auth rejected (%d/%d); "
+                            "token may be expired",
+                            consecutive_auth_failures,
+                            _MAX_AUTH_FAILURES,
+                        )
+                        if consecutive_auth_failures >= _MAX_AUTH_FAILURES:
+                            logger.error(
+                                "wechat: bot token rejected %d times in a "
+                                "row; stopping poll and requiring re-login",
+                                consecutive_auth_failures,
+                            )
+                            self._auth_failed = True
+                            self.bot_token = ""
+                            self._clear_token_file()
+                            break
+                        await asyncio.sleep(3)
+                        continue
+                    consecutive_auth_failures = 0
                     consecutive_failures += 1
                     backoff = min(
                         5 * (2 ** (consecutive_failures - 1)),
@@ -637,9 +685,14 @@ class WeChatChannel(BaseChannel):
             if msg_type != 1:
                 return
 
-            # Dedup: use context_token as unique id
+            # Dedup: use context_token as unique id; fall back to
+            # user+msg_id only when msg_id is actually present — a key
+            # without any unique component ("<uid>_") would collapse all
+            # of a user's messages into one dedup entry.
+            msg_id = msg.get("msg_id", "")
             dedup_key = (
-                context_token or f"{from_user_id}_{msg.get('msg_id', '')}"
+                context_token
+                or (f"{from_user_id}_{msg_id}" if msg_id else "")
             )
             if dedup_key and self._is_duplicate(dedup_key):
                 logger.debug(
@@ -1713,6 +1766,15 @@ class WeChatChannel(BaseChannel):
                 "status": "disabled",
                 "detail": "WeChat channel is disabled.",
             }
+        if self._auth_failed:
+            return {
+                "channel": self.channel,
+                "status": "unhealthy",
+                "detail": (
+                    "微信登录状态已失效（bot token 被拒绝），"
+                    "请在渠道设置中重新扫码授权"
+                ),
+            }
         issues = []
         if self._client is None:
             issues.append("WeChat client not initialized")
@@ -1739,6 +1801,10 @@ class WeChatChannel(BaseChannel):
         if not self.enabled:
             logger.debug("wechat channel disabled")
             return
+
+        # A (re)start is a fresh login attempt — clear any previous
+        # auth-failure state so health_check reflects reality again.
+        self._auth_failed = False
 
         # Resolve token: config > token file
         if not self.bot_token:

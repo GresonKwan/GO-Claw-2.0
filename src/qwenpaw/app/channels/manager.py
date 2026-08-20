@@ -73,6 +73,8 @@ class ChannelManager:
 
     def __init__(self, channels: List[BaseChannel]):
         self.channels = channels
+        self._process: ProcessHandler | None = None
+        self._on_last_dispatch: OnLastDispatch = None
         self._lock = asyncio.Lock()
         self._loop: Optional[asyncio.AbstractEventLoop] = None
 
@@ -109,7 +111,10 @@ class ChannelManager:
             for key, ch_cls in registry.items()
             if key in available
         ]
-        return cls(channels)
+        manager = cls(channels)
+        manager._process = process
+        manager._on_last_dispatch = on_last_dispatch
+        return manager
 
     @classmethod
     # pylint: disable=too-many-branches,too-many-statements
@@ -203,7 +208,10 @@ class ChannelManager:
                 )
                 continue
 
-        return cls(channels)
+        manager = cls(channels)
+        manager._process = process
+        manager._on_last_dispatch = on_last_dispatch
+        return manager
 
     def _make_enqueue_cb(self, channel_id: str) -> Callable[[Any], None]:
         """Return a callback that enqueues payload for the given channel."""
@@ -590,6 +598,8 @@ class ChannelManager:
 
         The channel is stopped, then a fresh instance is created via
         clone() with the current config, and started via replace_channel().
+        Channels that were never started (e.g. enabled after app launch)
+        are hot-loaded from the registry instead of cloned.
 
         Args:
             channel_name: Channel identifier (e.g. "dingtalk", "telegram")
@@ -598,7 +608,9 @@ class ChannelManager:
             Dict with restart result: channel, status, detail.
 
         Raises:
-            KeyError: If channel is not found in this manager.
+            KeyError: If channel is absent from the registry.
+            RuntimeError: If the channel cannot be built (no config,
+                no workspace, or no process on this manager).
         """
         # Per-channel lock prevents concurrent restarts from
         # leaking resources (two clones started, one discarded).
@@ -608,10 +620,6 @@ class ChannelManager:
         )
         async with lock:
             channel_instance = await self.get_channel(channel_name)
-            if channel_instance is None:
-                raise KeyError(
-                    f"Channel not found: {channel_name}",
-                )
 
             logger.info("Restarting channel: %s", channel_name)
 
@@ -653,8 +661,15 @@ class ChannelManager:
                     f"No config found for channel" f" '{channel_name}'",
                 )
 
-            # Clone a fresh instance and replace
-            new_channel = channel_instance.clone(channel_cfg)
+            # Clone a fresh instance, or hot-load one when the channel
+            # was never started (e.g. enabled after app launch)
+            if channel_instance is not None:
+                new_channel = channel_instance.clone(channel_cfg)
+            else:
+                new_channel = self._build_channel_instance(
+                    channel_name,
+                    channel_cfg,
+                )
             if self._workspace is not None:
                 new_channel.set_workspace(
                     self._workspace,
@@ -708,6 +723,59 @@ class ChannelManager:
             session_id,
             priority_level,
         )
+
+    def _build_channel_instance(
+        self,
+        channel_name: str,
+        channel_cfg: Any,
+    ) -> BaseChannel:
+        """Build a fresh channel instance from the registry (hot-load).
+
+        Used by restart_channel when the channel was never started
+        (e.g. enabled after app launch), so there is no live instance
+        to clone from. Mirrors the per-channel construction in
+        from_config().
+        """
+        if self._process is None:
+            raise RuntimeError(
+                "Cannot hot-load channel: ChannelManager has no process",
+            )
+        ch_cls = get_channel_registry()[channel_name]
+        if isinstance(channel_cfg, dict):
+            from types import SimpleNamespace
+            from ...config.config import BaseChannelConfig
+
+            defaults = BaseChannelConfig().model_dump()
+            defaults.update(channel_cfg)
+            channel_cfg = SimpleNamespace(**defaults)
+
+        import inspect
+
+        from_config_kwargs: dict[str, Any] = {
+            "process": self._process,
+            "config": channel_cfg,
+            "on_reply_sent": self._on_last_dispatch,
+            "display_config": ChannelDisplayConfig.from_config(channel_cfg),
+            "no_text_debounce": getattr(
+                channel_cfg,
+                "no_text_debounce",
+                True,
+            ),
+            "workspace_dir": None,
+        }
+        sig = inspect.signature(ch_cls.from_config)
+        if any(
+            p.kind == inspect.Parameter.VAR_KEYWORD
+            for p in sig.parameters.values()
+        ):
+            filtered = from_config_kwargs
+        else:
+            filtered = {
+                k: v
+                for k, v in from_config_kwargs.items()
+                if k in sig.parameters
+            }
+        return ch_cls.from_config(**filtered)
 
     async def replace_channel(
         self,
