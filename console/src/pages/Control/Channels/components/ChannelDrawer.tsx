@@ -1191,8 +1191,14 @@ export function ChannelDrawer({
               successCredentialKey="bot_token"
               pollInterval={2000}
               onSuccess={(credentials) => {
-                form.setFieldsValue({ bot_token: credentials.bot_token });
+                form.setFieldsValue({
+                  bot_token: credentials.bot_token,
+                  enabled: true,
+                });
                 message.success(t("channels.wechatLoginSuccess"));
+                // 扫码成功即完成连接：自动启用并保存，
+                // 否则用户以为已连接，实际渠道从未启动。
+                form.submit();
               }}
               onError={(type) => {
                 if (type === "expired") {
