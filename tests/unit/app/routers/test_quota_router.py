@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
 """Tests for the console quota proxy route (GO CLAW portable)."""
+
 from __future__ import annotations
 
 import json
@@ -32,7 +33,7 @@ def portable_env(tmp_path, monkeypatch):
             {
                 "provisionUrl": "https://provision.example/go-claw/provision",
                 "hmacSecret": "s3cr3t-s3cr3t-s3cr3t",
-            }
+            },
         ),
         encoding="utf-8",
     )

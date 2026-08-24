@@ -220,7 +220,9 @@ def test_quota_reports_granted_and_remaining(service, tmp_path, monkeypatch):
     import sqlite3
 
     with sqlite3.connect(newapi_db) as conn:
-        conn.execute("CREATE TABLE users (id INTEGER PRIMARY KEY, quota INTEGER)")
+        conn.execute(
+            "CREATE TABLE users (id INTEGER PRIMARY KEY, quota INTEGER)",
+        )
         conn.execute(
             "INSERT INTO users (id, quota) VALUES (?, ?)",
             (user_id, module.GIFT_QUOTA // 2),
@@ -239,7 +241,10 @@ def test_quota_reports_granted_and_remaining(service, tmp_path, monkeypatch):
     assert body["percent"] == 50
 
 
-def test_quota_rejects_bad_signature_and_unknown_instance(service, monkeypatch):
+def test_quota_rejects_bad_signature_and_unknown_instance(
+    service,
+    monkeypatch,
+):
     module = service
     monkeypatch.setattr(module, "NEWAPI_DB_PATH", "/nonexistent.db")
     with TestClient(module.app) as client:

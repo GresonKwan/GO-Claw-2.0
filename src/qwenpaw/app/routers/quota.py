@@ -50,7 +50,9 @@ async def get_console_quota() -> JSONResponse:
             status_code=404,
             content={"error": "not_portable"},
         )
-    working_dir = Path(os.environ["QWENPAW_WORKING_DIR"]).expanduser().resolve()
+    working_dir = (
+        Path(os.environ["QWENPAW_WORKING_DIR"]).expanduser().resolve()
+    )
     instance_path = working_dir / INSTANCE_ID_FILENAME
     provision_config_path = (
         root / CREDENTIALS_RELATIVE_PATH
@@ -104,5 +106,5 @@ async def get_console_quota() -> JSONResponse:
             "granted": data.get("granted"),
             "remaining": data.get("remaining"),
             "percent": data.get("percent"),
-        }
+        },
     )

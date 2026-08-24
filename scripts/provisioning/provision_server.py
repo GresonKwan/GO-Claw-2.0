@@ -109,7 +109,7 @@ def init_db() -> None:
         # quota percentage survives later GIFT_QUOTA config changes.
         try:
             conn.execute(
-                "ALTER TABLE provisions ADD COLUMN granted_quota INTEGER"
+                "ALTER TABLE provisions ADD COLUMN granted_quota INTEGER",
             )
         except sqlite3.OperationalError:
             pass  # column already exists
@@ -494,7 +494,7 @@ def provision(body: ProvisionRequest, request: Request) -> JSONResponse:
 
 QUOTA_UNITS_PER_DOLLAR = 500000  # NewAPI quota units -> USD
 QUOTA_RATE_LIMIT_PER_INSTANCE_PER_HOUR = int(
-    os.environ.get("QUOTA_RATE_LIMIT_PER_INSTANCE_PER_HOUR", "240")
+    os.environ.get("QUOTA_RATE_LIMIT_PER_INSTANCE_PER_HOUR", "240"),
 )
 
 # In-memory per-instance sliding-window limiter for /api/quota.
@@ -519,7 +519,7 @@ def _quota_rate_limited(instance_id: str) -> bool:
 def _read_user_quota_db(user_id: int) -> int:
     """Read the user's remaining quota (units) from the NewAPI database."""
     with closing(
-        sqlite3.connect(f"file:{NEWAPI_DB_PATH}?mode=ro", uri=True)
+        sqlite3.connect(f"file:{NEWAPI_DB_PATH}?mode=ro", uri=True),
     ) as conn:
         row = conn.execute(
             "SELECT quota FROM users WHERE id = ?",
@@ -572,5 +572,5 @@ def quota(instance_id: str, ts: int, sign: str) -> JSONResponse:
             "granted": round(granted, 4),
             "remaining": round(remaining, 4),
             "percent": percent,
-        }
+        },
     )
