@@ -1,5 +1,7 @@
 # QwenPaw v2.0.1 Windows USB Portable Launch Implementation Plan
 
+> 状态：已完成（2026-08-24 补标，见 GO CLAW 变更台账）
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** 在 Windows 10/11 x64 上，从 U 盘解压后的目录直接双击 `QwenPaw-Portable.exe`，无需安装或管理员权限即可启动 QwenPaw 核心，并自动打开本机客户端页面；QwenPaw 的配置、工作区、密钥、备份和应用日志跟随 U 盘移动。

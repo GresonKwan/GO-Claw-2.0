@@ -1,5 +1,7 @@
 # GO CLAW Customer Rebrand and Preset Digital Employees Implementation Plan
 
+> 状态：已完成（2026-08-24 补标，见 GO CLAW 变更台账）
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** 在保持 QwenPaw 内部协议和便携路径机制兼容的前提下，把 Windows 便携产品的客户可见层统一为 GO CLAW、固定简体中文、精简顶栏，并在全新数据目录中幂等创建 5 名可编辑数字员工，最终产出可在任意 U 盘盘符和中文路径双击运行的完整 ZIP。

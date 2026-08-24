@@ -1,5 +1,7 @@
 # GO CLAW Runtime Brand and Batch Credentials Implementation Plan
 
+> 状态：已完成（2026-08-24 补标，见 GO CLAW 变更台账）
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Make every customer-facing runtime identity say GO CLAW, import one batch LLM/DashScope credential file exactly once in Windows portable mode, and make the bundled Qwen-Image/Wan 2.7 tools available by default to every existing and future digital employee.

@@ -1,5 +1,7 @@
 # GO CLAW Media First-Call and Cost Controls Implementation Plan
 
+> 状态：已完成（2026-08-24 补标，见 GO CLAW 变更台账）
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Correct the Windows startup loading layout, guarantee that a newly extracted portable build imports a complete usable DashScope credential before the first media-tool call, and lock media defaults plus a small shared cost quota.
