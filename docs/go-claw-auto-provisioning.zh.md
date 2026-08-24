@@ -13,7 +13,7 @@
        │ HMAC 签名请求                        │ 验签 / 时间窗 / IP限流
        ├──────────────────▶ POST /go-claw/provision（nginx 重写为 /api/provision）
        │                                     │ 幂等查询（SQLite）
-       │                                     ├─▶ NewAPI 建子用户 gc-xxxxxxxx
+       │                                     ├─▶ NewAPI 建子用户 gc-xxxxxxxx-yyyy
        │                                     ├─▶ 签发不限额令牌 go-claw-auto
        │                                     └─▶ DB 直读完整 Key + 写用户额度
        │ ◀────────────────── 返回 credentials.json 内容
@@ -83,5 +83,5 @@ NewAPI **不透传** DashScope 原生路径（`/api/v1/services/aigc/*`），因
 - [x] `credentials.json` / `provision.json` / `.env` / `provision.db` 均已
       被 .gitignore 覆盖，且从未进入 git 历史
 - [x] 交付物只含 HMAC 密钥；NewAPI 管理员令牌不出服务器
-- [x] 赠送额度同时受用户额度 + 令牌额度双重约束
+- [x] 赠送额度仅受用户账号额度约束（令牌自 8561e1d 起默认不限额；令牌层可在 NewAPI 后台单独限额）
 - [ ] 建议定期轮换 HMAC 密钥与管理员令牌（轮换后需重新出包）
