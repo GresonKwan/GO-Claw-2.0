@@ -11,10 +11,10 @@
 客户便携包（首次启动，联网）                运营服务器（与 NewAPI 同机）
   data/instance.id (UUID)                  scripts/provisioning 服务
        │ HMAC 签名请求                        │ 验签 / 时间窗 / IP限流
-       ├──────────────────▶ POST /api/provision
+       ├──────────────────▶ POST /go-claw/provision（nginx 重写为 /api/provision）
        │                                     │ 幂等查询（SQLite）
        │                                     ├─▶ NewAPI 建子用户 gc-xxxxxxxx
-       │                                     ├─▶ 签发限额令牌 go-claw-auto
+       │                                     ├─▶ 签发不限额令牌 go-claw-auto
        │                                     └─▶ DB 直读完整 Key + 写用户额度
        │ ◀────────────────── 返回 credentials.json 内容
        ▼
@@ -65,7 +65,7 @@ NewAPI **不透传** DashScope 原生路径（`/api/v1/services/aigc/*`），因
 见 `scripts/provisioning/README.md`。关键件：
 
 - 服务：`/opt/go-claw-provisioning/`（systemd: `go-claw-provision.service`）
-- 公网入口：nginx `location = /api/provision` → `127.0.0.1:9100`
+- 公网入口：nginx `location = /go-claw/provision` → `proxy_pass http://127.0.0.1:9100/api/provision`（公网路径与服务端路由的映射靠这条重写，二者不可互换）
 - 服务器机密（权限 600，勿外泄）：`/root/.newapi_admin_token`、
   `/root/.go-claw-hmac-secret`
 
