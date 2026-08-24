@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 from __future__ import annotations
 
 from qwenpaw.plugins.media_quota import MediaQuota

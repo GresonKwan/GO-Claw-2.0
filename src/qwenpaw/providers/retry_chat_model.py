@@ -620,7 +620,7 @@ class RetryChatModel(ChatModelBase):
                         raise RuntimeError(
                             "Model stream completed with zero chunks "
                             "(possible swallowed cancellation or empty "
-                            "relay stream)"
+                            "relay stream)",
                         )
                     return  # stream completed without error
 

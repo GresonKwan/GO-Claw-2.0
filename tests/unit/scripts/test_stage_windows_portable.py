@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# -*- coding: utf-8 -*-
 from __future__ import annotations
 
 import hashlib
@@ -85,7 +86,7 @@ def _write_batch_credentials(
                     ),
                     "apiKey": dashscope_key,
                 },
-            }
+            },
         ),
         encoding="utf-8",
     )
@@ -188,7 +189,7 @@ def test_stage_includes_explicit_batch_credentials(tmp_path):
 
     delivered = output.stage_dir / "GO-CLAW-Config/credentials.json"
     assert delivered.read_text(encoding="utf-8") == credentials.read_text(
-        encoding="utf-8"
+        encoding="utf-8",
     )
 
 

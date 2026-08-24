@@ -98,9 +98,7 @@ def build_env_context(
 
     # Runtime identity
     if active_model_name:
-        model_identity = (
-            f"，由当前选中的 {active_model_name} 模型提供推理能力"
-        )
+        model_identity = f"，由当前选中的 {active_model_name} 模型提供推理能力"
     else:
         model_identity = ""
     parts.append(

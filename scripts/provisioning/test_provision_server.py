@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 """Unit tests for the GO CLAW provisioning service.
 
 NewAPI calls are replaced with a fake client; no real NewAPI needed.
@@ -36,8 +37,12 @@ class FakeNewAPIClient:
         self.ensure_user_calls.append((username, password))
         return 42
 
-    def create_token_key(self, username: str, password: str,
-                         user_id: int) -> str:
+    def create_token_key(
+        self,
+        username: str,
+        password: str,
+        user_id: int,
+    ) -> str:
         self.create_token_calls.append((username, password, user_id))
         return ISSUED_KEY
 
@@ -64,7 +69,9 @@ def service(tmp_path, monkeypatch):
 
 def _sign(instance_id: str, ts: int) -> str:
     return hmac.new(
-        SECRET.encode(), f"{instance_id}:{ts}".encode(), hashlib.sha256,
+        SECRET.encode(),
+        f"{instance_id}:{ts}".encode(),
+        hashlib.sha256,
     ).hexdigest()
 
 
@@ -100,7 +107,9 @@ def test_success_flow_mints_sub_user_and_returns_credentials(service):
     )
     assert fake.ensure_user_calls[0][0] == username
     assert fake.create_token_calls[0] == (
-        username, fake.ensure_user_calls[0][1], 42,
+        username,
+        fake.ensure_user_calls[0][1],
+        42,
     )
 
     row = module.get_provision(instance_id)
@@ -155,9 +164,13 @@ def test_rate_limit_blocks_new_instances_but_not_replays(service):
         # Replays of an already-provisioned instance bypass the limiter.
         row = module.get_provision  # noqa: F841 - keep fixture referenced
     with TestClient(module.app) as client:
-        done = module._connect().execute(  # pylint: disable=protected-access
-            "SELECT instance_id FROM provisions WHERE status='done' LIMIT 1",
-        ).fetchone()
+        done = (
+            module._connect()
+            .execute(  # pylint: disable=protected-access
+                "SELECT instance_id FROM provisions WHERE status='done' LIMIT 1",
+            )
+            .fetchone()
+        )
         assert _post(client, done["instance_id"]).status_code == 200
 
 

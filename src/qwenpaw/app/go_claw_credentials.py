@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 """One-time GO CLAW batch credential import for Windows portable mode."""
 
 from __future__ import annotations
@@ -292,9 +293,7 @@ async def _import_go_claw_batch_credentials(
         # Auto-register the delivery model (e.g. a NewAPI-proxied model
         # name) into extra_models so activation succeeds.
         existing_extra = [
-            model.model_dump()
-            if hasattr(model, "model_dump")
-            else model
+            model.model_dump() if hasattr(model, "model_dump") else model
             for model in getattr(llm_provider, "extra_models", [])
         ]
         llm_update["extra_models"] = [

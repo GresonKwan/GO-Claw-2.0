@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 """Install GO CLAW's bundled media plugins into the user plugin directory."""
 
 from __future__ import annotations
@@ -121,7 +122,7 @@ def _validate_source_tree(source: Path, source_root: Path) -> None:
         )
     if not source.is_dir():
         raise RuntimeError(
-            f"Bundled plugin source is not a directory: {source}"
+            f"Bundled plugin source is not a directory: {source}",
         )
 
     for descendant in source.rglob("*"):

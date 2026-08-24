@@ -15,6 +15,20 @@ from qwenpaw.tauri.env import DESKTOP_CORS_ORIGINS_ENV, DESKTOP_READY_PREFIX
 
 
 def test_install_desktop_runtime_preserves_existing_cors_values(monkeypatch):
+    # The guard rejects installing CORS origins after the FastAPI app module
+    # is loaded; drop it from sys.modules so this test is insensitive to
+    # import order when the whole suite runs in one process.
+    monkeypatch.delitem(sys.modules, "qwenpaw.app._app", raising=False)
+    # If qwenpaw.constant is already loaded, _install_desktop_runtime syncs
+    # the desktop origins into its CORS_ORIGINS; restore it on teardown so
+    # later tests are unaffected.
+    constant_module = sys.modules.get("qwenpaw.constant")
+    if constant_module is not None:
+        monkeypatch.setattr(
+            constant_module,
+            "CORS_ORIGINS",
+            constant_module.CORS_ORIGINS,
+        )
     monkeypatch.setenv(
         DESKTOP_CORS_ORIGINS_ENV,
         "https://example.test,tauri://localhost",

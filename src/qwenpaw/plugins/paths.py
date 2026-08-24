@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 """Shared path rules for plugin discovery and installation."""
 
 from __future__ import annotations

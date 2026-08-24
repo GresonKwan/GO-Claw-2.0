@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 """Tests for the OpenAI-compatible (NewAPI relay) media API mode."""
 
 from __future__ import annotations
@@ -253,11 +254,11 @@ async def test_generate_image_openai_mode_posts_to_images_generations(
                         "url": "https://cdn.example/image.png?sig=1",
                         "b64_json": "",
                         "revised_prompt": "",
-                    }
+                    },
                 ],
                 "created": 1700000000,
-            }
-        )
+            },
+        ),
     ]
     calls: list[tuple] = []
     _patch_httpx(monkeypatch, module, script, calls)
@@ -303,8 +304,8 @@ async def test_edit_image_openai_mode_sends_reference_images(
 
     script = [
         _FakeResponse(
-            payload={"data": [{"url": "https://cdn.example/edited.png"}]}
-        )
+            payload={"data": [{"url": "https://cdn.example/edited.png"}]},
+        ),
     ]
     calls: list[tuple] = []
     _patch_httpx(monkeypatch, module, script, calls)
@@ -395,10 +396,10 @@ async def test_text_to_video_openai_mode_create_poll_success(
                 "id": "task_1",
                 "task_id": "task_1",
                 "status": "queued",
-            }
+            },
         ),
         _FakeResponse(
-            payload={"code": "success", "data": {"status": "PENDING"}}
+            payload={"code": "success", "data": {"status": "PENDING"}},
         ),
         _FakeResponse(
             payload={
@@ -407,7 +408,7 @@ async def test_text_to_video_openai_mode_create_poll_success(
                     "status": "SUCCESS",
                     "result_url": "https://cdn.example/video.mp4?sig=1",
                 },
-            }
+            },
         ),
     ]
     calls: list[tuple] = []
@@ -455,8 +456,8 @@ async def test_image_to_video_openai_mode_includes_image_field(
                 "data": {
                     "status": "SUCCESS",
                     "result_url": "https://cdn.example/i2v.mp4",
-                }
-            }
+                },
+            },
         ),
     ]
     calls: list[tuple] = []
@@ -491,8 +492,8 @@ async def test_reference_to_video_openai_mode_splits_reference_images(
                 "data": {
                     "status": "SUCCESS",
                     "result_url": "https://cdn.example/r2v.mp4",
-                }
-            }
+                },
+            },
         ),
     ]
     calls: list[tuple] = []
@@ -533,8 +534,8 @@ async def test_video_openai_mode_failed_status_returns_friendly_error(
                 "data": {
                     "status": "FAILED",
                     "fail_reason": "content moderated",
-                }
-            }
+                },
+            },
         ),
     ]
     calls: list[tuple] = []
@@ -585,7 +586,7 @@ async def test_generate_image_falls_back_when_default_model_unavailable(
             ),
         ),
         _FakeResponse(
-            payload={"data": [{"url": "https://cdn.example/fallback.png"}]}
+            payload={"data": [{"url": "https://cdn.example/fallback.png"}]},
         ),
     ]
     calls: list[tuple] = []

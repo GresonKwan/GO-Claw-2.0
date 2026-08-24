@@ -421,7 +421,8 @@ class WeChatChannel(BaseChannel):
                 )
         except Exception:
             logger.warning(
-                "wechat: failed to remove token file", exc_info=True,
+                "wechat: failed to remove token file",
+                exc_info=True,
             )
 
     def _load_context_tokens(self) -> None:
@@ -690,9 +691,8 @@ class WeChatChannel(BaseChannel):
             # without any unique component ("<uid>_") would collapse all
             # of a user's messages into one dedup entry.
             msg_id = msg.get("msg_id", "")
-            dedup_key = (
-                context_token
-                or (f"{from_user_id}_{msg_id}" if msg_id else "")
+            dedup_key = context_token or (
+                f"{from_user_id}_{msg_id}" if msg_id else ""
             )
             if dedup_key and self._is_duplicate(dedup_key):
                 logger.debug(
@@ -1770,10 +1770,7 @@ class WeChatChannel(BaseChannel):
             return {
                 "channel": self.channel,
                 "status": "unhealthy",
-                "detail": (
-                    "微信登录状态已失效（bot token 被拒绝），"
-                    "请在渠道设置中重新扫码授权"
-                ),
+                "detail": ("微信登录状态已失效（bot token 被拒绝），" "请在渠道设置中重新扫码授权"),
             }
         issues = []
         if self._client is None:

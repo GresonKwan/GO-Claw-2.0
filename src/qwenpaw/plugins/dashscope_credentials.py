@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 """Resolve DashScope credentials for bundled media tool plugins."""
 
 from __future__ import annotations

@@ -1,4 +1,7 @@
 # -*- coding: utf-8 -*-
+# pylint: disable=no-value-for-parameter
+# ^ false positives on ctypes constructors (c_void_p(), wintypes.BOOL(),
+# DWORD(), c_uint32() all take an optional value arg).
 """Windows restricted-token sandbox implementation (allow_read_all=True).
 
 Uses dedicated local user accounts with CreateRestrictedToken in

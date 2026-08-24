@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# -*- coding: utf-8 -*-
 """Stage and archive the self-contained Windows portable distribution."""
 
 from __future__ import annotations
@@ -58,7 +59,9 @@ def _validate_provision_file(provision_file: Path) -> None:
         url = payload["provisionUrl"]
         secret = payload["hmacSecret"]
     except (json.JSONDecodeError, KeyError, TypeError) as exc:
-        raise ValueError("Provisioning config is structurally invalid") from exc
+        raise ValueError(
+            "Provisioning config is structurally invalid",
+        ) from exc
     if (
         not isinstance(url, str)
         or not url.startswith("https://")
@@ -80,7 +83,9 @@ def _validate_dist(dist: Path, repository_root: Path | None) -> Path:
 
 
 def _tree_size(root: Path) -> int:
-    return sum(path.stat().st_size for path in root.rglob("*") if path.is_file())
+    return sum(
+        path.stat().st_size for path in root.rglob("*") if path.is_file()
+    )
 
 
 def _zip_tree(stage_dir: Path, zip_path: Path) -> None:
@@ -238,7 +243,10 @@ def main(argv: list[str] | None = None) -> int:
         license_file=args.license_file or repository_root / "LICENSE",
         readme_file=(
             args.readme_file
-            or repository_root / "scripts" / "pack-tauri" / "README-PORTABLE.zh-CN.txt"
+            or repository_root
+            / "scripts"
+            / "pack-tauri"
+            / "README-PORTABLE.zh-CN.txt"
         ),
         credentials_example_file=(
             repository_root
@@ -247,7 +255,9 @@ def main(argv: list[str] | None = None) -> int:
             / "GO-CLAW-Config"
             / "credentials.example.json"
         ),
-        credentials_file=(credentials_file if credentials_file.is_file() else None),
+        credentials_file=(
+            credentials_file if credentials_file.is_file() else None
+        ),
         provision_file=(provision_file if provision_file.is_file() else None),
         repository_root=repository_root,
     )

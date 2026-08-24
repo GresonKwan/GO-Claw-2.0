@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 """Contract tests for the checked-in GO CLAW customer assets."""
 
 from __future__ import annotations
@@ -90,7 +91,10 @@ GO_CLAW_TAURI_ICON_COMMAND = (
     "npm exec -- tauri icon ../scripts/pack/assets/"
     "go-claw-app-icon-1024.png"
 )
-PACKAGING_CONSUMER_TOKEN_CONTRACTS = {
+PACKAGING_CONSUMER_TOKEN_CONTRACTS: dict[
+    str,
+    dict[str, tuple[str, ...]],
+] = {
     "scripts/pack-tauri/build_win_pyinstaller.ps1": {
         "forbidden": ("QwenPaw-Portable-",),
         "required": ("GO-CLAW-Portable-${VERSION}-Windows-x64.zip",),
@@ -186,8 +190,7 @@ STANDALONE_AGENT_PATTERN = re.compile(r"(?<![A-Za-z])Agent(?![A-Za-z])")
 SUSPECTED_API_KEY_PATTERN = re.compile(r"sk-[A-Za-z0-9_-]{16,}")
 CHINESE_CHARACTER_PATTERN = re.compile(r"[\u3400-\u9fff]")
 MISSING_DASHSCOPE_KEY_MESSAGE = (
-    "请在 GO CLAW 批次凭证或当前数字员工工具配置中填写 "
-    "DashScope API Key"
+    "请在 GO CLAW 批次凭证或当前数字员工工具配置中填写 " "DashScope API Key"
 )
 MEDIA_PLUGIN_CONTRACTS = {
     "plugins/tool/qwen-image": {
@@ -205,7 +208,7 @@ MEDIA_PLUGIN_CONTRACTS = {
             "image_to_video_wan",
             "reference_to_video_wan",
         ],
-        "config_names": {"api_key", "endpoint", "timeout"},
+        "config_names": {"api_key", "endpoint", "model", "timeout"},
         "tool_source": "wan27_tool.py",
     },
 }
@@ -222,7 +225,8 @@ def _read_customer_text(relative_path: str) -> str:
 def _matching_lines(relative_path: str, pattern: re.Pattern[str]) -> list[str]:
     matches = []
     for line_number, line in enumerate(
-        _read_customer_text(relative_path).splitlines(), start=1
+        _read_customer_text(relative_path).splitlines(),
+        start=1,
     ):
         match = pattern.search(line)
         if match:
@@ -267,14 +271,12 @@ def test_customer_visible_copy_does_not_contain_qwenpaw_brand() -> None:
 
 def test_portable_readme_explains_drive_letter_rebinding() -> None:
     readme = _read_customer_text(
-        "scripts/pack-tauri/README-PORTABLE.zh-CN.txt"
+        "scripts/pack-tauri/README-PORTABLE.zh-CN.txt",
     )
 
     assert readme.startswith("GO CLAW Portable")
     assert "双击 GO-CLAW-Portable.exe" in readme
-    assert (
-        "U 盘盘符从 E、F 或 G 变化时，无需修改配置" in readme
-    )
+    assert "U 盘盘符从 E、F 或 G 变化时，无需修改配置" in readme
     assert (
         "Get-FileHash .\\GO-CLAW-Portable-2.0.1-Windows-x64.zip "
         "-Algorithm SHA256"
@@ -290,7 +292,8 @@ def test_customer_visible_copy_does_not_reference_legacy_assets() -> None:
         for asset_reference in LEGACY_CUSTOMER_ASSET_REFERENCES
         for path in CUSTOMER_VISIBLE_TEXT_PATHS
         for match in _matching_lines(
-            path, re.compile(re.escape(asset_reference))
+            path,
+            re.compile(re.escape(asset_reference)),
         )
     ]
 
@@ -303,7 +306,8 @@ def test_customer_visible_copy_does_not_reference_legacy_assets() -> None:
 def test_market_plugin_categories_use_digital_employee_copy() -> None:
     market_plugin_list_text = _read_customer_text(MARKET_PLUGIN_LIST_PATH)
     offenders = _matching_lines(
-        MARKET_PLUGIN_LIST_PATH, re.compile(r"Agent 工具")
+        MARKET_PLUGIN_LIST_PATH,
+        re.compile(r"Agent 工具"),
     )
 
     assert (
@@ -317,19 +321,19 @@ def test_tauri_product_names_and_window_titles_are_exact_go_claw() -> None:
         config = json.loads(_read_customer_text(relative_path))
         if config.get("productName") != "GO CLAW":
             failures.append(
-                f"{relative_path}:productName={config.get('productName')!r}"
+                f"{relative_path}:productName={config.get('productName')!r}",
             )
         for index, window in enumerate(
-            config.get("app", {}).get("windows", [])
+            config.get("app", {}).get("windows", []),
         ):
             if window.get("title") != "GO CLAW":
                 failures.append(
                     f"{relative_path}:app.windows[{index}].title="
-                    f"{window.get('title')!r}"
+                    f"{window.get('title')!r}",
                 )
 
     assert not failures, "Tauri customer product names diverge:\n" + "\n".join(
-        failures
+        failures,
     )
 
 
@@ -339,7 +343,7 @@ def test_tauri_shell_customer_copy_is_branded_go_claw() -> None:
         customer_shell_text = _read_customer_text(relative_path)
         if "QwenPaw" in customer_shell_text:
             failures.extend(
-                _matching_lines(relative_path, re.compile(r"QwenPaw"))
+                _matching_lines(relative_path, re.compile(r"QwenPaw")),
             )
 
     required_copy = {
@@ -359,7 +363,7 @@ def test_tauri_shell_customer_copy_is_branded_go_claw() -> None:
             failures.append(f"{relative_path}: missing {required_text!r}")
 
     assert not failures, "Tauri customer shell copy diverges:\n" + "\n".join(
-        failures
+        failures,
     )
 
 
@@ -391,7 +395,9 @@ def test_tauri_cargo_customer_metadata_uses_go_claw_repository() -> None:
 
 
 def test_tauri_bundle_and_build_scripts_use_generated_go_claw_icons() -> None:
-    config = json.loads(_read_customer_text("console/src-tauri/tauri.conf.json"))
+    config = json.loads(
+        _read_customer_text("console/src-tauri/tauri.conf.json"),
+    )
     bundle = config["bundle"]
 
     assert bundle["icon"] == ["icons/icon.icns", "icons/icon.ico"]
@@ -430,7 +436,7 @@ def test_direct_packaging_consumers_use_current_artifact_tokens() -> None:
                 failures.append(f"{relative_path}: missing token {token!r}")
 
     assert not failures, "Packaging artifact consumers diverge:\n" + "\n".join(
-        failures
+        failures,
     )
 
 
@@ -508,7 +514,7 @@ def test_media_tools_expose_the_actionable_missing_key_message() -> None:
 
 def test_pyinstaller_spec_bundles_media_plugins_and_dashscope() -> None:
     spec_tree = ast.parse(
-        _read_customer_text("scripts/pack-tauri/qwenpaw.spec")
+        _read_customer_text("scripts/pack-tauri/qwenpaw.spec"),
     )
     calls = [
         node for node in ast.walk(spec_tree) if isinstance(node, ast.Call)
@@ -577,7 +583,7 @@ def test_pyinstaller_spec_bundles_media_plugins_and_dashscope() -> None:
 
 def _load_pyinstaller_collect_tree() -> object:
     spec_tree = ast.parse(
-        _read_customer_text("scripts/pack-tauri/qwenpaw.spec")
+        _read_customer_text("scripts/pack-tauri/qwenpaw.spec"),
     )
     collect_tree_node = next(
         node

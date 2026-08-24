@@ -289,9 +289,7 @@ async def _generate_images_openai(
         raise RuntimeError(message)
 
     data = response.json().get("data") or []
-    urls = [
-        item.get("url") for item in data if isinstance(item, dict)
-    ]
+    urls = [item.get("url") for item in data if isinstance(item, dict)]
     return [url for url in urls if url]
 
 
@@ -524,9 +522,7 @@ async def generate_image_qwen(
 
                     image_urls = _parse_image_urls(rsp)
                 if candidate != model:
-                    fallback_note = (
-                        f"（默认模型 {model} 不可用，已自动改用 {candidate}）"
-                    )
+                    fallback_note = f"（默认模型 {model} 不可用，已自动改用 {candidate}）"
                 break
             except _ModelUnavailableError as exc:
                 last_unavailable = str(exc)
@@ -782,9 +778,9 @@ async def edit_image_qwen(
             try:
                 if mode == "openai":
                     # OpenAI-compatible relay (e.g. NewAPI): send the reference
-                    # image(s) together with the prompt to /v1/images/generations.
-                    # The upstream qwen-image-2.0 model accepts reference images
-                    # via the ``image`` field; extras go to ``metadata.images``.
+                    # image(s) with the prompt to /v1/images/generations.
+                    # Upstream qwen-image-2.0 accepts reference images
+                    # via ``image``; extras go to ``metadata.images``.
                     image_urls = await _generate_images_openai(
                         base_url=base_url,
                         api_key=api_key,
@@ -842,14 +838,12 @@ async def edit_image_qwen(
 
                     image_urls = _parse_image_urls(rsp)
                 if candidate != model:
-                    fallback_note = (
-                        f"（默认模型 {model} 不可用，已自动改用 {candidate}）"
-                    )
+                    fallback_note = f"（默认模型 {model} 不可用，已自动改用 {candidate}）"
                 break
             except _ModelUnavailableError as exc:
                 last_unavailable = str(exc)
                 logger.warning(
-                    "image edit model %s unavailable, trying next fallback: %s",
+                    "image edit model %s unavailable, trying next: %s",
                     candidate,
                     exc,
                 )

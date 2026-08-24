@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 """Tests for installing the bundled GO CLAW media plugins."""
 
 from __future__ import annotations
@@ -74,7 +75,7 @@ def _write_canonical_media_plugins_and_legacy_workdir(
     )
     legacy_manifest_path = legacy_dir / "plugin.json"
     legacy_manifest = json.loads(
-        legacy_manifest_path.read_text(encoding="utf-8")
+        legacy_manifest_path.read_text(encoding="utf-8"),
     )
     legacy_manifest["name"] = "Legacy installation workdir"
     legacy_manifest_path.write_text(
@@ -733,9 +734,11 @@ def test_real_loader_discovery_hides_legacy_installation_workdir(
     tmp_path: Path,
 ) -> None:
     plugins_dir = tmp_path / "plugins"
-    qwen_dir, wan_dir, legacy_dir = (
-        _write_canonical_media_plugins_and_legacy_workdir(plugins_dir)
-    )
+    (
+        qwen_dir,
+        wan_dir,
+        legacy_dir,
+    ) = _write_canonical_media_plugins_and_legacy_workdir(plugins_dir)
     loader = PluginLoader(plugin_dirs=[plugins_dir])
 
     discovered = loader.discover_plugins()
@@ -757,9 +760,11 @@ async def test_real_loader_loads_each_canonical_plugin_once(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     plugins_dir = tmp_path / "plugins"
-    qwen_dir, wan_dir, legacy_dir = (
-        _write_canonical_media_plugins_and_legacy_workdir(plugins_dir)
-    )
+    (
+        qwen_dir,
+        wan_dir,
+        legacy_dir,
+    ) = _write_canonical_media_plugins_and_legacy_workdir(plugins_dir)
     monkeypatch.setattr(PluginRegistry, "_instance", None)
     loader = PluginLoader(plugin_dirs=[plugins_dir])
     load_sources: list[Path] = []
@@ -814,9 +819,11 @@ def test_disk_plugin_fallback_hides_legacy_installation_workdir(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     plugins_dir = tmp_path / "plugins"
-    _qwen_dir, _wan_dir, legacy_dir = (
-        _write_canonical_media_plugins_and_legacy_workdir(plugins_dir)
-    )
+    (
+        _qwen_dir,
+        _wan_dir,
+        legacy_dir,
+    ) = _write_canonical_media_plugins_and_legacy_workdir(plugins_dir)
     monkeypatch.setattr(
         config_utils,
         "get_plugins_dir",
@@ -859,6 +866,6 @@ def test_similar_normal_plugin_directory_name_is_not_reserved(
     disk_plugins = plugins_router._list_plugins_from_disk()
 
     assert [(manifest.id, source) for manifest, source in discovered] == [
-        ("customer-tool", ordinary_dir)
+        ("customer-tool", ordinary_dir),
     ]
     assert [plugin["id"] for plugin in disk_plugins] == ["customer-tool"]

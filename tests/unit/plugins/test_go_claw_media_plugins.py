@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 """Focused behavior tests for GO CLAW's bundled media tool plugins."""
 
 from __future__ import annotations
@@ -19,10 +20,7 @@ from qwenpaw.plugins.dashscope_credentials import (
 )
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[3]
-MISSING_KEY_MESSAGE = (
-    "请在 GO CLAW 批次凭证或当前数字员工工具配置中填写 "
-    "DashScope API Key"
-)
+MISSING_KEY_MESSAGE = "请在 GO CLAW 批次凭证或当前数字员工工具配置中填写 " "DashScope API Key"
 
 
 def _load_tool_module(relative_path: str, module_name: str) -> ModuleType:
@@ -54,7 +52,7 @@ class _RecordingPluginApi:
                 enabled=enabled,
                 description=description,
                 icon=icon,
-            )
+            ),
         )
 
 
@@ -74,17 +72,23 @@ class _ProviderManager:
 
 
 def test_employee_dashscope_key_wins_over_global_key() -> None:
-    assert resolve_dashscope_api_key(
-        {"api_key": " employee-key "},
-        manager=_ProviderManager("global-key"),
-    ) == "employee-key"
+    assert (
+        resolve_dashscope_api_key(
+            {"api_key": " employee-key "},
+            manager=_ProviderManager("global-key"),
+        )
+        == "employee-key"
+    )
 
 
 def test_global_dashscope_key_is_used_when_employee_key_is_blank() -> None:
-    assert resolve_dashscope_api_key(
-        {"api_key": "  "},
-        manager=_ProviderManager(" global-key "),
-    ) == "global-key"
+    assert (
+        resolve_dashscope_api_key(
+            {"api_key": "  "},
+            manager=_ProviderManager(" global-key "),
+        )
+        == "global-key"
+    )
 
 
 def test_global_dashscope_url_maps_to_native_endpoint() -> None:
@@ -98,13 +102,16 @@ def test_global_dashscope_url_maps_to_native_endpoint() -> None:
 
 
 def test_employee_dashscope_endpoint_wins_over_global_endpoint() -> None:
-    assert resolve_dashscope_endpoint(
-        {"endpoint": " https://employee.example/api/v1 "},
-        manager=_ProviderManager(
-            "global-key",
-            "https://dashscope.example/compatible-mode/v1",
-        ),
-    ) == "https://employee.example/api/v1"
+    assert (
+        resolve_dashscope_endpoint(
+            {"endpoint": " https://employee.example/api/v1 "},
+            manager=_ProviderManager(
+                "global-key",
+                "https://dashscope.example/compatible-mode/v1",
+            ),
+        )
+        == "https://employee.example/api/v1"
+    )
 
 
 @pytest.mark.parametrize(
@@ -154,9 +161,7 @@ def test_both_media_plugins_use_the_shared_global_key_resolver(
         (
             "plugins/tool/qwen-image/qwen_image.py",
             {
-                "generate_image_qwen": (
-                    "使用 Qwen-Image 根据文字提示生成图像"
-                ),
+                "generate_image_qwen": ("使用 Qwen-Image 根据文字提示生成图像"),
                 "edit_image_qwen": "使用 Qwen-Image 编辑或融合图像",
             },
         ),
@@ -165,9 +170,7 @@ def test_both_media_plugins_use_the_shared_global_key_resolver(
             {
                 "text_to_video_wan": ("使用 Wan 2.7 根据文字提示生成视频"),
                 "image_to_video_wan": ("使用 Wan 2.7 根据图像生成视频"),
-                "reference_to_video_wan": (
-                    "使用 Wan 2.7 根据角色参考素材生成视频"
-                ),
+                "reference_to_video_wan": ("使用 Wan 2.7 根据角色参考素材生成视频"),
             },
         ),
     ],
@@ -197,7 +200,8 @@ def test_media_plugin_registers_customer_ready_tool_descriptions(
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
-    "tool_config", [{}, {"api_key": ""}, {"api_key": "   "}]
+    "tool_config",
+    [{}, {"api_key": ""}, {"api_key": "   "}],
 )
 @pytest.mark.parametrize("tool_name", ["generate", "edit"])
 async def test_qwen_image_never_requests_without_a_nonblank_api_key(
@@ -224,7 +228,9 @@ async def test_qwen_image_never_requests_without_a_nonblank_api_key(
         pytest.fail("DashScope request must not run without an API key")
 
     monkeypatch.setattr(
-        module, "_call_multimodal_conversation", unexpected_request
+        module,
+        "_call_multimodal_conversation",
+        unexpected_request,
     )
     invocations: dict[str, Callable[[], Awaitable[ToolChunk]]] = {
         "generate": lambda: module.generate_image_qwen("a red panda"),
@@ -242,7 +248,8 @@ async def test_qwen_image_never_requests_without_a_nonblank_api_key(
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
-    "tool_config", [{}, {"api_key": ""}, {"api_key": "\t "}]
+    "tool_config",
+    [{}, {"api_key": ""}, {"api_key": "\t "}],
 )
 @pytest.mark.parametrize("tool_name", ["text", "image", "reference"])
 async def test_wan_never_requests_without_a_nonblank_api_key(
@@ -411,10 +418,10 @@ async def test_qwen_generation_uses_requested_default_model_and_2k(
                 choices=[
                     SimpleNamespace(
                         message=SimpleNamespace(
-                            content=[{"image": image_url}]
-                        )
-                    )
-                ]
+                            content=[{"image": image_url}],
+                        ),
+                    ),
+                ],
             ),
         )
 
@@ -440,8 +447,8 @@ async def test_qwen_generation_uses_requested_default_model_and_2k(
 def test_qwen_manifest_uses_requested_default_model() -> None:
     manifest = json.loads(
         (REPOSITORY_ROOT / "plugins/tool/qwen-image/plugin.json").read_text(
-            encoding="utf-8"
-        )
+            encoding="utf-8",
+        ),
     )
     generate_tool = next(
         tool

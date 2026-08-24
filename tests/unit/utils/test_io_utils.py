@@ -54,7 +54,9 @@ def test_write_json_atomic_durable_syncs_parent_after_replace(
 
     def inspect_fsync(fd: int) -> None:
         events.append(
-            "dir-fsync" if stat.S_ISDIR(os.fstat(fd).st_mode) else "file-fsync"
+            "dir-fsync"
+            if stat.S_ISDIR(os.fstat(fd).st_mode)
+            else "file-fsync",
         )
         real_fsync(fd)
 

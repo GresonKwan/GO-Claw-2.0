@@ -39,7 +39,6 @@ def test_api_workspace_working_file_list_put_get(app_server) -> None:
         "MEMORY.md",
         "HEARTBEAT.md",
         "BOOTSTRAP.md",
-        "AGENTS.md",
     }
 
     create_agent = app_server.api_request(
@@ -315,7 +314,7 @@ def test_api_workspace_download_zip_contract(app_server) -> None:
         with zipfile.ZipFile(io.BytesIO(zip_bytes), "r") as zf:
             names = set(zf.namelist())
 
-        assert "AGENTS.md" in names
+        assert "SOUL.md" in names
         assert f"{marker_stem}.md" in names
     finally:
         app_server.api_request("DELETE", f"/api/agents/{agent_id}")

@@ -69,8 +69,11 @@ def _load_builtin_channels() -> dict[str, type[BaseChannel]]:
                     exc_info=True,
                 )
                 raise
-            logger.debug(
-                "built-in channel unavailable: %s",
+            # A silently skipped builtin channel surfaces downstream as
+            # "missing builtin types" with no clue why; keep the reason
+            # visible (warning, not error: the app still works).
+            logger.warning(
+                'built-in channel unavailable, skipping: "%s"',
                 key,
                 exc_info=True,
             )

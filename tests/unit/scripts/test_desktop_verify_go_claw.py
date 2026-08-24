@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 """Unit tests for the keyless GO CLAW desktop startup smoke checks."""
 
 from __future__ import annotations
@@ -6,6 +7,7 @@ import importlib.util
 import json
 import sys
 from pathlib import Path
+from typing import Any
 
 import pytest
 
@@ -35,7 +37,7 @@ MEDIA_TOOLS = (
 )
 
 
-def _responses() -> dict[str, object]:
+def _responses() -> dict[str, Any]:
     return {
         "/": (
             '<!doctype html><html lang="zh-CN"><head>'
@@ -123,7 +125,9 @@ def test_frontend_rejects_wrong_go_claw_shell(
     message: str,
 ) -> None:
     monkeypatch.setattr(
-        desktop_verify, "_http", lambda *_args, **_kwargs: html
+        desktop_verify,
+        "_http",
+        lambda *_args, **_kwargs: html,
     )
 
     with pytest.raises(RuntimeError, match=message):
@@ -215,10 +219,15 @@ def test_main_runs_keyless_go_claw_smoke_for_existing_verify_entry(
             "--skip-chat",
         ],
     )
+
+    def _fake_health_check(_url: str) -> str:
+        calls.append("health")
+        return "2.0.1"
+
     monkeypatch.setattr(
         desktop_verify,
         "health_check",
-        lambda _url: calls.append("health") or "2.0.1",
+        _fake_health_check,
     )
     monkeypatch.setattr(
         desktop_verify,

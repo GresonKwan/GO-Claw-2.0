@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 """First-launch auto-provisioning for GO CLAW portable builds.
 
 When a portable build starts without imported credentials and without a
@@ -112,9 +113,13 @@ async def _provision(http_post: HttpPost) -> bool:
     root = _portable_root()
     if root is None:
         return True
-    working_dir = Path(
-        os.environ["QWENPAW_WORKING_DIR"],
-    ).expanduser().resolve()
+    working_dir = (
+        Path(
+            os.environ["QWENPAW_WORKING_DIR"],
+        )
+        .expanduser()
+        .resolve()
+    )
     config_dir = root / CREDENTIALS_RELATIVE_PATH.parent
     credentials_path = root / CREDENTIALS_RELATIVE_PATH
     marker_path = working_dir / MARKER_FILENAME

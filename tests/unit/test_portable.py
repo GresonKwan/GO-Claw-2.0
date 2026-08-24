@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 from __future__ import annotations
 
 import json
@@ -21,9 +22,12 @@ def test_portable_history_survives_directory_move(tmp_path):
 
     assert str(old_data.resolve()) in history
     assert str(new_data.resolve()) in history
-    assert json.loads(
-        (new_data / ".portable-location.json").read_text("utf-8"),
-    )["workingDirs"] == history
+    assert (
+        json.loads(
+            (new_data / ".portable-location.json").read_text("utf-8"),
+        )["workingDirs"]
+        == history
+    )
 
 
 def test_normalize_rebases_known_paths_but_preserves_external(

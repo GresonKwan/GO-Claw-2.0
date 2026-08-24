@@ -68,6 +68,7 @@ def _model_candidates(primary: str, fallbacks: tuple) -> list:
             out.append(name)
     return out
 
+
 _VALID_RESOLUTIONS = {"720P", "1080P"}
 _VALID_RATIOS = {"16:9", "9:16", "1:1", "4:3", "3:4"}
 
@@ -497,9 +498,7 @@ async def text_to_video_wan(
 
                     video_url = rsp.output.video_url
                 if candidate != model:
-                    fallback_note = (
-                        f"（默认模型 {model} 不可用，已自动改用 {candidate}）"
-                    )
+                    fallback_note = f"（默认模型 {model} 不可用，已自动改用 {candidate}）"
                 break
             except _ModelUnavailableError as exc:
                 last_unavailable = str(exc)
@@ -769,7 +768,9 @@ async def image_to_video_wan(
             else (
                 "first-last-frame"
                 if last_frame_url
-                else "audio-driven" if driving_audio_url else "first-frame"
+                else "audio-driven"
+                if driving_audio_url
+                else "first-frame"
             )
         )
 
@@ -853,9 +854,7 @@ async def image_to_video_wan(
 
                     video_url = rsp.output.video_url
                 if candidate != model:
-                    fallback_note = (
-                        f"（默认模型 {model} 不可用，已自动改用 {candidate}）"
-                    )
+                    fallback_note = f"（默认模型 {model} 不可用，已自动改用 {candidate}）"
                 break
             except _ModelUnavailableError as exc:
                 last_unavailable = str(exc)
@@ -1135,8 +1134,8 @@ async def reference_to_video_wan(
         for candidate in candidates:
             try:
                 if mode == "openai":
-                    # OpenAI-compatible relay (e.g. NewAPI): the first reference
-                    # image is sent as the top-level ``image`` field, remaining
+                    # OpenAI-compatible relay (e.g. NewAPI): the first ref
+                    # image goes to the top-level ``image`` field, remaining
                     # references ride inside ``metadata.images`` / ``videos``.
                     ref_images = [
                         item["url"]
@@ -1211,9 +1210,7 @@ async def reference_to_video_wan(
 
                     video_url = rsp.output.video_url
                 if candidate != model:
-                    fallback_note = (
-                        f"（默认模型 {model} 不可用，已自动改用 {candidate}）"
-                    )
+                    fallback_note = f"（默认模型 {model} 不可用，已自动改用 {candidate}）"
                 break
             except _ModelUnavailableError as exc:
                 last_unavailable = str(exc)

@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 """Focused tests for first-launch auto-provisioning."""
 
 from __future__ import annotations
@@ -120,8 +121,12 @@ async def test_marker_present_skips_request(portable_env: Path) -> None:
 
 
 @pytest.mark.asyncio
-async def test_existing_delivery_file_skips_request(portable_env: Path) -> None:
-    _credentials_path(portable_env).write_text(json.dumps(VALID_SERVER_PAYLOAD))
+async def test_existing_delivery_file_skips_request(
+    portable_env: Path,
+) -> None:
+    _credentials_path(portable_env).write_text(
+        json.dumps(VALID_SERVER_PAYLOAD),
+    )
     http = FakeHttp()
     assert await provision_go_claw_credentials(http_post=http) is True
     assert http.calls == []
@@ -146,7 +151,9 @@ async def test_server_failure_writes_nothing_and_is_retryable(
     # Next launch retries: instance ID is reused, request succeeds.
     http_ok = FakeHttp()
     assert await provision_go_claw_credentials(http_post=http_ok) is True
-    assert http_ok.calls[0][1]["instance_id"] == http.calls[0][1]["instance_id"]
+    assert (
+        http_ok.calls[0][1]["instance_id"] == http.calls[0][1]["instance_id"]
+    )
     assert _credentials_path(portable_env).is_file()
 
 
@@ -165,8 +172,10 @@ async def test_invalid_server_payload_is_not_persisted(
 async def test_http_provision_url_is_rejected(portable_env: Path) -> None:
     (portable_env / "GO-CLAW-Config" / PROVISION_CONFIG_FILENAME).write_text(
         json.dumps(
-            {"provisionUrl": "http://prov.example/api/provision",
-             "hmacSecret": SECRET},
+            {
+                "provisionUrl": "http://prov.example/api/provision",
+                "hmacSecret": SECRET,
+            },
         ),
         encoding="utf-8",
     )

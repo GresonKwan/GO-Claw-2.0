@@ -262,7 +262,7 @@ def test_fresh_data_provisions_exactly_five_ordered_profiles(
         assert (workspace / "memory").is_dir()
         assert (workspace / "skills").is_dir()
         assert preset.md_template_id in (workspace / "AGENTS.md").read_text(
-            encoding="utf-8"
+            encoding="utf-8",
         )
         skill_manifest = (workspace / "skill.json").read_text(
             encoding="utf-8",
@@ -1042,7 +1042,7 @@ def test_manifest_fsync_uses_a_writable_file_descriptor(
 def test_cli_init_does_not_provision_the_legacy_qa_employee() -> None:
     """Fresh portable init leaves the five GO CLAW employees authoritative."""
     init_source = (REPOSITORY_ROOT / "src/qwenpaw/cli/init_cmd.py").read_text(
-        encoding="utf-8"
+        encoding="utf-8",
     )
 
     assert "ensure_qa_agent_exists" not in init_source

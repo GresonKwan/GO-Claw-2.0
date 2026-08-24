@@ -1,8 +1,10 @@
+# -*- coding: utf-8 -*-
 """Focused tests for one-time portable batch credential import."""
 
 from __future__ import annotations
 
 import json
+from typing import Any
 from copy import deepcopy
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -25,7 +27,7 @@ from qwenpaw.config.config import (
 VALID_KEY_PREFIX = "sk-unit-test-dashscope-key-"
 VALID_KEY_SUFFIX = "abcdefghijklmnopqrstuvwxyz-0123456789"
 VALID_DASHSCOPE_KEY = VALID_KEY_PREFIX + VALID_KEY_SUFFIX
-VALID_PAYLOAD = {
+VALID_PAYLOAD: dict[str, Any] = {
     "schemaVersion": 1,
     "batchId": "test-batch",
     "llm": {
@@ -398,10 +400,12 @@ async def test_symlinked_delivery_is_rejected(
         outside = tmp_path / "outside-config"
         outside.mkdir()
         (outside / "credentials.json").write_text(
-            json.dumps(VALID_PAYLOAD), encoding="utf-8"
+            json.dumps(VALID_PAYLOAD),
+            encoding="utf-8",
         )
         credential_env.credentials_path.parent.symlink_to(
-            outside, target_is_directory=True
+            outside,
+            target_is_directory=True,
         )
     else:
         credential_env.credentials_path.parent.mkdir()

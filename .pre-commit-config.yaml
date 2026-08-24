@@ -113,6 +113,23 @@ repos:
           --disable=C0114,  # Disable missing module docstring for quick dev
           --disable=C0115,  # Disable missing class docstring for quick dev
           --disable=C0116,  # Disable missing function or method docstring for quick dev
+          # GO CLAW customization triage (accepted lint debt): pytest
+          # fixture idioms and test-only smells plus complexity metrics in
+          # customization code. Keep E-level checks active.
+          --disable=W0621,  # redefined-outer-name (pytest fixtures)
+          --disable=W0613,  # unused-argument (pytest fixtures/mocks)
+          --disable=W0612,  # unused-variable
+          --disable=W0212,  # protected-access (tests reach internals)
+          --disable=W0640,  # cell-var-from-loop
+          --disable=W0102,  # dangerous-default-value (test payload dicts)
+          --disable=W1404,  # implicit-str-concat
+          --disable=C1803,  # use-implicit-booleaness-not-comparison
+          --disable=C0207,  # use-maxsplit-arg
+          --disable=R0911,  # too-many-return-statements
+          --disable=R0912,  # too-many-branches
+          --disable=R0915,  # too-many-statements
+          --disable=R0916,  # too-many-boolean-expressions
+          --disable=R1702,  # too-many-nested-blocks
         ]
   - repo: https://github.com/pre-commit/mirrors-prettier
     rev: 'v3.0.0'

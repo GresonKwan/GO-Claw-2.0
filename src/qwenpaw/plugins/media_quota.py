@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 """Small in-process usage caps for bundled GO CLAW media tools."""
 
 from __future__ import annotations
@@ -80,10 +81,8 @@ class MediaQuota:
             MediaQuotaDecision(
                 allowed=False,
                 retry_after_seconds=retry_after_seconds,
-                message=(
-                    "媒体生成频次已受限，请在 " f"{retry_after_seconds} 秒后重试。"
-                ),
-            )
+                message=("媒体生成频次已受限，请在 " f"{retry_after_seconds} 秒后重试。"),
+            ),
         )
 
     @staticmethod
@@ -111,7 +110,7 @@ class MediaQuota:
                 outputs_to_expire = total - _IMAGE_OUTPUTS_PER_HOUR
                 limiting_event = self._image_outputs[outputs_to_expire - 1]
                 return self._limited(
-                    math.ceil(_WINDOW_SECONDS - (now - limiting_event))
+                    math.ceil(_WINDOW_SECONDS - (now - limiting_event)),
                 )
 
             self._image_requests.append(now)
@@ -129,7 +128,7 @@ class MediaQuota:
                         allowed=False,
                         retry_after_seconds=1,
                         message="当前已有视频生成任务，请等待完成后再试。",
-                    )
+                    ),
                 )
 
             if len(self._video_requests) >= _VIDEO_REQUESTS_PER_HOUR:

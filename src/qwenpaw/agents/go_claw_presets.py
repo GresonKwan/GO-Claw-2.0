@@ -45,10 +45,7 @@ SPECIALIST_PRESETS: Mapping[str, DigitalEmployeePreset] = MappingProxyType(
         "marketing-growth": DigitalEmployeePreset(
             id="marketing-growth",
             name="营销获客",
-            description=(
-                "围绕目标客群制定可执行的获客策略、活动节奏、"
-                "转化漏斗与营销物料。"
-            ),
+            description=("围绕目标客群制定可执行的获客策略、活动节奏、" "转化漏斗与营销物料。"),
             skill_names=(
                 "browser_visible",
                 "file_reader",
@@ -72,10 +69,7 @@ SPECIALIST_PRESETS: Mapping[str, DigitalEmployeePreset] = MappingProxyType(
         "content-production": DigitalEmployeePreset(
             id="content-production",
             name="内容生产",
-            description=(
-                "完成选题策划、长短内容撰写、视觉提示词与视频"
-                "脚本分镜，并在工具已配置时生成媒体。"
-            ),
+            description=("完成选题策划、长短内容撰写、视觉提示词与视频" "脚本分镜，并在工具已配置时生成媒体。"),
             skill_names=("file_reader", "docx", "pptx", "pdf"),
             md_template_id="go-claw-content-production",
             required_builtin_tools=(
@@ -98,10 +92,7 @@ SPECIALIST_PRESETS: Mapping[str, DigitalEmployeePreset] = MappingProxyType(
         "data-processing": DigitalEmployeePreset(
             id="data-processing",
             name="数据处理",
-            description=(
-                "对表格与 PDF 数据进行可追溯的检查、清洗、合并、"
-                "计算、统计和可视化。"
-            ),
+            description=("对表格与 PDF 数据进行可追溯的检查、清洗、合并、" "计算、统计和可视化。"),
             skill_names=("file_reader", "xlsx", "pdf"),
             md_template_id="go-claw-data-processing",
             required_builtin_tools=(
@@ -116,10 +107,7 @@ SPECIALIST_PRESETS: Mapping[str, DigitalEmployeePreset] = MappingProxyType(
         "business-analysis": DigitalEmployeePreset(
             id="business-analysis",
             name="商业分析",
-            description=(
-                "结合网页、文档和表格证据分析行业、竞品与经营指标，"
-                "形成机会、风险和行动建议。"
-            ),
+            description=("结合网页、文档和表格证据分析行业、竞品与经营指标，" "形成机会、风险和行动建议。"),
             skill_names=(
                 "browser_visible",
                 "file_reader",
@@ -141,7 +129,7 @@ SPECIALIST_PRESETS: Mapping[str, DigitalEmployeePreset] = MappingProxyType(
                 "view_image",
             ),
         ),
-    }
+    },
 )
 
 
