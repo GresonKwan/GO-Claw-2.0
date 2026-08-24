@@ -90,7 +90,7 @@
 | feishu 渠道 pkg_resources shim 移到 lark_oapi 传递导入之前 | setuptools≥82 环境 feishu 渠道无法加载 | 6a4472e | registry 含 feishu（本地 setuptools 84 验证） |
 | `.gitignore` 的 `AGENTS.md` 规则改为 `/AGENTS.md` 并补录 6 个模板文件 | 裸规则误伤 md_files 模板，CI/打包缺 AGENTS.md | 6a4472e | CI test_agents_router |
 | 测试 regex 对 Windows 路径用 re.escape；`.gitattributes` 强制 SVG LF | Windows 测试失败/资产哈希不一致 | 6a4472e | test_go_claw_bundled_plugins / branding 测试 |
-| test_offload_while_running 在 Windows 隔离（skipif win32） | 同一机制的其他用例在 Windows 全过，仅此用例 entry 永不出现；无 Windows 环境可调试，功能在 mac/Linux 有覆盖 | （待推送） | 标注待有 Windows 环境后复查 |
+| test_offload_while_running 在 Windows 隔离（skipif win32） | 同一机制的其他用例在 Windows 全过，仅此用例 entry 永不出现；无 Windows 环境可调试，功能在 mac/Linux 有覆盖 | 3526338 | 标注待有 Windows 环境后复查 |
 | 建立变更台账与文档规范，旧 plan 补状态标记 | 规范化（用户要求） | f4d93e9 |
 
 ## 运营侧变更（非代码，无 commit）
