@@ -87,6 +87,9 @@
 |------|------|--------|
 | 文档修正：provisioning 公网路径/nginx 重写、用户名格式、额度模型 | 文档与部署不符 | ae6a839, e1e41dc |
 | CI 存量还债：pre-commit 卫生、pylint 测试惯式放行、过期测试对齐 GO CLAW 行为、渠道注册告警 | CI 长期红 | 48ae45a |
+| feishu 渠道 pkg_resources shim 移到 lark_oapi 传递导入之前 | setuptools≥82 环境 feishu 渠道无法加载 | （待推送） | registry 含 feishu（本地 setuptools 84 验证） |
+| `.gitignore` 的 `AGENTS.md` 规则改为 `/AGENTS.md` 并补录 6 个模板文件 | 裸规则误伤 md_files 模板，CI/打包缺 AGENTS.md | （待推送） | CI test_agents_router |
+| 测试 regex 对 Windows 路径用 re.escape；`.gitattributes` 强制 SVG LF | Windows 测试失败/资产哈希不一致 | （待推送） | test_go_claw_bundled_plugins / branding 测试 |
 | 建立变更台账与文档规范，旧 plan 补状态标记 | 规范化（用户要求） | f4d93e9 |
 
 ## 运营侧变更（非代码，无 commit）

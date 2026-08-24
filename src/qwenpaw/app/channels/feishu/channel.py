@@ -27,6 +27,42 @@ from collections import OrderedDict
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple
 
+
+# Compatibility for setuptools>=82 where pkg_resources may be absent.
+# lark-oapi imports pkg_resources.declare_namespace from its vendored protobuf
+# package init; install a minimal shim only while importing lark-oapi.
+# NOTE: this shim must be installed BEFORE `from .cards import ...` below,
+# because cards/dispatcher.py transitively imports lark_oapi.
+def _declare_namespace_shim(_name: str) -> None:
+    return None
+
+
+_PKG_RESOURCES_MISSING = object()
+_original_pkg_resources: Any = sys.modules.get(
+    "pkg_resources",
+    _PKG_RESOURCES_MISSING,
+)
+_pkg_resources_shim: Optional[types.ModuleType] = None
+_pkg_resources_module: Any = None
+_declare_namespace_patched = False
+
+try:
+    import pkg_resources as _pkg_resources_module  # type: ignore
+except ImportError:  # pragma: no cover - pkg_resources absent (setuptools>=82)
+    _pkg_resources_shim = types.ModuleType("pkg_resources")
+    _pkg_resources_shim.declare_namespace = (  # type: ignore[attr-defined]
+        _declare_namespace_shim
+    )
+    sys.modules["pkg_resources"] = _pkg_resources_shim
+else:
+    if not hasattr(_pkg_resources_module, "declare_namespace"):
+        setattr(
+            _pkg_resources_module,
+            "declare_namespace",
+            _declare_namespace_shim,
+        )
+        _declare_namespace_patched = True
+
 import httpx
 from qwenpaw.schemas import (
     AudioContent,
@@ -73,40 +109,6 @@ from .utils import (
     short_session_id_from_full_id,
 )
 from .cards import FeishuCardHandler
-
-
-# Compatibility for setuptools>=82 where pkg_resources may be absent.
-# lark-oapi imports pkg_resources.declare_namespace from its vendored protobuf
-# package init; install a minimal shim only while importing lark-oapi.
-def _declare_namespace_shim(_name: str) -> None:
-    return None
-
-
-_PKG_RESOURCES_MISSING = object()
-_original_pkg_resources: Any = sys.modules.get(
-    "pkg_resources",
-    _PKG_RESOURCES_MISSING,
-)
-_pkg_resources_shim: Optional[types.ModuleType] = None
-_pkg_resources_module: Any = None
-_declare_namespace_patched = False
-
-try:
-    import pkg_resources as _pkg_resources_module  # type: ignore
-except ImportError:  # pragma: no cover - pkg_resources absent (setuptools>=82)
-    _pkg_resources_shim = types.ModuleType("pkg_resources")
-    _pkg_resources_shim.declare_namespace = (  # type: ignore[attr-defined]
-        _declare_namespace_shim
-    )
-    sys.modules["pkg_resources"] = _pkg_resources_shim
-else:
-    if not hasattr(_pkg_resources_module, "declare_namespace"):
-        setattr(
-            _pkg_resources_module,
-            "declare_namespace",
-            _declare_namespace_shim,
-        )
-        _declare_namespace_patched = True
 
 
 class _EventLoopProxy:

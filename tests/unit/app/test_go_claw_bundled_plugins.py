@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import json
+import re
 import threading
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
@@ -349,7 +350,7 @@ def test_invalid_required_manifest_reports_its_path_and_expected_id(
 
     with pytest.raises(
         RuntimeError,
-        match=rf"{invalid_manifest}.*qwen-image-tool",
+        match=rf"{re.escape(str(invalid_manifest))}.*qwen-image-tool",
     ):
         go_claw_bundled_plugins.install_go_claw_bundled_plugins()
 
@@ -433,7 +434,7 @@ def test_canonical_required_manifest_with_invalid_schema_is_rejected(
 
     with pytest.raises(
         RuntimeError,
-        match=rf"(?s){invalid_manifest}.*version",
+        match=rf"(?s){re.escape(str(invalid_manifest))}.*version",
     ):
         go_claw_bundled_plugins.install_go_claw_bundled_plugins()
 
@@ -472,7 +473,7 @@ def test_invalid_installed_target_manifest_is_a_preserved_conflict(
 
     with pytest.raises(
         RuntimeError,
-        match=rf"(?s){invalid_manifest}.*version",
+        match=rf"(?s){re.escape(str(invalid_manifest))}.*version",
     ):
         go_claw_bundled_plugins.install_go_claw_bundled_plugins()
 
