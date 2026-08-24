@@ -98,7 +98,7 @@
 | 改动 | 原因 | commit | 验证 |
 |------|------|--------|------|
 | 侧边栏隐藏 11 个专业/低频入口（工具/MCP/ACP/心跳/环境变量/安全/Token消耗/备份/语音转写/调试/插件管理），路由保留 | 非技术客户精简界面 | 5103c4bd | console/src/layouts/registry/builtinMenu.test.ts |
-| 侧边栏左下角逐增额度进度条（仅百分比，低额度变红）+ provisioning /api/quota + 后端代理 /api/console/quota；数值=剩余÷签发额（clamp 0-100） | 客户对剩余额度无感知 | （待推送） | test_provision_server.py +3 / test_quota_router.py +3 / QuotaBar.test.tsx +3 |
+| 侧边栏左下角逐增额度进度条（仅百分比，低额度变红）+ provisioning /api/quota + 后端代理 /api/console/quota；数值=剩余÷签发额（clamp 0-100） | 客户对剩余额度无感知 | 8458ddfe | test_provision_server.py +3 / test_quota_router.py +3 / QuotaBar.test.tsx +3 |
 
 关联计划：`docs/superpowers/plans/2026-08-24-go-claw-sidebar-quota.md`
 
