@@ -497,8 +497,13 @@ def _submit_shell_sleep_task(  # pylint: disable=redefined-outer-name
     return submit_resp.json()["task_id"], session_id
 
 
-def _poll_for_entry(app_server, session_id, timeout=20.0):
-    """Poll list_calls until at least one entry appears; return it."""
+def _poll_for_entry(app_server, session_id, timeout=60.0):
+    """Poll list_calls until at least one entry appears; return it.
+
+    The 60s budget is generous on purpose: on the Windows CI runner the
+    mock-LLM → agent → tool-dispatch pipeline is markedly slower, and
+    20s was not enough (intermittent `entry is None` failures).
+    """
     deadline = time.time() + timeout
     while time.time() < deadline:
         resp = app_server.api_request(

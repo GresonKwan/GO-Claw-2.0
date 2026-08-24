@@ -1,6 +1,10 @@
 # -*- coding: utf-8 -*-
 # pylint: disable=too-many-statements,too-many-branches,protected-access
 # pylint: disable=too-many-return-statements,unused-argument
+# pylint: disable=wrong-import-position
+# flake8: noqa: E402
+# (the pkg_resources shim must be installed before lark-oapi is imported
+# transitively, so imports deliberately come after executable code)
 """Feishu (Lark) Channel.
 
 Uses lark-oapi (https://github.com/larksuite/oapi-sdk-python) WebSocket
