@@ -71,8 +71,7 @@ const CUSTOMER_HIDDEN_MENU_IDS = new Set([
 ]);
 
 /** Menu visibility predicate for customer-hidden entries. */
-const customerVisible = (id: string) => () =>
-  !CUSTOMER_HIDDEN_MENU_IDS.has(id);
+const customerVisible = (id: string) => () => !CUSTOMER_HIDDEN_MENU_IDS.has(id);
 
 export const BUILTIN_MENU: MenuItem[] = [
   // ── Agent-scoped (Sidebar Menu #1) ───────────────────────────────────────

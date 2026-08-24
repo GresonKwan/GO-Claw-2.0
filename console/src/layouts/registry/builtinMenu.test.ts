@@ -31,10 +31,9 @@ describe("GO CLAW customer menu", () => {
     for (const id of HIDDEN) {
       const item = BUILTIN_MENU.find((i) => i.id === id);
       expect(item, `${id} should still be declared`).toBeDefined();
-      expect(
-        item?.visible?.(),
-        `${id} should be hidden from the sidebar`,
-      ).toBe(false);
+      expect(item?.visible?.(), `${id} should be hidden from the sidebar`).toBe(
+        false,
+      );
     }
   });
 
@@ -42,9 +41,7 @@ describe("GO CLAW customer menu", () => {
     for (const id of KEPT) {
       const item = BUILTIN_MENU.find((i) => i.id === id);
       expect(item, `${id} missing from menu`).toBeDefined();
-      expect(item?.visible?.() ?? true, `${id} should stay visible`).toBe(
-        true,
-      );
+      expect(item?.visible?.() ?? true, `${id} should stay visible`).toBe(true);
     }
   });
 });
