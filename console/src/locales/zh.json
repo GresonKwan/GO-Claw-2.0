@@ -112,6 +112,8 @@
     "security": "安全",
     "tokenUsage": "Token 消耗",
     "agentStats": "数字员工统计",
+    "quota": "额度",
+    "quotaTooltip": "剩余 ${{remaining}} / 共 ${{granted}}",
     "voiceTranscription": "语音转写",
     "debug": "调试",
     "plugins": "插件",

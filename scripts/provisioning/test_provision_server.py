@@ -191,3 +191,59 @@ def test_startup_fails_fast_without_required_env(tmp_path, monkeypatch):
     with pytest.raises(RuntimeError, match="misconfigured"):
         with TestClient(module.app):
             pass
+
+
+# ---------------------------------------------------------------------------
+# /api/quota
+# ---------------------------------------------------------------------------
+
+
+def _quota_get(client: TestClient, instance_id: str, *, ts=None, sign=None):
+    import time as _time
+
+    ts = int(_time.time()) if ts is None else ts
+    sign = _sign(instance_id, ts) if sign is None else sign
+    return client.get(
+        "/api/quota",
+        params={"instance_id": instance_id, "ts": ts, "sign": sign},
+    )
+
+
+def test_quota_reports_granted_and_remaining(service, tmp_path, monkeypatch):
+    module = service
+    instance_id = str(uuid.uuid4())
+    user_id = 42
+    module.insert_pending(instance_id, "gc-test", "pw", "127.0.0.1")
+    module.finalize_provision(instance_id, user_id, "sk-x", "{}")
+
+    newapi_db = tmp_path / "one-api.db"
+    import sqlite3
+
+    with sqlite3.connect(newapi_db) as conn:
+        conn.execute("CREATE TABLE users (id INTEGER PRIMARY KEY, quota INTEGER)")
+        conn.execute(
+            "INSERT INTO users (id, quota) VALUES (?, ?)",
+            (user_id, module.GIFT_QUOTA // 2),
+        )
+    monkeypatch.setattr(module, "NEWAPI_DB_PATH", str(newapi_db))
+
+    with TestClient(module.app) as client:
+        resp = _quota_get(client, instance_id)
+
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["granted"] == module.GIFT_QUOTA / module.QUOTA_UNITS_PER_DOLLAR
+    assert body["remaining"] == (module.GIFT_QUOTA // 2) / (
+        module.QUOTA_UNITS_PER_DOLLAR
+    )
+    assert body["percent"] == 50
+
+
+def test_quota_rejects_bad_signature_and_unknown_instance(service, monkeypatch):
+    module = service
+    monkeypatch.setattr(module, "NEWAPI_DB_PATH", "/nonexistent.db")
+    with TestClient(module.app) as client:
+        bad = _quota_get(client, str(uuid.uuid4()), sign="0" * 64)
+        assert bad.status_code == 403
+        unknown = _quota_get(client, str(uuid.uuid4()))
+        assert unknown.status_code == 404

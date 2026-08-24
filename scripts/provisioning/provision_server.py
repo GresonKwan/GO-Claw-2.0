@@ -104,6 +104,20 @@ def _connect() -> sqlite3.Connection:
 def init_db() -> None:
     with closing(_connect()) as conn:
         conn.executescript(_SCHEMA)
+        # Column migration for pre-existing databases: granted_quota records
+        # the gift amount at issuance time (in NewAPI quota units), so the
+        # quota percentage survives later GIFT_QUOTA config changes.
+        try:
+            conn.execute(
+                "ALTER TABLE provisions ADD COLUMN granted_quota INTEGER"
+            )
+        except sqlite3.OperationalError:
+            pass  # column already exists
+        conn.execute(
+            "UPDATE provisions SET granted_quota = ?"
+            " WHERE status = 'done' AND granted_quota IS NULL",
+            (GIFT_QUOTA,),
+        )
         conn.commit()
 
 
@@ -140,8 +154,9 @@ def finalize_provision(
     with closing(_connect()) as conn:
         conn.execute(
             "UPDATE provisions SET newapi_user_id = ?, api_key = ?,"
-            " credentials = ?, status = 'done' WHERE instance_id = ?",
-            (user_id, api_key, credentials_json, instance_id),
+            " credentials = ?, status = 'done', granted_quota = ?"
+            " WHERE instance_id = ?",
+            (user_id, api_key, credentials_json, GIFT_QUOTA, instance_id),
         )
         conn.commit()
 
@@ -471,3 +486,91 @@ def provision(body: ProvisionRequest, request: Request) -> JSONResponse:
         user_id,
     )
     return JSONResponse(content=payload)
+
+
+# ---------------------------------------------------------------------------
+# Quota reporting (read-only, per-instance)
+# ---------------------------------------------------------------------------
+
+QUOTA_UNITS_PER_DOLLAR = 500000  # NewAPI quota units -> USD
+QUOTA_RATE_LIMIT_PER_INSTANCE_PER_HOUR = int(
+    os.environ.get("QUOTA_RATE_LIMIT_PER_INSTANCE_PER_HOUR", "240")
+)
+
+# In-memory per-instance sliding-window limiter for /api/quota.
+# Deliberately separate from the per-IP provisioning rate limit: quota
+# polling (every 60s per client) must never consume provisioning attempts.
+_quota_hits: dict[str, list[float]] = {}
+
+
+def _quota_rate_limited(instance_id: str) -> bool:
+    now = time.time()
+    hits = [t for t in _quota_hits.get(instance_id, []) if now - t < 3600]
+    if len(hits) >= QUOTA_RATE_LIMIT_PER_INSTANCE_PER_HOUR:
+        _quota_hits[instance_id] = hits
+        return True
+    hits.append(now)
+    _quota_hits[instance_id] = hits
+    if len(_quota_hits) > 10000:  # bound memory: drop idle instances
+        _quota_hits.clear()
+    return False
+
+
+def _read_user_quota_db(user_id: int) -> int:
+    """Read the user's remaining quota (units) from the NewAPI database."""
+    with closing(
+        sqlite3.connect(f"file:{NEWAPI_DB_PATH}?mode=ro", uri=True)
+    ) as conn:
+        row = conn.execute(
+            "SELECT quota FROM users WHERE id = ?",
+            (user_id,),
+        ).fetchone()
+    if row is None:
+        raise NewAPIError(f"NewAPI user {user_id} not found")
+    return int(row[0])
+
+
+@app.get("/api/quota")
+def quota(instance_id: str, ts: int, sign: str) -> JSONResponse:
+    """Return the provisioned instance's quota usage (granted/remaining)."""
+    if not _INSTANCE_ID_RE.match(instance_id):
+        return _error(400, "invalid_instance_id")
+    now = int(time.time())
+    if abs(now - ts) > SIGNATURE_WINDOW_SECONDS:
+        return _error(403, "stale_timestamp")
+    expected = hmac.new(
+        PROVISION_HMAC_SECRET.encode(),
+        f"{instance_id}:{ts}".encode(),
+        hashlib.sha256,
+    ).hexdigest()
+    if not hmac.compare_digest(expected, sign):
+        return _error(403, "bad_signature")
+    if _quota_rate_limited(instance_id):
+        return _error(429, "rate_limited")
+
+    row = get_provision(instance_id)
+    if row is None or row["status"] != "done":
+        return _error(404, "unknown_instance")
+    if not NEWAPI_DB_PATH:
+        return _error(503, "quota_store_unavailable")
+
+    granted_units = row["granted_quota"] or GIFT_QUOTA
+    try:
+        remaining_units = _read_user_quota_db(row["newapi_user_id"])
+    except NewAPIError:
+        return _error(503, "quota_store_unavailable")
+
+    granted = granted_units / QUOTA_UNITS_PER_DOLLAR
+    remaining = remaining_units / QUOTA_UNITS_PER_DOLLAR
+    percent = (
+        0
+        if granted <= 0
+        else min(100, max(0, round(remaining / granted * 100)))
+    )
+    return JSONResponse(
+        content={
+            "granted": round(granted, 4),
+            "remaining": round(remaining, 4),
+            "percent": percent,
+        }
+    )

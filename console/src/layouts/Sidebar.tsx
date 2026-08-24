@@ -38,6 +38,7 @@ import { buildSessionPath, getSessionIdFromPath } from "../utils/sessionRoute";
 import sessionApi from "../pages/Chat/sessionApi";
 import styles from "./index.module.less";
 import { useTheme } from "../contexts/ThemeContext";
+import { QuotaBar } from "./QuotaBar";
 import { useMenuItems, useRoutes } from "../plugins/registry/hooks";
 import { Slot } from "../plugins/registry/Slot";
 import {
@@ -580,6 +581,8 @@ export default function Sidebar({ selectedKey }: SidebarProps) {
           <Slot name="sider.bottom" kind="fill" />
         </>
       )}
+
+      {!collapsed && <QuotaBar />}
 
       {authEnabled && !collapsed && (
         <div className={styles.authActions}>

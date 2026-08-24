@@ -2,7 +2,7 @@
  * builtinMenu.test.ts — GO CLAW customer build hides over-technical entries.
  */
 import { describe, it, expect } from "vitest";
-import { BUILTIN_MENU } from "../builtinMenu";
+import { BUILTIN_MENU } from "./builtinMenu";
 
 const HIDDEN = [
   "core.tools",

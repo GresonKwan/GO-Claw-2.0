@@ -56,6 +56,7 @@ from .routers.agent_scoped import AgentContextMiddleware
 from .routers.approval import router as approval_router
 from .routers.coding_mode import router as coding_mode_router
 from .routers.healthz import router as healthz_router
+from .routers.quota import router as quota_router
 from .routers.loops import router as loops_router
 from .routers.tool_calls import router as tool_calls_router
 from .routers.voice import voice_router
@@ -778,6 +779,8 @@ async def post_desktop_shutdown(
 app.include_router(api_router, prefix="/api")
 
 app.include_router(healthz_router, prefix="/api")
+
+app.include_router(quota_router, prefix="/api")
 
 app.include_router(tool_calls_router, prefix="/api")
 
