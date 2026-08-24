@@ -1,6 +1,6 @@
 # GO CLAW 侧边栏精简与额度进度条实施计划
 
-> 状态：第一部分（侧边栏隐藏）已实施；第二部分（额度进度条）设计中（2026-08-24）
+> 状态：第一部分（侧边栏隐藏）已实施并推送（5103c4bd）；第二部分（额度进度条）安全审查完成、方案定稿待评审（2026-08-24）
 > 关联台账：docs/GO-CLAW-变更台账.zh.md（实施后补登）
 
 ## 背景与目标
@@ -57,53 +57,69 @@ GO CLAW 面向非技术客户，侧边栏/设置中面向开发者的入口造�
 
 ---
 
-## 二、额度使用进度条（设计 + 实施）
+## 二、额度使用进度条（安全审查后定稿）
 
-### 数据链路（关键决策）
+### 2.1 审查结论（冲突 / 假数据 / 安全暴露）
 
-已实测：New API 的 `/v1/dashboard/billing/subscription` 返回的 `hard_limit` 不反映子用户真实额度（恒为系统级大数），**不能直接用**。
+**假数据风险（已排除一条错路）**：New API 自带的 `/v1/dashboard/billing/subscription` 实测 `hard_limit_usd` 恒为系统级大数（$100,000,000），不反映子用户真实额度——**已否决直连 New API billing 端点的方案**。真实数据只有两处：one-api.db 的 `users.quota`（剩余）与 provision.db 的签发记录（授予额）。
 
-采用**服务端聚合**方案（我们同时控制两端，数据最准）：
+**安全暴露面（逐项评估）**：
+1. HMAC secret 随便携包分发（此前评审已接受）：持有者可伪造任意 instance_id 查额度——只泄露金额数字，敏感度低；`/api/quota` 对不存在的 instance 一律 404，防枚举。
+2. **限流冲突（必须处理）**：现有 5 次/IP/天 是为"开通"设计的；额度条 60s 轮询 = 每实例 1440 次/天，绝不可复用该限制。`/api/quota` 采用独立的**按 instance_id 限流**（240 次/小时/实例），且该端点的失败请求不影响开通限流计数。
+3. console 后端代理只转发数字：返回体仅 `granted/remaining/percent` 三个数；secret、instance.id 不出后端进程；仅在便携模式启用，否则 404。
+4. 传输：provisioning URL 强制 https（`_load_provision_config` 已校验）。
+5. 直读 one-api.db 为只读；New API 升级改 schema 的风险低，若读失败返回 503，前端隐藏组件（无假数据）。
 
-1. **provisioning 服务新增** `GET /api/quota`（`scripts/provisioning/provision_server.py`）：
-   - 入参同 `/api/provision`：instance_id + ts + HMAC 签名（复用现有验签）；
-   - 按 instance_id 查 provision.db → 拿到 New API user_id → 从 one-api.db 读 `users.quota`（剩余）+ 签发时记录的 `granted_quota`（provision.db 新增列，存量行回填 GIFT_QUOTA）；
-   - 返回 `{ "granted": <美元>, "remaining": <美元>, "percent": <0-100> }`。
-   - percent = remaining / granted × 100（管理员充值后 remaining 增大，百分比同步上升，符合直觉）。
-2. **客户端**：console 新增 `api/modules/quota.ts`，通过后端代理转发到 provisioning 服务（后端读 `GO-CLAW-Config/provision.json` 拿 URL + secret + instance.id 签名）——前端不直接接触 secret。
-   - 后端代理路由：`GET /api/console/quota`（`src/qwenpaw/app/routers/console.py` 或新小模块），非便携包/无 provisioning 配置时返回 404，前端隐藏组件。
-3. 刷新策略：进入页面请求一次 + 每 60s 轮询 + 窗口聚焦时刷新。
+**数值正确性**：
+- percent = remaining / granted × 100，clamp 到 [0, 100]；
+- 管理员在 New API 充值后 remaining 可能超过签发额 → 显示 100%（合理语义：额度充足）；
+- granted 记录于签发时刻（provision.db 新列），不受后续 GIFT_QUOTA 配置变更影响。
 
-### UI 设计
-
-位置：侧边栏左下角，齿轮/折叠按钮行（`Sidebar.tsx:617-647`）**上方**、账号区（:584-615）下方；折叠态只显示迷你圆环或隐藏（先隐藏，保持简单）。
+### 2.2 唯一技术方案（数据链路）
 
 ```
-┌─────────────────────┐
-│ 额度                │
-│ ▓▓▓▓▓▓▓░░░░░░  47%  │   ← 4px 高进度条 + 右侧百分比
-├─────────────────────┤
-│ ⚙  ⬅                │   ← 原有齿轮/折叠行
-└─────────────────────┘
+客户机 console 前端 QuotaBar
+  → GET /api/console/quota            （GO CLAW 后端代理，仅便携模式）
+      → 读 GO-CLAW-Config/provision.json + data/instance.id
+      → HMAC 签名 → GET {origin}/go-claw/quota?instance_id&ts&sign
+          （nginx: location = /go-claw/quota → 127.0.0.1:9100/api/quota）
+      → provisioning 服务验签 → 查 provision.db(instance→user_id, granted)
+        → 只读查 one-api.db users.quota（remaining）
+      → 返回 {granted, remaining, percent}
 ```
 
-- 组件：`console/src/layouts/QuotaBar.tsx`（新文件），antd `Progress`（`size="small"`，`showInfo` 定制为右侧百分比）。
-- 文案：标签"额度"（zh.json 新增 `nav.quota`）；tooltip 显示"剩余 $1.23 / 共 $2.00"。
-- 配色：正常用品牌橙 `#FF4A18`；percent < 20% 转红色 `#ff4d4f` 并 tooltip 提示"额度即将用完，请联系客服"。
-- 加载失败/非便携包：整体不渲染（不占空间、无报错）。
-- 样式：`layouts/index.module.less` 新增 `.quotaBar`（padding、字号 12px、颜色 token 用 less 变量）。
+### 2.3 执行步骤（含具体代码位置）
 
-### 验证
+**A. provisioning 服务端**（`scripts/provisioning/provision_server.py`）
+1. `init_db()` 中加列迁移：`ALTER TABLE provisions ADD COLUMN granted_quota REAL`（catch duplicate-column 异常即跳过），`finalize_provision` 写入 `GIFT_QUOTA`；存量行回填。
+2. 新增 `GET /api/quota`：校验 instance_id 格式 + 时间窗 + HMAC（复用现有逻辑）；按 instance_id 限流（内存 dict + 每小时 240 次）；实例不存在 → 404；查 one-api.db 失败 → 503。返回 `{"granted": float, "remaining": float, "percent": int}`。
+3. 测试：`test_provision_server.py` 新增 3 例（正常、签名错 403、未知实例 404）。
+4. 部署：`scp` 到服务器 `/opt/go-claw-provisioning/`，`systemctl restart go-claw-provision`；nginx `/etc/nginx/conf.d/newapi-8443.conf` 增加：
+   ```nginx
+   location = /go-claw/quota {
+       proxy_pass http://127.0.0.1:9100/api/quota;
+       proxy_http_version 1.1;
+       proxy_set_header Host $host;
+       proxy_set_header X-Real-IP $remote_addr;
+   }
+   ```
+   `nginx -t && systemctl reload nginx`；curl 验证 400/403/404 三类响应。
 
-- provisioning 服务端：`test_provision_server.py` 新增 2 例（正常返回、签名错误 403）。
-- 后端代理：单元测试 mock httpx。
-- 前端：`QuotaBar` 组件测试（渲染百分比、低额度变红、404 时隐藏）。
+**B. GO CLAW 后端代理**（新文件 `src/qwenpaw/app/routers/quota.py`，挂进 `_app.py` 路由注册处）
+1. `GET /api/console/quota`：非便携（`QWENPAW_PORTABLE != "1"`）或无 provision.json 或无 instance.id → 404。
+2. 从 provision.json 读 `provisionUrl`，取其 origin 拼 `/go-claw/quota`；用 hmacSecret 对 `{instance_id}:{ts}` 签名；httpx GET，15s 超时；透传三字段。
+3. 测试：mock httpx，覆盖 404（非便携）/正常透传/上游 503。
 
-### 不做（明确排除）
+**C. 前端**（console）
+1. `console/src/api/modules/quota.ts`：`getQuota()` → `GET /api/console/quota`，404 返回 null。
+2. `console/src/layouts/QuotaBar.tsx`（新组件）：antd `Progress`，4px 高、品牌橙 `#FF4A18`、percent<20 变红 `#ff4d4f`；tooltip 显示"剩余 $X / 共 $Y"；加载中/失败/null 不渲染；60s 轮询 + window focus 刷新。
+3. `console/src/layouts/Sidebar.tsx`：在 authActions 块（:584）之前插 `<QuotaBar />`，仅 `!collapsed` 时渲染。
+4. `zh.json` 加 `nav.quota: "额度"`；`layouts/index.module.less` 加 `.quotaBar` 样式。
+5. 测试：`QuotaBar.test.tsx`（渲染百分比/低额度变红/null 隐藏）。
 
-- 不显示具体金额于主界面（只要百分比，金额进 tooltip）；
-- 不做额度预警推送；
-- 不改 New API 本体。
+### 2.4 明确排除
+
+- 前端不直连 New API、不持有 secret；不显示金额于主界面（金额只在 tooltip）；不做预警推送；不改 New API 本体；不动现有 5 次/IP/天 开通限流。
 
 ---
 
