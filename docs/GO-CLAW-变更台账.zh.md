@@ -93,6 +93,14 @@
 | test_offload_while_running 在 Windows 隔离（skipif win32） | 同一机制的其他用例在 Windows 全过，仅此用例 entry 永不出现；无 Windows 环境可调试，功能在 mac/Linux 有覆盖 | 3526338 | 标注待有 Windows 环境后复查 |
 | 建立变更台账与文档规范，旧 plan 补状态标记 | 规范化（用户要求） | f4d93e9 |
 
+## 2026-08-24 · 产品迭代：侧边栏精简
+
+| 改动 | 原因 | commit | 验证 |
+|------|------|--------|------|
+| 侧边栏隐藏 11 个专业/低频入口（工具/MCP/ACP/心跳/环境变量/安全/Token消耗/备份/语音转写/调试/插件管理），路由保留 | 非技术客户精简界面 | （待推送） | console/src/layouts/registry/builtinMenu.test.ts |
+
+关联计划：`docs/superpowers/plans/2026-08-24-go-claw-sidebar-quota.md`
+
 ## 运营侧变更（非代码，无 commit）
 
 | 日期 | 变更 | 原因 |

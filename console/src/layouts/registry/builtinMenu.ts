@@ -54,6 +54,26 @@ import type { MenuItem } from "../../plugins/registry/types";
 const navLabel = (key: string, defaultValue?: string) => (): string =>
   i18next.t(key, defaultValue ?? key);
 
+// GO CLAW 客户版：对非技术客户隐藏的过度专业/低频入口。
+// 仅隐藏菜单项，路由保留（深链接与未来恢复不受影响）。
+const CUSTOMER_HIDDEN_MENU_IDS = new Set([
+  "core.tools",
+  "core.mcp",
+  "core.acp",
+  "core.heartbeat",
+  "core.environments",
+  "core.security",
+  "core.token-usage",
+  "core.backups",
+  "core.voice-transcription",
+  "core.debug",
+  "core.plugin-manager",
+]);
+
+/** Menu visibility predicate for customer-hidden entries. */
+const customerVisible = (id: string) => () =>
+  !CUSTOMER_HIDDEN_MENU_IDS.has(id);
+
 export const BUILTIN_MENU: MenuItem[] = [
   // ── Agent-scoped (Sidebar Menu #1) ───────────────────────────────────────
   {
@@ -111,6 +131,7 @@ export const BUILTIN_MENU: MenuItem[] = [
   },
   {
     id: "core.heartbeat",
+    visible: customerVisible("core.heartbeat"),
     location: "primary.agentScoped",
     parentId: "core.control-group",
     label: navLabel("nav.heartbeat"),
@@ -147,6 +168,7 @@ export const BUILTIN_MENU: MenuItem[] = [
   },
   {
     id: "core.tools",
+    visible: customerVisible("core.tools"),
     location: "primary.agentScoped",
     parentId: "core.agent-group",
     label: navLabel("nav.tools"),
@@ -156,6 +178,7 @@ export const BUILTIN_MENU: MenuItem[] = [
   },
   {
     id: "core.mcp",
+    visible: customerVisible("core.mcp"),
     location: "primary.agentScoped",
     parentId: "core.agent-group",
     label: navLabel("nav.mcp"),
@@ -165,6 +188,7 @@ export const BUILTIN_MENU: MenuItem[] = [
   },
   {
     id: "core.acp",
+    visible: customerVisible("core.acp"),
     location: "primary.agentScoped",
     parentId: "core.agent-group",
     label: navLabel("nav.acp"),
@@ -228,6 +252,7 @@ export const BUILTIN_MENU: MenuItem[] = [
   },
   {
     id: "core.environments",
+    visible: customerVisible("core.environments"),
     location: "primary.settings",
     parentId: "core.settings-group",
     label: navLabel("nav.environments"),
@@ -237,6 +262,7 @@ export const BUILTIN_MENU: MenuItem[] = [
   },
   {
     id: "core.security",
+    visible: customerVisible("core.security"),
     location: "primary.settings",
     parentId: "core.settings-group",
     label: navLabel("nav.security"),
@@ -246,6 +272,7 @@ export const BUILTIN_MENU: MenuItem[] = [
   },
   {
     id: "core.token-usage",
+    visible: customerVisible("core.token-usage"),
     location: "primary.settings",
     parentId: "core.settings-group",
     label: navLabel("nav.tokenUsage"),
@@ -255,6 +282,7 @@ export const BUILTIN_MENU: MenuItem[] = [
   },
   {
     id: "core.backups",
+    visible: customerVisible("core.backups"),
     location: "primary.settings",
     parentId: "core.settings-group",
     label: navLabel("nav.backups"),
@@ -264,6 +292,7 @@ export const BUILTIN_MENU: MenuItem[] = [
   },
   {
     id: "core.voice-transcription",
+    visible: customerVisible("core.voice-transcription"),
     location: "primary.settings",
     parentId: "core.settings-group",
     label: navLabel("nav.voiceTranscription"),
@@ -273,6 +302,7 @@ export const BUILTIN_MENU: MenuItem[] = [
   },
   {
     id: "core.debug",
+    visible: customerVisible("core.debug"),
     location: "primary.settings",
     parentId: "core.settings-group",
     label: navLabel("nav.debug", "Debug"),
@@ -282,6 +312,7 @@ export const BUILTIN_MENU: MenuItem[] = [
   },
   {
     id: "core.plugin-manager",
+    visible: customerVisible("core.plugin-manager"),
     location: "primary.settings",
     parentId: "core.settings-group",
     label: navLabel("nav.pluginManager", "Plugin Manager"),
