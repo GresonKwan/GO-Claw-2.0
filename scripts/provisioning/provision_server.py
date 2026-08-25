@@ -530,6 +530,18 @@ def _read_user_quota_db(user_id: int) -> int:
     return int(row[0])
 
 
+def _read_user_consumption_db(user_id: int) -> int:
+    """Net consumed quota (units) from NewAPI quota_data (refunds net out)."""
+    with closing(
+        sqlite3.connect(f"file:{NEWAPI_DB_PATH}?mode=ro", uri=True),
+    ) as conn:
+        row = conn.execute(
+            "SELECT COALESCE(SUM(quota), 0) FROM quota_data WHERE user_id = ?",
+            (user_id,),
+        ).fetchone()
+    return int(row[0] or 0)
+
+
 @app.get("/api/quota")
 def quota(instance_id: str, ts: int, sign: str) -> JSONResponse:
     """Return the provisioned instance's quota usage (granted/remaining)."""
@@ -554,14 +566,16 @@ def quota(instance_id: str, ts: int, sign: str) -> JSONResponse:
     if not NEWAPI_DB_PATH:
         return _error(503, "quota_store_unavailable")
 
-    # 额度语义：granted 取"签发额度"与"当前剩余"的较大者——管理员在
-    # NewAPI 充值后，进度条按调整后的实际额度显示（充值即回到高位、
-    # 随后随消耗下降），而不是长期钉在 100%。
+    # 额度语义（严格口径）：总额 = 剩余 + 累计净消耗。该恒等式由
+    # NewAPI 数据直接导出（users.quota + quota_data 净额），天然覆盖
+    # 管理员充值——充值使剩余增大，总额同步增大，百分比严格反映
+    # "剩余占实际总额"的比例，与 New API 数据逐点一致。
     try:
         remaining_units = _read_user_quota_db(row["newapi_user_id"])
+        consumed_units = _read_user_consumption_db(row["newapi_user_id"])
     except NewAPIError:
         return _error(503, "quota_store_unavailable")
-    granted_units = max(row["granted_quota"] or GIFT_QUOTA, remaining_units)
+    granted_units = remaining_units + consumed_units
 
     granted = granted_units / QUOTA_UNITS_PER_DOLLAR
     remaining = remaining_units / QUOTA_UNITS_PER_DOLLAR

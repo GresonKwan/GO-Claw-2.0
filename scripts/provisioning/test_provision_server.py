@@ -224,7 +224,15 @@ def test_quota_reports_granted_and_remaining(service, tmp_path, monkeypatch):
             "CREATE TABLE users (id INTEGER PRIMARY KEY, quota INTEGER)",
         )
         conn.execute(
+            "CREATE TABLE quota_data"
+            " (id INTEGER PRIMARY KEY, user_id INTEGER, quota INTEGER)",
+        )
+        conn.execute(
             "INSERT INTO users (id, quota) VALUES (?, ?)",
+            (user_id, module.GIFT_QUOTA // 2),
+        )
+        conn.execute(
+            "INSERT INTO quota_data (user_id, quota) VALUES (?, ?)",
             (user_id, module.GIFT_QUOTA // 2),
         )
     monkeypatch.setattr(module, "NEWAPI_DB_PATH", str(newapi_db))
@@ -273,7 +281,11 @@ def test_quota_after_admin_topup_uses_adjusted_grant(
         conn.execute(
             "CREATE TABLE users (id INTEGER PRIMARY KEY, quota INTEGER)",
         )
-        # 管理员充值后剩余额度远超签发额度
+        conn.execute(
+            "CREATE TABLE quota_data"
+            " (id INTEGER PRIMARY KEY, user_id INTEGER, quota INTEGER)",
+        )
+        # 管理员充值后剩余额度远超签发额度（无消费记录）
         conn.execute(
             "INSERT INTO users (id, quota) VALUES (?, ?)",
             (user_id, module.GIFT_QUOTA * 4),
