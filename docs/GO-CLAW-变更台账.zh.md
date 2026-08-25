@@ -106,11 +106,11 @@
 
 | 改动 | 原因 | commit | 验证 |
 |------|------|--------|------|
-| 隐藏侧边栏"运行配置"入口（同第一轮机制） | 非技术客户精简界面 | （待推送） | builtinMenu.test.ts |
-| 隐藏对话下方 Loop 模式选择器，固定默认模式 | 客户无需理解模式 | （待推送） | 前端全套件 |
-| 额度条去掉悬停金额 tooltip，只留进度条+百分比 | 用户要求 | （待推送） | QuotaBar.test.tsx |
-| 模型选择器：跨 provider 按 id 去重 + GO CLAW 可用模型白名单（deepseek-v4-pro/v4-flash/qwen3.7-max/qwen3.7-plus/glm-5.2/qwen3.6-flash/qwen3.8-max）+ 移除 FREE 页签 | 重复选项、不可用选项必 503 | （待推送） | ModelSelector.test.tsx 12 例 |
-| 空响应根治：取消路径改发 turn_interrupted 错误信封（"本轮对话已停止"） | cancel 产出 Completed+空 output 与空成功无法区分 | （待推送） | envelope 既有测试 + retry_chat_model 测试 |
+| 隐藏侧边栏"运行配置"入口（同第一轮机制） | 非技术客户精简界面 | 82ada36c | builtinMenu.test.ts |
+| 隐藏对话下方 Loop 模式选择器，固定默认模式 | 客户无需理解模式 | 82ada36c | 前端全套件 |
+| 额度条去掉悬停金额 tooltip，只留进度条+百分比 | 用户要求 | 82ada36c | QuotaBar.test.tsx |
+| 模型选择器：跨 provider 按 id 去重 + GO CLAW 可用模型白名单（deepseek-v4-pro/v4-flash/qwen3.7-max/qwen3.7-plus/glm-5.2/qwen3.6-flash/qwen3.8-max）+ 移除 FREE 页签 | 重复选项、不可用选项必 503 | 82ada36c | ModelSelector.test.tsx 12 例 |
+| 空响应根治：取消路径改发 turn_interrupted 错误信封（"本轮对话已停止"） | cancel 产出 Completed+空 output 与空成功无法区分 | 82ada36c | envelope 既有测试 + retry_chat_model 测试 |
 | extra_models 追加去重结论：has_model 已覆盖目录+extra，现有逻辑天然去重，无需改动 | 评估后关闭 | — | — |
 
 ## 运营侧变更（非代码，无 commit）
