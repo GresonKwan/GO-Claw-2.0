@@ -309,9 +309,10 @@ jobs:
           Pop-Location
           $setup = "dist/GO-CLAW-Update-$version-setup.exe"
           if (-not (Test-Path $setup)) { throw "update installer not produced" }
+          $setup = (Resolve-Path -LiteralPath $setup).Path
 
           if ($env:TAURI_SIGNING_PRIVATE_KEY) {
-            npm exec -- tauri signer sign $setup
+            npm --prefix console exec -- tauri signer sign $setup
             if ($LASTEXITCODE -ne 0) { throw "tauri signer sign failed" }
             python scripts/pack-tauri/build_go_claw_update_manifest.py `
               --version $version `
