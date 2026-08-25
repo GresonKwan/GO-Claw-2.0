@@ -131,7 +131,7 @@
 | 在线更新全链路：后端 Python 编排（go_claw_updates.py + /api/updates/* 路由 + 6h 定时检测）、minisign/Ed25519 验签、NSIS 更新包（白名单+备份+锁+自动重启）、CI 构建/签名/manifest/发布、前端版本区块（检查/下载/一键安装/历史回滚）、公钥随包分发 | 客户一键更新到新版本 | 58b5fbe8 | test_go_claw_updates.py（验签往返+篡改拒绝）、tsc、前端全量、pre-commit 全钩子 |
 | Rust 侧：portable.json updates 字段（serde default 兼容）、便携放行、安装 /D= raw_arg 安全拼接、缓存迁便携根、install_update_from_url 回滚命令 | 便携模式兼容 | 58b5fbe8 | cargo check |
 | 修正：更新编排从 Rust 改为 Python（便携浏览器模式无 Tauri IPC） | 架构事实 | — | — |
-| D2 密钥落地：生成 GO CLAW 专用 Tauri 签名密钥，公钥同步到代码/GitHub Variable/入包链，私钥非空口令加密并做跨磁盘备份；Python 验签兼容 Tauri CLI 的 Base64 minisign 文本格式 | 建立可恢复的密钥保管制度，并修正真实 CI 产物的验签格式断层 | （待推送） | 本地 Tauri 签名探针 + `test_go_claw_updates.py` | `docs/GO-CLAW-在线更新签名密钥运维.zh.md` |
+| D2 密钥落地：生成 GO CLAW 专用 Tauri 签名密钥，公钥同步到代码/GitHub Variable/入包链，私钥非空口令加密并做跨磁盘备份；Python 验签兼容 Tauri CLI 的 Base64 minisign 文本格式 | 建立可恢复的密钥保管制度，并修正真实 CI 产物的验签格式断层 | 2f0ab644 | 本地 Tauri 签名探针 + `test_go_claw_updates.py` | `docs/GO-CLAW-在线更新签名密钥运维.zh.md` |
 
 ## 运营侧变更（非代码，无 commit）
 
