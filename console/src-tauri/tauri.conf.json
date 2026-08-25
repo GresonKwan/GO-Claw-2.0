@@ -75,7 +75,7 @@
   },
   "plugins": {
     "updater": {
-      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IEE0MkMxRjE4MUM4Njc0RjAKUldUd2RJWWNHQjhzcEhoZ2FWWkxVRXp0bFMyS1JEand6YXZURCs5YnlNcFlzRCtNalhRcjJwamMK",
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IEI0MEI4QURENTVDNzY5RDcKUldUWGFjZFYzWW9MdEVycDBDMGNBN1NZWWpNbmg2NDIwYitxUEF3OEs0VWpPdjJIdE1ENFVTNkcK",
       "endpoints": [
         "https://goclaw.host:8443/updates/latest.json",
         "https://github.com/GresonKwan/GO-Claw-2.0/releases/latest/download/latest.json"

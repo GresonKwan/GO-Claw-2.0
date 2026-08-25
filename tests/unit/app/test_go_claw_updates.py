@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import base64
+import hashlib
 import os
 
 import pytest
@@ -64,3 +65,54 @@ def test_minisign_roundtrip_and_tamper_rejection() -> None:
             base64.b64encode(os.urandom(8) + sig).decode(),
             pubkey_b64,
         )
+
+
+def _make_tauri_minisign_text_blocks(data: bytes) -> tuple[str, str]:
+    from cryptography.hazmat.primitives.asymmetric.ed25519 import (
+        Ed25519PrivateKey,
+    )
+
+    sk = Ed25519PrivateKey.generate()
+    pk = sk.public_key().public_bytes_raw()
+    keynum = os.urandom(8)
+    pubkey_payload = base64.b64encode(b"Ed" + keynum + pk).decode()
+    pubkey_text = f"untrusted comment: minisign public key\n{pubkey_payload}\n"
+    tauri_pubkey = base64.b64encode(pubkey_text.encode()).decode()
+
+    signature = sk.sign(hashlib.blake2b(data, digest_size=64).digest())
+    signature_payload = base64.b64encode(
+        b"ED" + keynum + signature,
+    ).decode()
+    trusted_comment = "timestamp:0"
+    global_signature = base64.b64encode(
+        sk.sign(signature + trusted_comment.encode()),
+    ).decode()
+    signature_text = (
+        "untrusted comment: signature from tauri secret key\n"
+        f"{signature_payload}\n"
+        f"trusted comment: {trusted_comment}\n"
+        f"{global_signature}\n"
+    )
+    tauri_signature = base64.b64encode(signature_text.encode()).decode()
+    return tauri_signature, tauri_pubkey
+
+
+def test_minisign_accepts_tauri_cli_prehashed_text_blocks() -> None:
+    data = b"MZ Tauri updater artifact"
+    tauri_signature, tauri_pubkey = _make_tauri_minisign_text_blocks(data)
+
+    verify_minisign(data, tauri_signature, tauri_pubkey)
+
+
+def test_minisign_rejects_tampered_tauri_global_signature() -> None:
+    data = b"MZ Tauri updater artifact"
+    tauri_signature, tauri_pubkey = _make_tauri_minisign_text_blocks(data)
+    signature_text = base64.b64decode(tauri_signature).decode()
+    lines = signature_text.splitlines()
+    lines[3] = base64.b64encode(b"\x00" * 64).decode()
+    tampered_signature = base64.b64encode(
+        ("\n".join(lines) + "\n").encode(),
+    ).decode()
+
+    with pytest.raises(ValueError, match="verification failed"):
+        verify_minisign(data, tampered_signature, tauri_pubkey)

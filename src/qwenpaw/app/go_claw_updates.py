@@ -78,29 +78,86 @@ def _parse_version(value: str) -> Optional[Version]:
         return None
 
 
+def _decode_minisign_value(
+    value: str,
+    *,
+    kind: str,
+) -> tuple[bytes, list[str] | None]:
+    try:
+        raw = base64.b64decode(value, validate=True)
+    except (ValueError, TypeError) as exc:
+        raise ValueError(f"invalid minisign {kind} base64") from exc
+
+    if raw.startswith(b"untrusted comment:"):
+        try:
+            lines = [
+                line.strip()
+                for line in raw.decode("ascii").splitlines()
+                if line.strip()
+            ]
+            raw = base64.b64decode(lines[1], validate=True)
+        except (UnicodeDecodeError, IndexError, ValueError) as exc:
+            raise ValueError(f"invalid minisign {kind} text") from exc
+        return raw, lines
+    return raw, None
+
+
 def verify_minisign(data: bytes, signature_b64: str, pubkey_b64: str) -> None:
     """Verify a minisign signature (Ed25519) over *data*.
 
-    Raises ValueError on any mismatch. pubkey_b64 is the base64 payload
-    line of a minisign public key file; signature_b64 is the base64
-    payload line of the .sig file.
+    Accept both raw minisign payload lines and the base64-encoded minisign
+    text blocks emitted by the Tauri CLI. Raises ValueError on any mismatch.
     """
     from cryptography.exceptions import InvalidSignature
     from cryptography.hazmat.primitives.asymmetric.ed25519 import (
         Ed25519PublicKey,
     )
 
-    sig_raw = base64.b64decode(signature_b64)
-    key_raw = base64.b64decode(pubkey_b64)
-    if len(sig_raw) != 72:  # 8-byte keynum + 64-byte Ed25519 signature
+    sig_raw, signature_lines = _decode_minisign_value(
+        signature_b64,
+        kind="signature",
+    )
+    key_raw, _ = _decode_minisign_value(pubkey_b64, kind="public key")
+    if len(sig_raw) == 74:  # 2-byte alg + 8-byte keynum + 64-byte signature
+        if sig_raw[:2] == b"ED":
+            signed_data = hashlib.blake2b(data, digest_size=64).digest()
+        elif sig_raw[:2] == b"Ed":
+            signed_data = data
+        else:
+            raise ValueError("unsupported minisign signature algorithm")
+        sig_keynum = sig_raw[2:10]
+        signature = sig_raw[10:]
+    elif len(sig_raw) == 72:  # legacy raw payload without the alg prefix
+        signed_data = data
+        sig_keynum = sig_raw[:8]
+        signature = sig_raw[8:]
+    else:
         raise ValueError("invalid minisign signature length")
     if len(key_raw) != 42:  # 2-byte alg + 8-byte keynum + 32-byte key
         raise ValueError("invalid minisign public key length")
-    if sig_raw[:8] != key_raw[2:10]:
+    if key_raw[:2] not in {b"Ed", b"ED"}:
+        raise ValueError("unsupported minisign public key algorithm")
+    if sig_keynum != key_raw[2:10]:
         raise ValueError("minisign key id mismatch")
     public_key = Ed25519PublicKey.from_public_bytes(key_raw[10:])
     try:
-        public_key.verify(sig_raw[8:], data)
+        public_key.verify(signature, signed_data)
+        if signature_lines is not None:
+            if len(signature_lines) != 4 or not signature_lines[2].startswith(
+                "trusted comment: ",
+            ):
+                raise ValueError("invalid minisign signature text")
+            global_signature = base64.b64decode(
+                signature_lines[3],
+                validate=True,
+            )
+            if len(global_signature) != 64:
+                raise ValueError("invalid minisign global signature length")
+            trusted_comment = signature_lines[2][len("trusted comment: ") :]
+            public_key.verify(
+                global_signature,
+                signature + trusted_comment.encode("utf-8"),
+            )
     except InvalidSignature as exc:
         raise ValueError("minisign verification failed") from exc
 

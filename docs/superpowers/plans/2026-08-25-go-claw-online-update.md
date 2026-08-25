@@ -1,6 +1,6 @@
 # GO CLAW 在线更新功能实施计划（方案 C：Tauri updater + 自家 Release）
 
-> 状态：已实施（2026-08-26，代码见下表；剩余一项运维步骤：密钥）
+> 状态：已完成（2026-08-26，代码与 D2 密钥运维均已落地）
 > 客户形态：U盘/本地目录，根目录有 `GO CLAW.exe`（非安装版）。更新包必须只替换程序文件，永不触碰 `data/`、`GO-CLAW-Config/`、`portable.json`、`updates/`。
 
 ## 〇、现状盘点（已核实，方案以此为基础）
@@ -143,4 +143,6 @@
 
 **耦合契约（最终版）**：manifest=Tauri 标准 latest.json；签名=minisign（公钥入包、私钥仅 CI secret）；安装契约=`"<pkg>" /S /D=<root>`（无引号、raw 拼接）；数据黑名单=`data/secrets/logs/cache/backups/updates/GO-CLAW-Config/portable.json`；payload 白名单=`GO-CLAW-Portable.exe/binaries/LICENSE/README`。
 
-**剩余运维步骤（需要人工）**：GitHub Secret `TAURI_SIGNING_PRIVATE_KEY` 对应的**公钥**需写入 `tauri.conf.json:78` 与 GitHub Variable `TAURI_UPDATER_PUBKEY`（三处一致，否则验签失败）；goclaw.host nginx 增加 `/updates/` 反代到 GitHub Release 资产（镜像 endpoint 已内置为首选，未配置时会自动回退 GitHub 直连）。
+**D2 密钥运维（已完成）**：已生成 GO CLAW 专用、非空口令保护的 Tauri 签名密钥，并将公钥同步到 `tauri.conf.json`、GitHub Variable `TAURI_UPDATER_PUBKEY` 与便携包自动生成链。保管、发布前检查、恢复与轮换规则见 `docs/GO-CLAW-在线更新签名密钥运维.zh.md`。
+
+**可选镜像运维（未实施）**：goclaw.host nginx 增加 `/updates/` 反代到 GitHub Release 资产（镜像 endpoint 已内置为首选，未配置时会自动回退 GitHub 直连）。
