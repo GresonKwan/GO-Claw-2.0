@@ -144,10 +144,10 @@ class Runtime:
             ctx.error = e
             # The Task's _must_cancel flag may still be True after
             # catching CancelledError, causing the next await to raise
-            # CancelledError again.  Wrap ON_ERROR hooks so that
-            # cancel_envelope is always yielded — the frontend SDK
-            # needs the {object:response, status:completed} event to
-            # exit loading state.
+            # CancelledError again.  Wrap ON_ERROR hooks so the turn
+            # always finalizes — below we emit a turn_interrupted error
+            # envelope, which ends the frontend's loading state while
+            # rendering "本轮对话已停止" instead of a bogus empty response.
             try:
                 await hooks.run(Phase.ON_ERROR, ctx)
             except asyncio.CancelledError:

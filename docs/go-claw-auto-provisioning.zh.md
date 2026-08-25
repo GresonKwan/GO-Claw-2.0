@@ -34,7 +34,7 @@
 
 - 借用内置 `deepseek` provider（OpenAI 兼容、base_url 可改）的壳接 NewAPI；
   导入时若 modelId 不在内置模型表，自动注册进 `extra_models`。
-- 当前默认模型：`qwen3.7-plus`（服务端 `CHAT_MODEL_ID` 可改）。
+- 当前默认模型：`deepseek-v4-flash`（服务端 `CHAT_MODEL_ID` 可改；须与渠道模型名逐字一致）。
 
 ### 媒体工具（图像/视频）
 

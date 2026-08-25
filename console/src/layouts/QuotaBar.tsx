@@ -17,7 +17,9 @@ export function QuotaBar() {
   const [quota, setQuota] = useState<QuotaInfo | null>(null);
 
   const refresh = useCallback(async () => {
-    setQuota(await getQuota());
+    const next = await getQuota();
+    // 瞬态失败不清空：保留上一次成功值，避免进度条闪烁
+    if (next) setQuota(next);
   }, []);
 
   useEffect(() => {

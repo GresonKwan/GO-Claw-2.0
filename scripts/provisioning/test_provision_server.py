@@ -252,3 +252,40 @@ def test_quota_rejects_bad_signature_and_unknown_instance(
         assert bad.status_code == 403
         unknown = _quota_get(client, str(uuid.uuid4()))
         assert unknown.status_code == 404
+
+
+def test_quota_after_admin_topup_uses_adjusted_grant(
+    service,
+    tmp_path,
+    monkeypatch,
+):
+    """充值后 granted 取 max(签发, 剩余)，百分比按调整后额度显示。"""
+    module = service
+    instance_id = str(uuid.uuid4())
+    user_id = 42
+    module.insert_pending(instance_id, "gc-test", "pw", "127.0.0.1")
+    module.finalize_provision(instance_id, user_id, "sk-x", "{}")
+
+    newapi_db = tmp_path / "one-api.db"
+    import sqlite3
+
+    with sqlite3.connect(newapi_db) as conn:
+        conn.execute(
+            "CREATE TABLE users (id INTEGER PRIMARY KEY, quota INTEGER)",
+        )
+        # 管理员充值后剩余额度远超签发额度
+        conn.execute(
+            "INSERT INTO users (id, quota) VALUES (?, ?)",
+            (user_id, module.GIFT_QUOTA * 4),
+        )
+    monkeypatch.setattr(module, "NEWAPI_DB_PATH", str(newapi_db))
+
+    with TestClient(module.app) as client:
+        resp = _quota_get(client, instance_id)
+
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["granted"] == (module.GIFT_QUOTA * 4) / (
+        module.QUOTA_UNITS_PER_DOLLAR
+    )
+    assert body["percent"] == 100

@@ -49,7 +49,7 @@ NEWAPI_ADMIN_ACCESS_TOKEN = os.environ.get("NEWAPI_ADMIN_ACCESS_TOKEN", "")
 NEWAPI_ADMIN_USER_ID = os.environ.get("NEWAPI_ADMIN_USER_ID", "")
 PROVISION_HMAC_SECRET = os.environ.get("PROVISION_HMAC_SECRET", "")
 GIFT_QUOTA = int(os.environ.get("GIFT_QUOTA", "1000000"))  # ~$2 at 500000/$
-CHAT_MODEL_ID = os.environ.get("CHAT_MODEL_ID", "qwen-plus")
+CHAT_MODEL_ID = os.environ.get("CHAT_MODEL_ID", "deepseek-v4-flash")
 LLM_PROVIDER_ID = os.environ.get("LLM_PROVIDER_ID", "deepseek")
 RATE_LIMIT_PER_IP_PER_DAY = int(
     os.environ.get("RATE_LIMIT_PER_IP_PER_DAY", "5"),
@@ -554,11 +554,14 @@ def quota(instance_id: str, ts: int, sign: str) -> JSONResponse:
     if not NEWAPI_DB_PATH:
         return _error(503, "quota_store_unavailable")
 
-    granted_units = row["granted_quota"] or GIFT_QUOTA
+    # 额度语义：granted 取"签发额度"与"当前剩余"的较大者——管理员在
+    # NewAPI 充值后，进度条按调整后的实际额度显示（充值即回到高位、
+    # 随后随消耗下降），而不是长期钉在 100%。
     try:
         remaining_units = _read_user_quota_db(row["newapi_user_id"])
     except NewAPIError:
         return _error(503, "quota_store_unavailable")
+    granted_units = max(row["granted_quota"] or GIFT_QUOTA, remaining_units)
 
     granted = granted_units / QUOTA_UNITS_PER_DOLLAR
     remaining = remaining_units / QUOTA_UNITS_PER_DOLLAR

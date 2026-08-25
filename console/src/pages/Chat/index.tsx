@@ -34,7 +34,7 @@ import {
   prepareLoopModeMessage,
   useLoopStore,
 } from "../../stores/loopStore";
-// GO CLAW 客户版：LoopModeSelector 已隐藏，LoopInput 中其它能力保留
+// GO CLAW 客户版：LoopModeSelector 已移除（LoopInput 目录已删除）
 import { useChatAnywhereInput } from "@agentscope-ai/chat";
 import styles from "./index.module.less";
 import { IconButton } from "@agentscope-ai/design";

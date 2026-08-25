@@ -1191,13 +1191,16 @@ export function ChannelDrawer({
               successCredentialKey="bot_token"
               pollInterval={2000}
               onSuccess={(credentials) => {
+                // 首次连接（无 bot_token）才自动启用并保存；
+                // 已有配置的用户重新扫码不覆盖其启用/禁用选择
+                const hadToken = Boolean(form.getFieldValue("bot_token"));
                 form.setFieldsValue({
                   bot_token: credentials.bot_token,
-                  enabled: true,
+                  ...(hadToken ? {} : { enabled: true }),
                 });
                 message.success(t("channels.wechatLoginSuccess"));
-                // 扫码成功即完成连接：自动启用并保存，
-                // 否则用户以为已连接，实际渠道从未启动。
+                // 扫码成功即完成连接：自动保存（表单内其它字段的
+                // 编辑值随提交一并保存，不会丢失）。
                 form.submit();
               }}
               onError={(type) => {

@@ -113,6 +113,17 @@
 | 空响应根治：取消路径改发 turn_interrupted 错误信封（"本轮对话已停止"） | cancel 产出 Completed+空 output 与空成功无法区分 | 82ada36c | envelope 既有测试 + retry_chat_model 测试 |
 | extra_models 追加去重结论：has_model 已覆盖目录+extra，现有逻辑天然去重，无需改动 | 评估后关闭 | — | — |
 
+## 2026-08-25 · 审查修复批次（全项目 review 后）
+
+| 改动 | 原因 | commit | 验证 |
+|------|------|--------|------|
+| 交付模型默认改 `deepseek-v4-flash`（服务器 .env + provision_server 默认值 + .env.example + 文档） | 交付模型须在白名单内，解决选择器空列表风险 | （待推送） | 服务器已重启生效 |
+| 模型白名单零命中兜底（回退去重后全量）+ 去重时已配置 provider 优先 | H1 解耦兜底 / H2 顺序隐患 | （待推送） | ModelSelector.test.tsx |
+| 额度语义改 `granted = max(签发, 剩余)` | 充值后不再长期钉 100%，按调整后额度显示 | （待推送） | test_provision_server.py 充值用例（已部署） |
+| 微信扫码仅首次配置时强制 enabled | 不覆盖既有用户的启用选择；表单其它字段随提交保存 | （待推送） | ChannelDrawer 逻辑审查 |
+| runtime 注释与实现对齐、额度条瞬态失败防闪烁、simple 白名单清理、删除 LoopInput 死代码 | 卫生 | （待推送） | tsc + 前端 1203 全量 |
+| 在线更新计划并入 11 条审查修正（白名单打包防凭证泄露、portable.json 兼容、自装路径改道、三处密钥一致、缓存迁移、回滚独立通道、/D= 安全拼接、发布架构、安装锁、国内镜像、CI 共存） | review 抓出的硬伤/泄露风险 | — | docs/superpowers/plans/2026-08-25-go-claw-online-update.md 第六节 |
+
 ## 运营侧变更（非代码，无 commit）
 
 | 日期 | 变更 | 原因 |
@@ -120,6 +131,7 @@
 | 08-20 | New API 渠道 #1 上游 TokenPlan 周配额耗尽（08-24 04:07 UTC 重置）；`deepseek-v4-flash` 模型名与渠道 `deepseek-v4-flash-0731` 不匹配 | 供应商侧，待续费/补模型名 |
 | 08-21 | 4 个存量 `go-claw-auto` 令牌 DB 直改 `unlimited_quota=1`；管理员 access token 过期导致 provisioning 502，已同步 `.env` 并重启服务；仓库转 public 用免费 Actions 额度 | 现场修复 |
 | 08-25 | deepseek-v4-flash 不可用三层修复：渠道 #1 models 名单补名 + `abilities` 表补路由行 + `options.ModelRatio` 补定价 0.25 + `model_mapping` 映射到 deepseek-v4-flash-0731（上游只认带日期型号）；实测 chat completion 200 | 模型选择器调用必 503 |
+| 08-25 | provisioning 服务器 `CHAT_MODEL_ID` 由 qwen3.7-plus 改为 `deepseek-v4-flash` 并重启；服务端 quota 语义更新已部署 | 交付模型与白名单对齐 / 充值语义 |
 
 ---
 

@@ -201,18 +201,36 @@ export default function ModelSelector() {
 
   // GO CLAW 客户版：跨 provider 按模型 id 去重（保留先出现的条目，
   // 避免 DashScope/DeepSeek 两组目录与 extra_models 造成重复选项）。
+  // H2: 已配置（有 key 或免 key）的 provider 优先，避免未配置目录
+  // provider 抢占同名模型 id 导致可用模型被去重隐藏。
+  const sortedProviders = [...eligibleProviders].sort((a, b) => {
+    const aConfigured = a.has_api_key || a.require_api_key === false ? 0 : 1;
+    const bConfigured = b.has_api_key || b.require_api_key === false ? 0 : 1;
+    return aConfigured - bConfigured;
+  });
   const seenModelIds = new Set<string>();
-  const uniqueProviders = eligibleProviders
+  const dedupedProviders = sortedProviders
     .map((p) => ({
       ...p,
       models: p.models.filter((m) => {
-        if (!GO_CLAW_ALLOWED_MODEL_IDS.has(m.id)) return false;
         if (seenModelIds.has(m.id)) return false;
         seenModelIds.add(m.id);
         return true;
       }),
     }))
     .filter((p) => p.is_free_tier || p.models.length > 0);
+
+  const curatedProviders = dedupedProviders
+    .map((p) => ({
+      ...p,
+      models: p.models.filter((m) => GO_CLAW_ALLOWED_MODEL_IDS.has(m.id)),
+    }))
+    .filter((p) => p.models.length > 0);
+
+  // H1 兜底：白名单零命中时回退到去重后的全量列表——防止交付模型
+  // 变更（白名单未同步）导致客户无模型可选。
+  const uniqueProviders =
+    curatedProviders.length > 0 ? curatedProviders : dedupedProviders;
 
   // GO CLAW 客户版：只保留 PRO 付费模型列表（FREE 页签已隐藏）
   const proProviders = useMemo(() => {

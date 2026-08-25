@@ -73,7 +73,6 @@ const INBOX_BADGE_POLLING_MS = 6000;
 const SIMPLE_MODE_WHITELIST = new Set([
   "core.inbox",
   "core.cron-jobs",
-  "core.agent-config",
   "core.models",
 ]);
 
