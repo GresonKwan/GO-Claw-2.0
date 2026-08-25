@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { Progress, Tooltip } from "antd";
+import { Progress } from "antd";
 import { useTranslation } from "react-i18next";
 import { getQuota, type QuotaInfo } from "../api/modules/quota";
 import styles from "./index.module.less";
@@ -37,30 +37,23 @@ export function QuotaBar() {
 
   return (
     <div className={styles.quotaBar}>
-      <Tooltip
-        title={t("nav.quotaTooltip", {
-          remaining: quota.remaining.toFixed(2),
-          granted: quota.granted.toFixed(2),
-        })}
-      >
-        <div className={styles.quotaBarRow}>
-          <span className={styles.quotaBarLabel}>{t("nav.quota")}</span>
-          <Progress
-            percent={percent}
-            size="small"
-            showInfo={false}
-            strokeColor={low ? "#ff4d4f" : "#FF4A18"}
-            className={styles.quotaBarProgress}
-          />
-          <span
-            className={`${styles.quotaBarValue} ${
-              low ? styles.quotaBarValueLow : ""
-            }`}
-          >
-            {percent}%
-          </span>
-        </div>
-      </Tooltip>
+      <div className={styles.quotaBarRow}>
+        <span className={styles.quotaBarLabel}>{t("nav.quota")}</span>
+        <Progress
+          percent={percent}
+          size="small"
+          showInfo={false}
+          strokeColor={low ? "#ff4d4f" : "#FF4A18"}
+          className={styles.quotaBarProgress}
+        />
+        <span
+          className={`${styles.quotaBarValue} ${
+            low ? styles.quotaBarValueLow : ""
+          }`}
+        >
+          {percent}%
+        </span>
+      </div>
     </div>
   );
 }

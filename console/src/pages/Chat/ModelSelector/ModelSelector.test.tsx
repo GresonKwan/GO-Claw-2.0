@@ -59,8 +59,8 @@ const mockProvider = {
   generate_kwargs: {},
   models: [
     {
-      id: "gpt-4",
-      name: "GPT-4",
+      id: "deepseek-v4-pro",
+      name: "DeepSeek-V4 Pro",
       supports_multimodal: false,
       supports_image: false,
       supports_video: false,
@@ -73,8 +73,8 @@ const mockProvider = {
       reasoning_effort: null,
     },
     {
-      id: "gpt-3.5-turbo",
-      name: "GPT-3.5 Turbo",
+      id: "qwen3.7-plus",
+      name: "Qwen3.7 Plus",
       supports_multimodal: false,
       supports_image: false,
       supports_video: false,
@@ -91,7 +91,7 @@ const mockProvider = {
 };
 
 const mockActiveModels = {
-  active_llm: { provider_id: "openai", model: "gpt-4" },
+  active_llm: { provider_id: "openai", model: "deepseek-v4-pro" },
 };
 
 function setupDefaultMocks() {
@@ -115,7 +115,9 @@ describe("ModelSelector", () => {
 
   it("displays current active model name on trigger button after loading", async () => {
     renderWithProviders(<ModelSelector />);
-    expect((await screen.findAllByText("GPT-4"))[0]).toBeInTheDocument();
+    expect(
+      (await screen.findAllByText("DeepSeek-V4 Pro"))[0],
+    ).toBeInTheDocument();
   });
 
   it("displays i18n key when there is no active model", async () => {
@@ -134,12 +136,14 @@ describe("ModelSelector", () => {
       { ...mockProvider, api_key: "" },
     ]);
     renderWithProviders(<ModelSelector />);
-    expect((await screen.findAllByText("gpt-4"))[0]).toBeInTheDocument();
+    expect(
+      (await screen.findAllByText("deepseek-v4-pro"))[0],
+    ).toBeInTheDocument();
   });
 
   it("calls listProviders and getActiveModels on mount", async () => {
     renderWithProviders(<ModelSelector />);
-    await screen.findAllByText("GPT-4");
+    await screen.findAllByText("DeepSeek-V4 Pro");
     expect(providerApi.listProviders).toHaveBeenCalledOnce();
     expect(providerApi.getActiveModels).toHaveBeenCalledWith({
       scope: "effective",
@@ -150,9 +154,9 @@ describe("ModelSelector", () => {
   it("clicking trigger button opens dropdown and shows provider list", async () => {
     const user = userEvent.setup();
     renderWithProviders(<ModelSelector />);
-    await screen.findAllByText("GPT-4");
+    await screen.findAllByText("DeepSeek-V4 Pro");
 
-    await user.click(screen.getAllByText("GPT-4")[0]);
+    await user.click(screen.getAllByText("DeepSeek-V4 Pro")[0]);
 
     expect(await screen.findByText("OpenAI")).toBeInTheDocument();
   });
@@ -160,15 +164,15 @@ describe("ModelSelector", () => {
   it("clicking a model calls setActiveLlm with correct parameters", async () => {
     const user = userEvent.setup();
     renderWithProviders(<ModelSelector />);
-    await screen.findAllByText("GPT-4");
+    await screen.findAllByText("DeepSeek-V4 Pro");
 
-    await user.click(screen.getAllByText("GPT-4")[0]);
-    const gpt35 = await screen.findByText("GPT-3.5 Turbo");
+    await user.click(screen.getAllByText("DeepSeek-V4 Pro")[0]);
+    const gpt35 = await screen.findByText("Qwen3.7 Plus");
     await user.click(gpt35);
 
     expect(providerApi.setActiveLlm).toHaveBeenCalledWith({
       provider_id: "openai",
-      model: "gpt-3.5-turbo",
+      model: "qwen3.7-plus",
       scope: "agent",
       agent_id: "default",
     });
@@ -178,7 +182,7 @@ describe("ModelSelector", () => {
     vi.mocked(providerApi.setActiveLlm).mockResolvedValue({
       active_llm: {
         provider_id: "openai",
-        model: "gpt-3.5-turbo",
+        model: "qwen3.7-plus",
       },
       effective_max_input_length: 65536,
     });
@@ -186,10 +190,10 @@ describe("ModelSelector", () => {
     window.addEventListener("model-switched", switched);
     const user = userEvent.setup();
     renderWithProviders(<ModelSelector />);
-    await screen.findAllByText("GPT-4");
+    await screen.findAllByText("DeepSeek-V4 Pro");
 
-    await user.click(screen.getAllByText("GPT-4")[0]);
-    await user.click(await screen.findByText("GPT-3.5 Turbo"));
+    await user.click(screen.getAllByText("DeepSeek-V4 Pro")[0]);
+    await user.click(await screen.findByText("Qwen3.7 Plus"));
 
     await waitFor(() => expect(switched).toHaveBeenCalledOnce());
     const event = switched.mock.calls[0][0] as CustomEvent;
@@ -207,7 +211,7 @@ describe("ModelSelector", () => {
     const switched = vi.fn();
     window.addEventListener("model-switched", switched);
     renderWithProviders(<ModelSelector />);
-    await screen.findAllByText("GPT-4");
+    await screen.findAllByText("DeepSeek-V4 Pro");
 
     await waitFor(() => expect(switched).toHaveBeenCalledOnce());
     const event = switched.mock.calls[0][0] as CustomEvent;
@@ -220,10 +224,10 @@ describe("ModelSelector", () => {
   it("clicking the already active model does not call setActiveLlm", async () => {
     const user = userEvent.setup();
     renderWithProviders(<ModelSelector />);
-    await screen.findAllByText("GPT-4");
+    await screen.findAllByText("DeepSeek-V4 Pro");
 
-    await user.click(screen.getAllByText("GPT-4")[0]);
-    const gpt4Items = await screen.findAllByText("GPT-4");
+    await user.click(screen.getAllByText("DeepSeek-V4 Pro")[0]);
+    const gpt4Items = await screen.findAllByText("DeepSeek-V4 Pro");
     await user.click(gpt4Items[gpt4Items.length - 1]);
 
     expect(providerApi.setActiveLlm).not.toHaveBeenCalled();
@@ -251,15 +255,84 @@ describe("ModelSelector", () => {
     );
     const user = userEvent.setup();
     renderWithProviders(<ModelSelector />);
-    await screen.findAllByText("GPT-4");
+    await screen.findAllByText("DeepSeek-V4 Pro");
 
-    await user.click(screen.getAllByText("GPT-4")[0]);
-    const gpt35 = await screen.findByText("GPT-3.5 Turbo");
+    await user.click(screen.getAllByText("DeepSeek-V4 Pro")[0]);
+    const gpt35 = await screen.findByText("Qwen3.7 Plus");
     await user.click(gpt35);
 
     // GPT-4 may appear in two places when dropdown is still open (trigger + dropdown item)
     await waitFor(() => {
-      expect(screen.getAllByText("GPT-4").length).toBeGreaterThanOrEqual(1);
+      expect(
+        screen.getAllByText("DeepSeek-V4 Pro").length,
+      ).toBeGreaterThanOrEqual(1);
     });
+  });
+});
+
+describe("GO CLAW customer model list", () => {
+  const makeModel = (id: string, name: string) => ({
+    id,
+    name,
+    supports_multimodal: false,
+    supports_image: false,
+    supports_video: false,
+    generate_kwargs: {},
+    max_tokens: 8192,
+    max_input_length: 32768,
+    relay_reasoning: true,
+    thinking_enabled: null,
+    thinking_budget: null,
+    reasoning_effort: null,
+  });
+
+  const duplicateProviders = [
+    {
+      ...mockProvider,
+      id: "dashscope",
+      name: "DashScope",
+      models: [
+        makeModel("deepseek-v4-pro", "DeepSeek-V4 Pro"),
+        makeModel("qwen3.7-plus", "Qwen3.7 Plus"),
+        makeModel("qwen3.6-plus", "Qwen3.6 Plus"),
+      ],
+      extra_models: [],
+    },
+    {
+      ...mockProvider,
+      id: "deepseek",
+      name: "DeepSeek",
+      models: [
+        makeModel("deepseek-v4-pro", "DeepSeek-V4 Pro"),
+        makeModel("deepseek-chat", "DeepSeek Chat"),
+      ],
+      extra_models: [makeModel("qwen3.7-plus", "qwen3.7-plus")],
+    },
+  ];
+
+  it("dedupes models across providers and hides non-allowed models", async () => {
+    vi.mocked(providerApi.listProviders).mockResolvedValue(duplicateProviders);
+    vi.mocked(providerApi.getActiveModels).mockResolvedValue({
+      active_llm: { provider_id: "dashscope", model: "deepseek-v4-pro" },
+    });
+    const user = userEvent.setup();
+    renderWithProviders(<ModelSelector />);
+
+    // 打开下拉（触发按钮显示当前激活模型）
+    await screen.findAllByText("DeepSeek-V4 Pro");
+    await user.click(screen.getAllByText("DeepSeek-V4 Pro")[0]);
+
+    // 去重 + 白名单后，第二个 provider（DeepSeek）的所有模型都被
+    // 过滤（v4-pro 与 extra 的 qwen3.7-plus 为重复项、deepseek-chat
+    // 不在白名单），该 provider 组应整体消失；DashScope 组保留
+    await waitFor(() => {
+      expect(screen.getByText("DashScope")).toBeInTheDocument();
+    });
+    expect(screen.queryByText("DeepSeek")).not.toBeInTheDocument();
+    // extra_models 的裸 id 重复项不出现
+    expect(screen.queryByText("qwen3.7-plus")).not.toBeInTheDocument();
+    // 白名单外的目录项隐藏
+    expect(screen.queryByText("Qwen3.6 Plus")).not.toBeInTheDocument();
+    expect(screen.queryByText("DeepSeek Chat")).not.toBeInTheDocument();
   });
 });

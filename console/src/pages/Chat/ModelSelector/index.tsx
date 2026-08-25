@@ -21,6 +21,18 @@ import { useTurnUsageStore } from "../turnUsageStore";
 import { OAuthConfirmModal } from "./OAuthConfirmModal";
 import styles from "./index.module.less";
 
+// GO CLAW 客户版：只展示中转渠道实际可用的模型（与渠道在挂模型
+// 保持一致；白名单外的目录项调用必然 503，直接隐藏）。
+export const GO_CLAW_ALLOWED_MODEL_IDS = new Set([
+  "deepseek-v4-pro",
+  "deepseek-v4-flash",
+  "qwen3.7-max",
+  "qwen3.7-plus",
+  "glm-5.2",
+  "qwen3.6-flash",
+  "qwen3.8-max",
+]);
+
 /** Sync Chat context ring with the active model's effective window. */
 function publishActiveMaxInputLength(
   effectiveMaxInputLength: number | null | undefined,
@@ -63,11 +75,6 @@ export default function ModelSelector() {
   const [saving, setSaving] = useState(false);
   const [open, setOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
-  const [activeTab, setActiveTab] = useState<"pro" | "free">(
-    () =>
-      (localStorage.getItem("qwenpaw_model_selector_tab") as "pro" | "free") ||
-      "pro",
-  );
   const [collapsedProviders, setCollapsedProviders] = useState<Set<string>>(
     () => {
       try {
@@ -194,16 +201,26 @@ export default function ModelSelector() {
       require_api_key: p.require_api_key,
     }));
 
-  // Split by model-level is_free, not provider-level is_free_tier
-  const { freeProviders, proProviders } = useMemo(() => {
-    const freeMap = new Map<string, EligibleProvider>();
+  // GO CLAW 客户版：跨 provider 按模型 id 去重（保留先出现的条目，
+  // 避免 DashScope/DeepSeek 两组目录与 extra_models 造成重复选项）。
+  const seenModelIds = new Set<string>();
+  const uniqueProviders = eligibleProviders
+    .map((p) => ({
+      ...p,
+      models: p.models.filter((m) => {
+        if (!GO_CLAW_ALLOWED_MODEL_IDS.has(m.id)) return false;
+        if (seenModelIds.has(m.id)) return false;
+        seenModelIds.add(m.id);
+        return true;
+      }),
+    }))
+    .filter((p) => p.is_free_tier || p.models.length > 0);
+
+  // GO CLAW 客户版：只保留 PRO 付费模型列表（FREE 页签已隐藏）
+  const proProviders = useMemo(() => {
     const proMap = new Map<string, EligibleProvider>();
-    for (const p of eligibleProviders) {
-      const freeModels = p.models.filter((m) => m.is_free);
+    for (const p of uniqueProviders) {
       const proModels = p.models.filter((m) => !m.is_free);
-      if (freeModels.length > 0 || (p.is_free_tier && p.models.length === 0)) {
-        freeMap.set(p.id, { ...p, models: freeModels });
-      }
       // PRO: show paid models when API key is configured, provider
       // doesn't require a key, or provider is user-created / local
       if (
@@ -216,11 +233,8 @@ export default function ModelSelector() {
         proMap.set(p.id, { ...p, models: proModels });
       }
     }
-    return {
-      freeProviders: [...freeMap.values()],
-      proProviders: [...proMap.values()],
-    };
-  }, [eligibleProviders]);
+    return [...proMap.values()];
+  }, [uniqueProviders]);
 
   // Filter by search query
   const trimmedSearch = searchQuery.trim();
@@ -241,7 +255,6 @@ export default function ModelSelector() {
       );
   };
 
-  const filteredFree = filterProviders(freeProviders);
   const filteredPro = filterProviders(proProviders);
 
   // Focus search input when dropdown opens; clear query when closes
@@ -588,84 +601,6 @@ export default function ModelSelector() {
     );
   };
 
-  const renderFreeTab = () => {
-    if (loading) {
-      return (
-        <div className={styles.spinWrapper}>
-          <Spin size="small" />
-        </div>
-      );
-    }
-
-    // Providers already usable (has key or doesn't need one)
-    const readyProviders = filteredFree.filter(
-      (p) =>
-        p.models.length > 0 && (p.has_api_key || p.require_api_key === false),
-    );
-    // OAuth providers not yet connected
-    const oauthOnlyProviders = filteredFree.filter(
-      (p) => p.supports_oauth && !p.has_api_key && !p.oauth_connected,
-    );
-    // Providers that need API key (not OAuth, no key yet)
-    const needsKeyProviders = filteredFree.filter(
-      (p) => !p.supports_oauth && !p.has_api_key && p.require_api_key !== false,
-    );
-
-    const hasAny =
-      readyProviders.length > 0 ||
-      oauthOnlyProviders.length > 0 ||
-      needsKeyProviders.length > 0;
-
-    if (!hasAny) {
-      return (
-        <div className={styles.emptyTip}>
-          {trimmedSearch
-            ? t("modelSelector.noModelsFound")
-            : t("modelSelector.noFreeModels")}
-        </div>
-      );
-    }
-
-    return (
-      <>
-        <div className={styles.freeBanner}>
-          <AlertTriangle size={14} className={styles.freeBannerIcon} />
-          <span>{t("modelSelector.freeBannerText")}</span>
-        </div>
-        {readyProviders.map(renderProviderModels)}
-        {oauthOnlyProviders.map(renderOAuthConnectEntry)}
-        {needsKeyProviders.length > 0 && (
-          <>
-            <div
-              className={styles.moreToggle}
-              onClick={() => {
-                setShowMoreFree((v) => {
-                  if (!v) {
-                    setTimeout(() => {
-                      moreContentRef.current?.scrollIntoView({
-                        behavior: "smooth",
-                        block: "nearest",
-                      });
-                    }, 50);
-                  }
-                  return !v;
-                });
-              }}
-            >
-              <span>{t("modelSelector.moreProviders")}</span>
-              {showMoreFree ? <UpOutlined /> : <DownOutlined />}
-            </div>
-            {showMoreFree && (
-              <div ref={moreContentRef} className={styles.moreContent}>
-                {needsKeyProviders.map(renderApiKeyEntry)}
-              </div>
-            )}
-          </>
-        )}
-      </>
-    );
-  };
-
   const renderProTab = () => {
     if (loading) {
       return (
@@ -718,35 +653,9 @@ export default function ModelSelector() {
         )}
       </div>
 
-      <div className={styles.tabBar}>
-        <button
-          className={[
-            styles.tabButton,
-            activeTab === "pro" ? styles.tabButtonActive : "",
-          ].join(" ")}
-          onClick={() => {
-            setActiveTab("pro");
-            localStorage.setItem("qwenpaw_model_selector_tab", "pro");
-          }}
-        >
-          PRO
-        </button>
-        <button
-          className={[
-            styles.tabButton,
-            activeTab === "free" ? styles.tabButtonActive : "",
-          ].join(" ")}
-          onClick={() => {
-            setActiveTab("free");
-            localStorage.setItem("qwenpaw_model_selector_tab", "free");
-          }}
-        >
-          FREE
-        </button>
-      </div>
-
       <div className={styles.listContainer}>
-        {activeTab === "free" ? renderFreeTab() : renderProTab()}
+        {/* GO CLAW 客户版：只展示 PRO 列表，隐藏 FREE 页签 */}
+        {renderProTab()}
       </div>
     </div>
   );

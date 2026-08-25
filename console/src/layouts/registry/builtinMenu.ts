@@ -61,6 +61,7 @@ const CUSTOMER_HIDDEN_MENU_IDS = new Set([
   "core.mcp",
   "core.acp",
   "core.heartbeat",
+  "core.agent-config",
   "core.environments",
   "core.security",
   "core.token-usage",
@@ -197,6 +198,7 @@ export const BUILTIN_MENU: MenuItem[] = [
   },
   {
     id: "core.agent-config",
+    visible: customerVisible("core.agent-config"),
     location: "primary.agentScoped",
     parentId: "core.agent-group",
     label: navLabel("nav.agentConfig"),

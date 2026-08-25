@@ -161,7 +161,13 @@ class Runtime:
             # asyncio.shield protects the save from task re-cancellation.
             await self._try_save_on_cancel(ctx)
 
-            async for ev in envelope.cancel_envelope():
+            # Finalize with an explicit interrupted marker instead of a
+            # bare Completed+empty response: the frontend renders this as
+            # "已停止" instead of the misleading "助手返回了空响应".
+            async for ev in envelope.error_envelope(
+                "本轮对话已停止",
+                error_code="turn_interrupted",
+            ):
                 yield ev
             raise
         except BaseException as e:

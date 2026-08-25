@@ -34,7 +34,7 @@ import {
   prepareLoopModeMessage,
   useLoopStore,
 } from "../../stores/loopStore";
-import { LoopModeSelector } from "../../components/LoopInput";
+// GO CLAW 客户版：LoopModeSelector 已隐藏，LoopInput 中其它能力保留
 import { useChatAnywhereInput } from "@agentscope-ai/chat";
 import styles from "./index.module.less";
 import { IconButton } from "@agentscope-ai/design";
@@ -2761,7 +2761,7 @@ export default function ChatPage() {
                 onTranscription={handleWhisperTranscription}
               />
             ) : null}
-            <LoopModeSelector />
+            {/* GO CLAW 客户版：隐藏 Loop 模式选择，固定默认模式 */}
             {pluginSenderPrefix}
           </>
         ),

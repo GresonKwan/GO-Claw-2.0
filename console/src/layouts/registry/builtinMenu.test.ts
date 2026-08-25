@@ -9,6 +9,7 @@ const HIDDEN = [
   "core.mcp",
   "core.acp",
   "core.heartbeat",
+  "core.agent-config",
   "core.environments",
   "core.security",
   "core.token-usage",
