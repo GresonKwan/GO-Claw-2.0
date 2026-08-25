@@ -291,7 +291,7 @@ jobs:
 
           # 白名单：仅程序文件。绝不包含 GO-CLAW-Config（批次凭证）、
           # portable.json、data/secrets/logs/cache/backups/updates。
-          $payload = "dist/update-payload"
+          $payload = "dist/payload"
           if (Test-Path $payload) { Remove-Item -Recurse -Force $payload }
           New-Item -ItemType Directory -Path $payload | Out-Null
           foreach ($item in @("GO-CLAW-Portable.exe", "binaries", "LICENSE", "README-PORTABLE.zh-CN.txt")) {
