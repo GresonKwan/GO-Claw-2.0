@@ -57,6 +57,7 @@ pub fn run() {
             updates::install_desktop_update,
             updates::download_desktop_update,
             updates::install_downloaded_update,
+            updates::install_update_from_url,
             updates::check_cached_update,
             tray::minimize_to_tray,
             tray::quit_app,

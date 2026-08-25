@@ -51,7 +51,10 @@ jobs:
           mv QwenPaw-Desktop-Tauri-Windows-*/QwenPaw-Tauri-*-Windows-setup.exe . 2>/dev/null || true
           mv QwenPaw-Desktop-Tauri-macOS-*/QwenPaw-Tauri-*-macOS.zip . 2>/dev/null || true
           mv tauri-updater-meta-macos/QwenPaw-Tauri-*-macOS.app.tar.gz . 2>/dev/null || true
-          files=(QwenPaw-Tauri-*-Windows-setup.exe QwenPaw-Tauri-*-macOS.zip QwenPaw-Tauri-*-macOS.app.tar.gz)
+          mv go-claw-update-package-*/GO-CLAW-Update-*-setup.exe . 2>/dev/null || true
+          mv go-claw-update-package-*/GO-CLAW-Update-*-setup.exe.sig . 2>/dev/null || true
+          mv go-claw-update-package-*/latest.json . 2>/dev/null || true
+          files=(QwenPaw-Tauri-*-Windows-setup.exe QwenPaw-Tauri-*-macOS.zip QwenPaw-Tauri-*-macOS.app.tar.gz GO-CLAW-Update-*-setup.exe GO-CLAW-Update-*-setup.exe.sig latest.json)
           if [ ${#files[@]} -eq 0 ]; then
             echo "::error::No desktop installers found to attach to the release"
             exit 1

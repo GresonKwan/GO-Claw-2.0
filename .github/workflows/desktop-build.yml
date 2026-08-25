@@ -278,6 +278,52 @@ jobs:
           if-no-files-found: ignore
           retention-days: 7
 
+      - name: Build portable update package (NSIS)
+        shell: pwsh
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        run: |
+          $version = "${{ steps.version.outputs.version }}"
+          $stage = Get-ChildItem -LiteralPath "dist" -Directory -Filter "GO-CLAW-Portable-*-Windows-x64" |
+            Select-Object -First 1
+          if (-not $stage) { throw "portable staging directory not found" }
+
+          # 白名单：仅程序文件。绝不包含 GO-CLAW-Config（批次凭证）、
+          # portable.json、data/secrets/logs/cache/backups/updates。
+          $payload = "dist/update-payload"
+          if (Test-Path $payload) { Remove-Item -Recurse -Force $payload }
+          New-Item -ItemType Directory -Path $payload | Out-Null
+          foreach ($item in @("GO-CLAW-Portable.exe", "binaries", "LICENSE", "README-PORTABLE.zh-CN.txt")) {
+            Copy-Item -LiteralPath (Join-Path $stage.FullName $item) -Destination $payload -Recurse
+          }
+          $forbidden = @("GO-CLAW-Config", "portable.json", "data", "secrets", "logs", "cache", "backups", "updates")
+          foreach ($item in $forbidden) {
+            if (Test-Path (Join-Path $payload $item)) { throw "forbidden content in update payload: $item" }
+          }
+
+          Copy-Item "console/src-tauri/nsis/go-claw-update.nsi" "dist/update.nsi"
+          Push-Location "dist"
+          makensis "/DGO_CLAW_VERSION=$version" "update.nsi"
+          if ($LASTEXITCODE -ne 0) { Pop-Location; throw "makensis failed" }
+          Pop-Location
+          $setup = "dist/GO-CLAW-Update-$version-setup.exe"
+          if (-not (Test-Path $setup)) { throw "update installer not produced" }
+
+          if ($env:TAURI_SIGNING_PRIVATE_KEY) {
+            npm exec -- tauri signer sign $setup
+            if ($LASTEXITCODE -ne 0) { throw "tauri signer sign failed" }
+            python scripts/pack-tauri/build_go_claw_update_manifest.py `
+              --version $version `
+              --setup $setup `
+              --base-url "https://github.com/GresonKwan/GO-Claw-2.0/releases/latest/download" `
+              --notes "GO CLAW $version" `
+              --output "dist/latest.json"
+            if ($LASTEXITCODE -ne 0) { throw "manifest generation failed" }
+          } else {
+            Write-Warning "TAURI_SIGNING_PRIVATE_KEY not configured; update installer stays unsigned, no latest.json"
+          }
+
       - name: Upload Tauri Windows artifact
         uses: actions/upload-artifact@v4
         with:
@@ -301,6 +347,17 @@ jobs:
           path: |
             dist/QwenPaw-Tauri-*-Windows-setup.exe.sig
             dist/tauri-windows-x86_64-updater.json
+
+      - name: Upload GO CLAW update package
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: go-claw-update-package-${{ steps.version.outputs.version }}
+          path: |
+            dist/GO-CLAW-Update-*-setup.exe
+            dist/GO-CLAW-Update-*-setup.exe.sig
+            dist/latest.json
+          if-no-files-found: ignore
 
   build-tauri-macos:
     if: ${{ inputs.windows_only != true }}

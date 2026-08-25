@@ -43,6 +43,10 @@ pub(super) fn current_platform() -> Option<&'static str> {
 }
 
 pub(super) fn cached_update_dir(app: &AppHandle) -> Option<PathBuf> {
+    // 便携模式：缓存放便携根 updates/ 下（不写主机目录，跟盘迁移）。
+    if let Some(state) = app.state::<crate::portable::PortableRuntime>().state() {
+        return Some(state.root.join("updates").join(CACHED_UPDATE_DIR));
+    }
     app.path()
         .app_local_data_dir()
         .ok()
@@ -64,6 +68,45 @@ pub(super) fn read_cached_update_meta(cache_dir: &Path) -> Result<UpdateMeta, St
 
 pub(super) fn remove_cached_update(cache_dir: &Path) {
     let _ = std::fs::remove_dir_all(cache_dir);
+}
+
+/// Persist a pinned-version artifact (rollback / install an explicit
+/// historical release). Same storage layout as persist_cached_update but
+/// without going through tauri_plugin_updater::Update, whose version
+/// comparator would reject older versions.
+pub(super) fn persist_cached_update_raw(
+    app: &AppHandle,
+    version: &str,
+    signature: &str,
+    bytes: &[u8],
+) -> Result<(), String> {
+    let platform = current_platform().ok_or("cached updates are not supported on this platform")?;
+    validate_artifact(platform, bytes)?;
+
+    let cache_dir = cached_update_dir(app).ok_or("cannot determine app data directory")?;
+    if cache_dir.exists() {
+        std::fs::remove_dir_all(&cache_dir).map_err(|e| e.to_string())?;
+    }
+    std::fs::create_dir_all(&cache_dir).map_err(|e| e.to_string())?;
+
+    let artifact_path = write_artifact(platform, bytes, &cache_dir, version)?;
+    let artifact_file = artifact_path
+        .strip_prefix(&cache_dir)
+        .ok()
+        .and_then(|p| p.to_str())
+        .ok_or("cached update path is invalid")?
+        .to_string();
+
+    let meta = UpdateMeta {
+        version: version.to_string(),
+        artifact_file,
+        platform: platform.to_string(),
+        target: String::new(),
+        signature: signature.to_string(),
+        sha256: sha256_hex(bytes),
+    };
+    let meta_json = serde_json::to_string_pretty(&meta).map_err(|e| e.to_string())?;
+    std::fs::write(cache_dir.join(UPDATE_META_FILE), meta_json).map_err(|e| e.to_string())
 }
 
 /// Persist the downloaded update artifact plus its metadata so a later

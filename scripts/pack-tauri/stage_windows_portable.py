@@ -181,6 +181,27 @@ def stage_portable(
             provision_file,
             credentials_dir / "provision.json",
         )
+    # 在线更新验签公钥随包分发（公钥非密，与 tauri.conf.json 同源）；
+    # 配置缺失时跳过，后端回退到环境变量。
+    tauri_conf = (
+        repository_root / "console" / "src-tauri" / "tauri.conf.json"
+        if repository_root is not None
+        else None
+    )
+    if tauri_conf is not None and tauri_conf.is_file():
+        updater = (
+            json.loads(
+                tauri_conf.read_text(encoding="utf-8"),
+            )
+            .get("plugins", {})
+            .get("updater", {})
+        )
+        pubkey = str(updater.get("pubkey", "")).strip()
+        if pubkey:
+            (credentials_dir / "update-pubkey.txt").write_text(
+                pubkey + "\n",
+                encoding="ascii",
+            )
     (stage_dir / "portable.json").write_text(
         json.dumps(
             {"schemaVersion": 1, "clientMode": "browser"},

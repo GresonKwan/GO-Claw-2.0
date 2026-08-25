@@ -57,6 +57,8 @@ from .routers.approval import router as approval_router
 from .routers.coding_mode import router as coding_mode_router
 from .routers.healthz import router as healthz_router
 from .routers.quota import router as quota_router
+from .routers.updates import router as updates_router
+from .routers.updates import schedule_update_checks
 from .routers.loops import router as loops_router
 from .routers.tool_calls import router as tool_calls_router
 from .routers.voice import voice_router
@@ -156,6 +158,7 @@ async def lifespan(  # pylint: disable=too-many-statements,too-many-branches
     # pick it up within the same startup. Never blocks startup.
     await provision_go_claw_credentials()
     await import_go_claw_batch_credentials(provider_manager)
+    schedule_update_checks()
     local_model_manager = LocalModelManager.get_instance()
 
     # --- AppServiceManager + WorkspaceRegistry ---
@@ -783,6 +786,8 @@ app.include_router(api_router, prefix="/api")
 app.include_router(healthz_router, prefix="/api")
 
 app.include_router(quota_router, prefix="/api")
+
+app.include_router(updates_router, prefix="/api")
 
 app.include_router(tool_calls_router, prefix="/api")
 

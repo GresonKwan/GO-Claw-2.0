@@ -1,6 +1,6 @@
 # GO CLAW 在线更新功能实施计划（方案 C：Tauri updater + 自家 Release）
 
-> 状态：已确认方案，待实施（2026-08-25）
+> 状态：已实施（2026-08-26，代码见下表；剩余一项运维步骤：密钥）
 > 客户形态：U盘/本地目录，根目录有 `GO CLAW.exe`（非安装版）。更新包必须只替换程序文件，永不触碰 `data/`、`GO-CLAW-Config/`、`portable.json`、`updates/`。
 
 ## 〇、现状盘点（已核实，方案以此为基础）
@@ -121,3 +121,26 @@
 9. **更新中锁定**：`<root>\updates\installing.lock` 存在期间禁止启动业务（防半更新状态被双击拉起），启动检测清理/回滚。
 10. **国内可达性**：endpoint 列表首位加 `https://goclaw.host:8443/updates/latest.json`（nginx 反代 GitHub Release 资产），GitHub 直连失败时自动回退；版本历史接口容忍 403 并本地缓存。
 11. **与 CI 验证的共存**：`verify` 环境构建的便携包写 `updates.enabled:false`（或在 verify 脚本注入不可达 endpoint），防止冒烟时被真实新版提示干扰。
+
+
+---
+
+## 七、实施落点与架构修正（2026-08-26）
+
+**关键架构修正**：便携浏览器模式下 console 无 Tauri IPC（`isDesktopApp()=false`），因此更新编排从 Rust 改为**后端 Python 驱动**（与额度条同构），Rust 侧能力保留给未来安装版。
+
+| 层 | 文件 | 内容 |
+|----|------|------|
+| 后端编排 | `src/qwenpaw/app/go_claw_updates.py` | 状态机、manifest 拉取（镜像优先双 endpoint）、流式下载、sha256+minisign(Ed25519) 双重验签、`/S /D=` 安装、回滚独立通道、6h 定时检测+inbox 通知 |
+| 路由 | `src/qwenpaw/app/routers/updates.py` | `/api/updates/{status,check,download,install,install-version,releases}`，便携关闭时 404 |
+| 验签公钥入包 | `scripts/pack-tauri/stage_windows_portable.py` | 从 tauri.conf.json 提取 pubkey 写入 `GO-CLAW-Config/update-pubkey.txt` |
+| NSIS 更新包 | `console/src-tauri/nsis/go-claw-update.nsi` | /D 校验 portable.json、taskkill 应用与后端、白名单备份+替换、installing.lock、自动重启 |
+| CI | `desktop-build.yml` | 白名单 payload → makensis → tauri signer sign → `build_go_claw_update_manifest.py` 生成 latest.json → 上传 artifact |
+| 发布 | `desktop-publish.yml` | setup.exe/.sig/latest.json 附到 Release |
+| 前端 | `console/src/layouts/UpdateSection.tsx` + `api/modules/updates.ts` + `SidebarSettingsPanel` | 版本区块：检查/下载进度/一键安装（二次确认）/版本历史+回滚 |
+| Rust（保留） | `updates.rs`/`cache.rs`/`portable.rs` | portable.json updates 字段、便携放行、/D= raw_arg、缓存迁根目录、install_update_from_url |
+| 测试 | `tests/unit/app/test_go_claw_updates.py` | 版本比较、minisign 往返+篡改拒绝（含 key id 不匹配） |
+
+**耦合契约（最终版）**：manifest=Tauri 标准 latest.json；签名=minisign（公钥入包、私钥仅 CI secret）；安装契约=`"<pkg>" /S /D=<root>`（无引号、raw 拼接）；数据黑名单=`data/secrets/logs/cache/backups/updates/GO-CLAW-Config/portable.json`；payload 白名单=`GO-CLAW-Portable.exe/binaries/LICENSE/README`。
+
+**剩余运维步骤（需要人工）**：GitHub Secret `TAURI_SIGNING_PRIVATE_KEY` 对应的**公钥**需写入 `tauri.conf.json:78` 与 GitHub Variable `TAURI_UPDATER_PUBKEY`（三处一致，否则验签失败）；goclaw.host nginx 增加 `/updates/` 反代到 GitHub Release 资产（镜像 endpoint 已内置为首选，未配置时会自动回退 GitHub 直连）。

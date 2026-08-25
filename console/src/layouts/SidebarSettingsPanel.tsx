@@ -17,6 +17,7 @@ import {
 import { languageApi } from "../api/modules/language";
 import { useTheme, type ThemeMode } from "../contexts/ThemeContext";
 import { useSidebarModeStore } from "../stores/sidebarModeStore";
+import { UpdateSection } from "./UpdateSection";
 import { isTauriRuntime } from "../tauri/backendRuntime";
 import {
   clearRememberedCloseAction,
@@ -202,6 +203,7 @@ export default function SidebarSettingsPanel({
           )}
         </button>
       </div>
+      <UpdateSection />
     </div>
   );
 }

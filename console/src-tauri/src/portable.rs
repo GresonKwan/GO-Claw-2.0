@@ -11,12 +11,36 @@ pub(crate) enum ClientMode {
     Auto,
 }
 
+#[derive(Clone, Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct PortableUpdatesConfig {
+    #[serde(default = "default_updates_enabled")]
+    pub(crate) enabled: bool,
+    #[serde(default)]
+    pub(crate) channel: String,
+}
+
+impl Default for PortableUpdatesConfig {
+    fn default() -> Self {
+        Self {
+            enabled: default_updates_enabled(),
+            channel: String::new(),
+        }
+    }
+}
+
+fn default_updates_enabled() -> bool {
+    true
+}
+
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 struct PortableManifest {
     schema_version: u8,
     #[serde(default = "default_client_mode")]
     client_mode: ClientMode,
+    #[serde(default)]
+    updates: PortableUpdatesConfig,
 }
 
 fn default_client_mode() -> ClientMode {
@@ -33,6 +57,7 @@ pub(crate) struct PortableState {
     pub(crate) cache_dir: PathBuf,
     pub(crate) webview_dir: PathBuf,
     pub(crate) client_mode: ClientMode,
+    pub(crate) updates: PortableUpdatesConfig,
 }
 
 impl PortableState {
@@ -66,6 +91,7 @@ impl PortableState {
             cache_dir: root.join("cache"),
             webview_dir: root.join("cache").join("webview2"),
             client_mode: manifest.client_mode,
+            updates: manifest.updates,
         }))
     }
 

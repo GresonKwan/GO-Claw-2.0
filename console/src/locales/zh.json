@@ -1,4 +1,20 @@
 {
+  "updates": {
+    "currentVersion": "当前版本",
+    "checkNow": "检查更新",
+    "checkFailed": "检查更新失败，请稍后重试",
+    "newVersion": "发现新版本 v{{version}}",
+    "downloadNow": "下载新版本",
+    "installNow": "一键安装",
+    "installing": "正在安装，应用将自动重启…",
+    "installConfirmTitle": "安装新版本",
+    "installConfirmContent": "将安装 v{{version}}，应用会自动重启（数据与配置不受影响）。",
+    "showHistory": "版本记录",
+    "hideHistory": "收起版本记录",
+    "historyEmpty": "暂无历史版本",
+    "currentTag": "当前",
+    "installThisVersion": "安装此版本"
+  },
   "common": {
     "save": "保存",
     "reset": "重置",
