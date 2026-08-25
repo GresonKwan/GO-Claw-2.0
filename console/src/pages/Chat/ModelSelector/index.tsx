@@ -9,7 +9,7 @@ import {
   DownOutlined,
   UpOutlined,
 } from "@ant-design/icons";
-import { AlertTriangle, Link as LinkIcon, Settings } from "lucide-react";
+import { AlertTriangle } from "lucide-react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { providerApi } from "../../../api/modules/provider";
@@ -92,8 +92,6 @@ export default function ModelSelector() {
   const { selectedAgent } = useAgentStore();
   const { message } = useAppMessage();
 
-  const [showMoreFree, setShowMoreFree] = useState(false);
-  const moreContentRef = useRef<HTMLDivElement>(null);
   const [expandedModels, setExpandedModels] = useState<Record<string, number>>(
     {},
   );
@@ -432,16 +430,6 @@ export default function ModelSelector() {
     }
   };
 
-  const handleOAuthConnect = (provider: EligibleProvider) => {
-    setOpen(false);
-    setOauthModal({
-      open: true,
-      providerId: provider.id,
-      providerName: provider.name,
-      pendingModelId: "",
-    });
-  };
-
   const toggleProviderCollapse = (providerId: string) => {
     setCollapsedProviders((prev) => {
       const next = new Set(prev);
@@ -541,62 +529,6 @@ export default function ModelSelector() {
             )}
           </>
         )}
-      </div>
-    );
-  };
-
-  const renderOAuthConnectEntry = (provider: EligibleProvider) => {
-    const isConnected = provider.has_api_key || provider.oauth_connected;
-    if (isConnected && provider.models.length > 0) return null;
-
-    return (
-      <div key={provider.id} className={styles.providerGroup}>
-        <div className={styles.providerHeader}>
-          <ProviderIcon providerId={provider.id} size={16} />
-          <span className={styles.providerHeaderName}>{provider.name}</span>
-        </div>
-        {isConnected && provider.models.length === 0 ? (
-          <div className={styles.connectHint}>
-            {t("modelSelector.noModelsDiscovered")}
-          </div>
-        ) : (
-          <div
-            className={styles.connectEntry}
-            onClick={() => handleOAuthConnect(provider)}
-          >
-            <LinkIcon size={14} className={styles.connectIcon} />
-            <span>
-              {t("modelSelector.connectToUse", { provider: provider.name })}
-            </span>
-          </div>
-        )}
-      </div>
-    );
-  };
-
-  const renderApiKeyEntry = (provider: EligibleProvider) => {
-    return (
-      <div key={provider.id} className={styles.providerGroup}>
-        <div className={styles.providerHeader}>
-          <ProviderIcon providerId={provider.id} size={16} />
-          <span className={styles.providerHeaderName}>{provider.name}</span>
-        </div>
-        <div
-          className={styles.connectEntry}
-          onClick={() => {
-            setOpen(false);
-            setConfigNavModal({
-              open: true,
-              providerId: provider.id,
-              providerName: provider.name,
-            });
-          }}
-        >
-          <Settings size={14} className={styles.connectIcon} />
-          <span>
-            {t("modelSelector.configureApiKey", { provider: provider.name })}
-          </span>
-        </div>
       </div>
     );
   };
