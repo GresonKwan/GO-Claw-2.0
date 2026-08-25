@@ -70,7 +70,7 @@ pub(crate) struct DesktopUpdate {
 
 #[tauri::command]
 pub(crate) async fn check_desktop_update(app: AppHandle) -> Result<Option<DesktopUpdate>, String> {
-    if !updates_allowed_for(app) {
+    if !updates_allowed_for(&app) {
         return Ok(None);
     }
     let update = check_installable_update(&app)
@@ -86,7 +86,7 @@ pub(crate) async fn check_desktop_update(app: AppHandle) -> Result<Option<Deskto
 
 #[tauri::command]
 pub(crate) fn install_desktop_update(app: AppHandle) -> Result<(), String> {
-    ensure_updates_allowed(app)?;
+    ensure_updates_allowed(&app)?;
     let guard = begin_update()?;
     tauri::async_runtime::spawn(async move {
         let _guard = guard;
@@ -128,7 +128,7 @@ async fn run_install(app: AppHandle) {
 
 #[tauri::command]
 pub(crate) fn download_desktop_update(app: AppHandle) -> Result<(), String> {
-    ensure_updates_allowed(app)?;
+    ensure_updates_allowed(&app)?;
     if !supports_cached_updates() {
         return Err("background update download is not supported on this platform".into());
     }
@@ -163,7 +163,7 @@ async fn run_background_download(app: AppHandle) {
 
 #[tauri::command]
 pub(crate) fn install_downloaded_update(app: AppHandle) -> Result<(), String> {
-    ensure_updates_allowed(app)?;
+    ensure_updates_allowed(&app)?;
     if !supports_cached_updates() {
         return Err("cached updates are not supported on this platform".into());
     }
@@ -351,7 +351,7 @@ async fn install_cached_macos(
 
 #[tauri::command]
 pub(crate) async fn check_cached_update(app: AppHandle) -> Result<Option<String>, String> {
-    if !updates_allowed_for(app) {
+    if !updates_allowed_for(&app) {
         return Ok(None);
     }
     if !supports_cached_updates() {
