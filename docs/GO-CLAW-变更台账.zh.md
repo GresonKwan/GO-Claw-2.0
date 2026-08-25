@@ -119,7 +119,7 @@
 |------|------|--------|------|
 | 交付模型默认改 `deepseek-v4-flash`（服务器 .env + provision_server 默认值 + .env.example + 文档） | 交付模型须在白名单内，解决选择器空列表风险 | 9b8c6750 | 服务器已重启生效 |
 | 模型白名单零命中兜底（回退去重后全量）+ 去重时已配置 provider 优先 | H1 解耦兜底 / H2 顺序隐患 | 9b8c6750 | ModelSelector.test.tsx |
-| 额度语义：`granted = 剩余 + 累计净消耗`（NewAPI 数据恒等式，严格覆盖充值；弃用初版 max(签发,剩余) 近似） | 进度条严格反映 New API 实际额度 | （待推送） | test_provision_server.py（含 quota_data）+ 服务器实测 granted=$8.00/percent=76（已部署） |
+| 额度语义：`granted = 剩余 + 累计净消耗`（NewAPI 数据恒等式，严格覆盖充值；弃用初版 max(签发,剩余) 近似） | 进度条严格反映 New API 实际额度 | 61647c04 | test_provision_server.py（含 quota_data）+ 服务器实测 granted=$8.00/percent=76（已部署） |
 | 微信扫码仅首次配置时强制 enabled | 不覆盖既有用户的启用选择；表单其它字段随提交保存 | 9b8c6750 | ChannelDrawer 逻辑审查 |
 | runtime 注释与实现对齐、额度条瞬态失败防闪烁、simple 白名单清理、删除 LoopInput 死代码 | 卫生 | 9b8c6750 | tsc + 前端 1203 全量 |
 | 在线更新计划并入 11 条审查修正（白名单打包防凭证泄露、portable.json 兼容、自装路径改道、三处密钥一致、缓存迁移、回滚独立通道、/D= 安全拼接、发布架构、安装锁、国内镜像、CI 共存） | review 抓出的硬伤/泄露风险 | — | docs/superpowers/plans/2026-08-25-go-claw-online-update.md 第六节 |
