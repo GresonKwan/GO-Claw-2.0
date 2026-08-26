@@ -87,6 +87,7 @@ pub fn run() {
                     return Err(std::io::Error::other(error).into());
                 }
             }
+            client::begin_client_launch(app.handle())?;
             backend::setup(app)?;
             tray::setup(app)?;
             Ok(())

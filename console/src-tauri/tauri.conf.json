@@ -12,6 +12,8 @@
     "withGlobalTauri": false,
     "windows": [
       {
+        "create": false,
+        "visible": false,
         "title": "GO CLAW",
         "width": 1280,
         "height": 800,

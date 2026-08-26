@@ -1,16 +1,13 @@
 //! Portable client launch policy after the Python sidecar becomes ready.
 
-use std::{
-    path::PathBuf,
-    sync::{
-        atomic::{AtomicBool, Ordering},
-        Mutex,
-    },
-};
+use std::{path::PathBuf, sync::Mutex};
 
 use tauri::Manager;
 
 use crate::{
+    client_readiness::{
+        BrowserFallbackReason, ClientPhase, ClientReadinessSnapshot, ReadinessMachine,
+    },
     external_link,
     portable::{self, ClientMode, PortableRuntime},
 };
@@ -27,26 +24,24 @@ enum LaunchStrategy {
     WebviewThenBrowser,
 }
 
-fn launch_strategy(mode: ClientMode) -> LaunchStrategy {
+fn launch_strategy(mode: Option<ClientMode>) -> LaunchStrategy {
     match mode {
-        ClientMode::Browser => LaunchStrategy::Browser,
-        ClientMode::Auto => LaunchStrategy::WebviewThenBrowser,
+        Some(ClientMode::Browser) => LaunchStrategy::Browser,
+        Some(ClientMode::Auto) | None => LaunchStrategy::WebviewThenBrowser,
     }
 }
 
 #[derive(Default)]
 pub(crate) struct ClientState {
-    port: Mutex<Option<u16>>,
-    browser_fallback: AtomicBool,
+    machine: Mutex<ReadinessMachine>,
 }
 
 impl ClientState {
-    fn set_port(&self, port: u16) {
-        *self.port.lock().expect("client state poisoned") = Some(port);
-    }
-
-    fn port(&self) -> Option<u16> {
-        *self.port.lock().expect("client state poisoned")
+    pub(crate) fn snapshot(&self) -> ClientReadinessSnapshot {
+        self.machine
+            .lock()
+            .expect("client state poisoned")
+            .snapshot()
     }
 }
 
@@ -60,36 +55,27 @@ pub(crate) fn open_browser(app: &tauri::AppHandle, port: u16) -> Result<(), Stri
 
 /// Bring the active client forward without starting a second backend.
 pub(crate) fn show_or_open(app: &tauri::AppHandle) {
-    if let Some(window) = app.get_webview_window("main") {
-        let _ = window.show();
-        let _ = window.unminimize();
-        let _ = window.set_focus();
-        return;
-    }
-
-    if app.state::<PortableRuntime>().state().is_some() {
-        let port = app
-            .state::<ClientState>()
-            .port()
-            .or_else(|| app.state::<crate::backend::BackendState>().port());
-        if let Some(port) = port {
-            if let Err(error) = open_browser(app, port) {
-                log::warn!("[portable-client] failed to reopen browser: {error}");
+    let snapshot = app.state::<ClientState>().snapshot();
+    match snapshot.phase {
+        ClientPhase::DesktopActive => {
+            if let Some(window) = app.get_webview_window("main") {
+                let _ = window.show();
+                let _ = window.unminimize();
+                let _ = window.set_focus();
             }
         }
+        ClientPhase::BrowserFallback => {
+            if let Some(port) = snapshot.backend_port {
+                if let Err(error) = open_browser(app, port) {
+                    log::warn!("[desktop-client] failed to reopen browser: {error}");
+                }
+            }
+        }
+        _ => {}
     }
 }
 
-fn try_open_webview(app: &tauri::AppHandle, data_dir: PathBuf) -> Result<(), String> {
-    if let Some(window) = app.get_webview_window("main") {
-        window.show().map_err(|error| error.to_string())?;
-        let _ = window.unminimize();
-        window.set_focus().map_err(|error| error.to_string())?;
-        return Ok(());
-    }
-
-    std::fs::create_dir_all(&data_dir)
-        .map_err(|error| format!("cannot create {}: {error}", data_dir.display()))?;
+fn try_build_webview(app: &tauri::AppHandle, data_dir: Option<PathBuf>) -> Result<(), String> {
     let config = app
         .config()
         .app
@@ -97,50 +83,75 @@ fn try_open_webview(app: &tauri::AppHandle, data_dir: PathBuf) -> Result<(), Str
         .first()
         .cloned()
         .ok_or_else(|| "main window config is missing".to_string())?;
-    tauri::WebviewWindowBuilder::from_config(app, &config)
-        .map_err(|error| error.to_string())?
-        .data_directory(data_dir)
+    let mut builder = tauri::WebviewWindowBuilder::from_config(app, &config)
+        .map_err(|error| error.to_string())?;
+    if let Some(data_dir) = data_dir {
+        std::fs::create_dir_all(&data_dir)
+            .map_err(|error| format!("cannot create {}: {error}", data_dir.display()))?;
+        builder = builder.data_directory(data_dir);
+    }
+    builder
         .build()
         .map(|_| ())
         .map_err(|error| error.to_string())
 }
 
-/// Launch the configured portable client once the current backend is ready.
-/// Installed mode is a no-op because its bootstrap WebView is created by Tauri.
-pub(crate) fn open_when_ready(app: tauri::AppHandle, port: u16) {
+/// Start one hidden desktop client launch before the backend sidecar starts.
+pub(crate) fn begin_client_launch(app: &tauri::AppHandle) -> Result<(), String> {
     let portable = app.state::<PortableRuntime>().state().cloned();
-    let Some(portable) = portable else {
-        return;
+    let strategy = launch_strategy(portable.as_ref().map(|state| state.client_mode));
+    let client_state = app.state::<ClientState>();
+    let launch_id = {
+        let mut machine = client_state.machine.lock().expect("client state poisoned");
+        let launch_id = machine.begin_launch().launch_id;
+        match strategy {
+            LaunchStrategy::Browser => {
+                machine
+                    .fallback(launch_id, BrowserFallbackReason::ExplicitBrowserMode)
+                    .map_err(|error| error.message)?;
+                return Ok(());
+            }
+            LaunchStrategy::WebviewThenBrowser => {
+                machine
+                    .bootstrap_creating(launch_id)
+                    .map_err(|error| error.message)?;
+            }
+        }
+        launch_id
     };
-    app.state::<ClientState>().set_port(port);
 
-    std::thread::spawn(move || match launch_strategy(portable.client_mode) {
-        LaunchStrategy::Browser => {
+    let data_dir = portable.map(|state| state.webview_dir);
+    if let Err(error) = try_build_webview(app, data_dir) {
+        let mut machine = client_state.machine.lock().expect("client state poisoned");
+        machine
+            .fallback(launch_id, BrowserFallbackReason::WebviewBuildFailed)
+            .map_err(|transition| transition.message)?;
+        log::warn!("[desktop-client] WebView construction failed: {error}");
+    }
+    Ok(())
+}
+
+/// Store backend readiness for the current launch. Browser fallback opens only
+/// after a port exists; the WebView path waits for the bootstrap handshake.
+pub(crate) fn open_when_ready(app: tauri::AppHandle, port: u16) {
+    let should_open_browser = {
+        let client_state = app.state::<ClientState>();
+        let mut machine = client_state.machine.lock().expect("client state poisoned");
+        let launch_id = machine.snapshot().launch_id;
+        if machine.backend_ready(launch_id, port).is_err() {
+            false
+        } else {
+            machine.reserve_browser_open(launch_id).unwrap_or(false)
+        }
+    };
+    if should_open_browser {
+        std::thread::spawn(move || {
             if let Err(error) = open_browser(&app, port) {
-                log::error!("[portable-client] failed to open browser: {error}");
+                log::error!("[desktop-client] browser fallback failed: {error}");
                 show_backend_startup_error(&app, &format!("无法打开系统浏览器：{error}"));
             }
-        }
-        LaunchStrategy::WebviewThenBrowser => {
-            if let Err(error) = try_open_webview(&app, portable.webview_dir) {
-                log::warn!(
-                    "[portable-client] WebView unavailable, falling back to browser: {error}"
-                );
-                app.state::<ClientState>()
-                    .browser_fallback
-                    .store(true, Ordering::SeqCst);
-                if let Err(browser_error) = open_browser(&app, port) {
-                    log::error!("[portable-client] browser fallback failed: {browser_error}");
-                    show_backend_startup_error(
-                        &app,
-                        &format!(
-                            "内置窗口不可用（{error}），且系统浏览器打开失败：{browser_error}"
-                        ),
-                    );
-                }
-            }
-        }
-    });
+        });
+    }
 }
 
 pub(crate) fn show_backend_startup_error(app: &tauri::AppHandle, message: &str) {
@@ -173,13 +184,14 @@ mod tests {
     }
 
     #[test]
-    fn client_mode_selects_expected_launch_strategy() {
+    fn installed_and_portable_client_modes_select_expected_launch_strategy() {
+        assert_eq!(launch_strategy(None), LaunchStrategy::WebviewThenBrowser);
         assert_eq!(
-            launch_strategy(ClientMode::Browser),
+            launch_strategy(Some(ClientMode::Browser)),
             LaunchStrategy::Browser
         );
         assert_eq!(
-            launch_strategy(ClientMode::Auto),
+            launch_strategy(Some(ClientMode::Auto)),
             LaunchStrategy::WebviewThenBrowser
         );
     }

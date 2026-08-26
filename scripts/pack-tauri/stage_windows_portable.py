@@ -204,7 +204,7 @@ def stage_portable(
             )
     (stage_dir / "portable.json").write_text(
         json.dumps(
-            {"schemaVersion": 1, "clientMode": "browser"},
+            {"schemaVersion": 1, "clientMode": "auto"},
             indent=2,
             ensure_ascii=False,
         )

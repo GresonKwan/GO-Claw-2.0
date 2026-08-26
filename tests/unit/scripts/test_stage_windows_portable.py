@@ -119,7 +119,7 @@ def test_stage_portable_layout_manifest_zip_and_checksum(tmp_path):
     assert (root / "GO-CLAW-Portable.exe").read_bytes() == b"MZ-test"
     assert json.loads((root / "portable.json").read_text("utf-8")) == {
         "schemaVersion": 1,
-        "clientMode": "browser",
+        "clientMode": "auto",
     }
     assert output.zip_path.name == "GO-CLAW-Portable-2.0.1-Windows-x64.zip"
     expected_digest = hashlib.sha256(output.zip_path.read_bytes()).hexdigest()

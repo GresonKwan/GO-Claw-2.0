@@ -44,7 +44,7 @@ struct PortableManifest {
 }
 
 fn default_client_mode() -> ClientMode {
-    ClientMode::Browser
+    ClientMode::Auto
 }
 
 #[derive(Clone, Debug)]
@@ -200,6 +200,21 @@ mod tests {
         assert_eq!(state.cache_dir, temp.path().join("cache"));
         assert_eq!(state.webview_dir, temp.path().join("cache/webview2"));
         assert_eq!(state.client_mode, ClientMode::Browser);
+    }
+
+    #[test]
+    fn omitted_client_mode_defaults_to_auto() {
+        let temp = tempfile::tempdir().unwrap();
+        let exe = temp.path().join("GO-CLAW-Portable.exe");
+        std::fs::write(
+            temp.path().join(PORTABLE_MANIFEST),
+            br#"{"schemaVersion":1}"#,
+        )
+        .unwrap();
+
+        let state = PortableState::detect_from_exe(&exe).unwrap().unwrap();
+
+        assert_eq!(state.client_mode, ClientMode::Auto);
     }
 
     #[test]
