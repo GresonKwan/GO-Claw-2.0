@@ -98,7 +98,10 @@ fn packaged_python_runtime(app: &tauri::AppHandle) -> Option<PathBuf> {
     let candidates = if cfg!(windows) {
         vec![base.join("python.exe")]
     } else {
-        vec![base.join("bin").join("python3"), base.join("bin").join("python")]
+        vec![
+            base.join("bin").join("python3"),
+            base.join("bin").join("python"),
+        ]
     };
     candidates.into_iter().find(|path| path.is_file())
 }

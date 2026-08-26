@@ -397,7 +397,6 @@ pub(crate) async fn check_cached_update(app: AppHandle) -> Result<Option<String>
     Ok(Some(meta.version))
 }
 
-
 // ---------------------------------------------------------------------------
 // Pinned-version install (rollback / install an explicit historical release)
 // ---------------------------------------------------------------------------
@@ -459,13 +458,12 @@ async fn download_pinned_bytes(app: &AppHandle, url: &str) -> Result<Vec<u8>, St
         .timeout(Duration::from_secs(600))
         .build()
         .map_err(|e| e.to_string())?;
-    let mut response = client
-        .get(url)
-        .send()
-        .await
-        .map_err(|e| e.to_string())?;
+    let mut response = client.get(url).send().await.map_err(|e| e.to_string())?;
     if !response.status().is_success() {
-        return Err(format!("update download failed: http {}", response.status()));
+        return Err(format!(
+            "update download failed: http {}",
+            response.status()
+        ));
     }
 
     let total = response.content_length();
