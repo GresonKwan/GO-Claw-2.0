@@ -1,11 +1,11 @@
 {
   "id": "qwen-image-tool",
-  "name": "Qwen-Image 图像生成与编辑工具",
-  "version": "1.0.0",
-  "description": "使用阿里云 Qwen-Image 模型生成与编辑图像",
+  "name": "图片生成",
+  "version": "1.1.0",
+  "description": "生成、编辑或融合图片",
   "description_i18n": {
-    "zh-CN": "使用阿里云 Qwen-Image 模型生成与编辑图像",
-    "en-US": "Generate and edit images using Alibaba Qwen-Image models"
+    "zh-CN": "生成、编辑或融合图片",
+    "en-US": "Generate, edit, or combine images"
   },
   "author": "GO CLAW Team",
   "entry": {
@@ -22,50 +22,13 @@
   "meta": {
     "tools": [
       {
-        "name": "generate_image_qwen",
-        "description": "使用 Qwen-Image 模型根据文字提示生成高质量图像",
+        "name": "generate_image",
+        "description": "根据文字提示生成图片",
         "icon": "🖼️",
         "enabled_by_default": true,
         "requires_config": false,
         "config_fields": [
           {
-            "name": "api_key",
-            "label": "DashScope API Key（可选）",
-            "type": "password",
-            "required": false,
-            "placeholder": "请输入 DashScope API Key",
-            "help": "未填写时使用 GO CLAW 首次导入的全局 DashScope API Key"
-          },
-          {
-            "name": "model",
-            "label": "模型",
-            "type": "select",
-            "required": false,
-            "default": "qwen-image-2.0",
-            "options": [
-              "qwen-image-2.0",
-              "qwen-image-2.0-pro",
-              "qwen-image-3.0",
-              "qwen-image-2.0-pro-2026-04-22",
-              "qwen-image-2.0-pro-2026-03-03",
-              "qwen-image-2.0-2026-03-03",
-              "qwen-image-max",
-              "qwen-image-max-2025-12-30",
-              "qwen-image-plus",
-              "qwen-image-plus-2026-01-09",
-              "qwen-image"
-            ],
-            "help": "选择图像生成模型（默认：qwen-image-2.0）"
-          },
-          {
-            "name": "endpoint",
-            "label": "API 地址",
-            "type": "text",
-            "required": false,
-            "placeholder": "https://dashscope.aliyuncs.com/api/v1",
-            "help": "北京区域：https://dashscope.aliyuncs.com/api/v1；新加坡区域：https://dashscope-intl.aliyuncs.com/api/v1；NewAPI 中转：填 https://你的newapi域名/v1"
-          },
-          {
             "name": "timeout",
             "label": "请求超时（秒）",
             "type": "number",
@@ -73,55 +36,18 @@
             "placeholder": "120",
             "min": 30,
             "max": 600,
-            "help": "HTTP 请求超时时间（默认：120 秒）"
+            "help": "请求超时时间（默认：120 秒）"
           }
         ]
       },
       {
-        "name": "edit_image_qwen",
-        "description": "使用 Qwen-Image 模型编辑图像或融合多张图像",
+        "name": "edit_image",
+        "description": "编辑或融合图片",
         "icon": "✏️",
         "enabled_by_default": true,
         "requires_config": false,
         "config_fields": [
           {
-            "name": "api_key",
-            "label": "DashScope API Key（可选）",
-            "type": "password",
-            "required": false,
-            "placeholder": "请输入 DashScope API Key",
-            "help": "未填写时使用 GO CLAW 首次导入的全局 DashScope API Key"
-          },
-          {
-            "name": "model",
-            "label": "模型",
-            "type": "select",
-            "required": false,
-            "default": "qwen-image-2.0",
-            "options": [
-              "qwen-image-2.0-pro",
-              "qwen-image-2.0-pro-2026-04-22",
-              "qwen-image-2.0-pro-2026-03-03",
-              "qwen-image-2.0",
-              "qwen-image-2.0-2026-03-03",
-              "qwen-image-edit-max",
-              "qwen-image-edit-max-2026-01-16",
-              "qwen-image-edit-plus",
-              "qwen-image-edit-plus-2025-12-15",
-              "qwen-image-edit-plus-2025-10-30",
-              "qwen-image-edit"
-            ],
-            "help": "选择图像编辑模型（默认：qwen-image-2.0-pro）"
-          },
-          {
-            "name": "endpoint",
-            "label": "API 地址",
-            "type": "text",
-            "required": false,
-            "placeholder": "https://dashscope.aliyuncs.com/api/v1",
-            "help": "北京区域：https://dashscope.aliyuncs.com/api/v1；新加坡区域：https://dashscope-intl.aliyuncs.com/api/v1；NewAPI 中转：填 https://你的newapi域名/v1"
-          },
-          {
             "name": "timeout",
             "label": "请求超时（秒）",
             "type": "number",
@@ -129,13 +55,10 @@
             "placeholder": "120",
             "min": 30,
             "max": 600,
-            "help": "HTTP 请求超时时间（默认：120 秒）"
+            "help": "请求超时时间（默认：120 秒）"
           }
         ]
       }
-    ],
-    "api_key_url": "https://bailian.console.aliyun.com/",
-    "api_key_hint": "请前往阿里云百炼控制台获取 DashScope API Key",
-    "model_url": "https://help.aliyun.com/zh/model-studio/qwen-image-api"
+    ]
   }
 }

@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 # pylint: disable=too-many-return-statements,too-many-branches
 # pylint: disable=too-many-statements,too-many-locals
-"""Wan 2.7 video generation tools."""
+"""Video generation tools."""
 
 import asyncio
 import base64
@@ -29,10 +29,10 @@ _DASHSCOPE_LOCK = threading.Lock()
 
 _DEFAULT_ENDPOINT = "https://dashscope.aliyuncs.com/api/v1"
 _DEFAULT_TIMEOUT = 600.0
-_MISSING_API_KEY_MESSAGE = "请在 GO CLAW 批次凭证或当前数字员工工具配置中填写 DashScope API Key"
-_TEXT_TO_VIDEO_MODEL = "wan2.7-t2v"
-_IMAGE_TO_VIDEO_MODEL = "wan2.7-i2v"
-_REFERENCE_TO_VIDEO_MODEL = "wan2.7-r2v"
+_MISSING_API_KEY_MESSAGE = "媒体服务尚未配置，请检查 GO CLAW 全局服务配置"
+_TEXT_TO_VIDEO_MODEL = "happyhorse-1.1-t2v"
+_IMAGE_TO_VIDEO_MODEL = "happyhorse-1.1-i2v"
+_REFERENCE_TO_VIDEO_MODEL = "happyhorse-1.1-r2v"
 
 # Polling interval (seconds) for OpenAI-compatible video tasks
 _OPENAI_POLL_INTERVAL = 5.0
@@ -50,9 +50,9 @@ _MODEL_UNAVAILABLE_MARKERS = (
     "url error",
 )
 
-_T2V_MODEL_FALLBACKS = ("wan2.7-t2v",)
-_I2V_MODEL_FALLBACKS = ("wan2.7-i2v",)
-_R2V_MODEL_FALLBACKS = ("wan2.7-r2v",)
+_T2V_MODEL_FALLBACKS = ()
+_I2V_MODEL_FALLBACKS = ()
+_R2V_MODEL_FALLBACKS = ()
 
 
 def _is_model_unavailable(message: str) -> bool:
@@ -124,28 +124,26 @@ def _resolve_image_url(path_or_url: str) -> str:
 
 def _extract_config(
     tool_config: dict,
-    default_model: str,
+    model: str,
 ) -> tuple[str, str, str, float, str]:
-    """Extract mode, api_key, base_url, timeout and model from config.
+    """Resolve global media credentials plus a fixed internal model.
 
     Args:
         tool_config: Tool configuration dict.
-        default_model: Fallback model name when not set in config.
+        model: Internal model selected for this media operation.
 
     Returns:
         Tuple of (mode, api_key, base_url, timeout, model). ``mode`` is
         "dashscope" (native SDK) or "openai" (OpenAI-compatible relay);
         ``base_url`` matches the resolved mode.
     """
-    mode, base_url, api_key = resolve_media_api(tool_config)
+    mode, base_url, api_key = resolve_media_api({})
 
     timeout_raw = tool_config.get("timeout")
     if timeout_raw is None or float(timeout_raw) <= 0:
         timeout = _DEFAULT_TIMEOUT
     else:
         timeout = float(timeout_raw)
-
-    model = tool_config.get("model", "") or default_model
 
     return mode, api_key, base_url, timeout, model
 
@@ -324,7 +322,7 @@ def _call_video_synthesis(
     return rsp
 
 
-async def text_to_video_wan(
+async def generate_video_from_text(
     prompt: str,
     resolution: str = "720P",
     ratio: str = "16:9",
@@ -333,11 +331,7 @@ async def text_to_video_wan(
     audio_url: str = "",
     prompt_extend: bool = True,
 ) -> ToolChunk:
-    """Generate a video from a text prompt using Wan 2.7.
-
-    Uses Alibaba Cloud's wan2.7-t2v model to create videos from
-    natural language descriptions. Supports multi-shot narratives,
-    custom audio, and negative prompts.
+    """Generate a video from a text prompt.
 
     Args:
         prompt (str):
@@ -365,11 +359,11 @@ async def text_to_video_wan(
     """
     video_lease = None
     try:
-        tool_config = get_tool_config("text_to_video_wan") or {}
+        tool_config = get_tool_config("generate_video_from_text") or {}
 
         mode, api_key, base_url, timeout, model = _extract_config(
             tool_config,
-            default_model=_TEXT_TO_VIDEO_MODEL,
+            model=_TEXT_TO_VIDEO_MODEL,
         )
         if not api_key:
             return _missing_api_key_result()
@@ -429,8 +423,6 @@ async def text_to_video_wan(
             return _quota_denied_result(video_lease.message)
 
         candidates = _model_candidates(model, _T2V_MODEL_FALLBACKS)
-        fallback_note = ""
-        last_unavailable = ""
         for candidate in candidates:
             try:
                 if mode == "openai":
@@ -497,13 +489,10 @@ async def text_to_video_wan(
                         )
 
                     video_url = rsp.output.video_url
-                if candidate != model:
-                    fallback_note = f"（默认模型 {model} 不可用，已自动改用 {candidate}）"
                 break
             except _ModelUnavailableError as exc:
-                last_unavailable = str(exc)
                 logger.warning(
-                    "video model %s unavailable, trying next fallback: %s",
+                    "configured video model %s is unavailable: %s",
                     candidate,
                     exc,
                 )
@@ -513,11 +502,7 @@ async def text_to_video_wan(
                 content=[
                     TextBlock(
                         type="text",
-                        text=(
-                            "Error: 所有候选视频模型均不可用："
-                            f"{'、'.join(candidates)}。"
-                            f"最后一次错误：{last_unavailable}"
-                        ),
+                        text="视频服务当前不可用，请稍后重试或联系管理员。",
                     ),
                 ],
             )
@@ -547,9 +532,7 @@ async def text_to_video_wan(
                 TextBlock(
                     type="text",
                     text=(
-                        f"Video generated successfully using "
-                        f"Wan 2.7{fallback_note}\n"
-                        f"Model: {model}\n"
+                        f"Video generated successfully\n"
                         f"Prompt: {prompt}\n"
                         f"Resolution: {resolution}, Ratio: {ratio}, "
                         f"Duration: {duration}s\n"
@@ -578,7 +561,7 @@ async def text_to_video_wan(
             video_lease.release()
 
 
-async def image_to_video_wan(
+async def generate_video_from_image(
     prompt: str,
     first_frame_url: str,
     last_frame_url: str = "",
@@ -588,7 +571,7 @@ async def image_to_video_wan(
     duration: int = 5,
     prompt_extend: bool = True,
 ) -> ToolChunk:
-    """Generate a video from images using Wan 2.7.
+    """Generate a video from images.
 
     Supports four modes based on the combination of optional inputs:
     - First-frame: provide only first_frame_url (+ optional audio)
@@ -625,11 +608,11 @@ async def image_to_video_wan(
     """
     video_lease = None
     try:
-        tool_config = get_tool_config("image_to_video_wan") or {}
+        tool_config = get_tool_config("generate_video_from_image") or {}
 
         mode, api_key, base_url, timeout, model = _extract_config(
             tool_config,
-            default_model=_IMAGE_TO_VIDEO_MODEL,
+            model=_IMAGE_TO_VIDEO_MODEL,
         )
         if not api_key:
             return _missing_api_key_result()
@@ -785,8 +768,6 @@ async def image_to_video_wan(
             return _quota_denied_result(video_lease.message)
 
         candidates = _model_candidates(model, _I2V_MODEL_FALLBACKS)
-        fallback_note = ""
-        last_unavailable = ""
         for candidate in candidates:
             try:
                 if mode == "openai":
@@ -853,13 +834,10 @@ async def image_to_video_wan(
                         )
 
                     video_url = rsp.output.video_url
-                if candidate != model:
-                    fallback_note = f"（默认模型 {model} 不可用，已自动改用 {candidate}）"
                 break
             except _ModelUnavailableError as exc:
-                last_unavailable = str(exc)
                 logger.warning(
-                    "video model %s unavailable, trying next fallback: %s",
+                    "configured video model %s is unavailable: %s",
                     candidate,
                     exc,
                 )
@@ -869,11 +847,7 @@ async def image_to_video_wan(
                 content=[
                     TextBlock(
                         type="text",
-                        text=(
-                            "Error: 所有候选视频模型均不可用："
-                            f"{'、'.join(candidates)}。"
-                            f"最后一次错误：{last_unavailable}"
-                        ),
+                        text="视频服务当前不可用，请稍后重试或联系管理员。",
                     ),
                 ],
             )
@@ -903,9 +877,7 @@ async def image_to_video_wan(
                 TextBlock(
                     type="text",
                     text=(
-                        f"Video generated successfully using "
-                        f"Wan 2.7{fallback_note}\n"
-                        f"Model: {model}\n"
+                        f"Video generated successfully\n"
                         f"Mode: {mode_desc}\n"
                         f"Prompt: {prompt}\n"
                         f"Resolution: {resolution}, Duration: {duration}s\n"
@@ -936,7 +908,7 @@ async def image_to_video_wan(
             video_lease.release()
 
 
-async def reference_to_video_wan(
+async def generate_video_from_reference(
     prompt: str,
     reference_images: List[str],
     reference_videos: Optional[List[str]] = None,
@@ -946,7 +918,7 @@ async def reference_to_video_wan(
     duration: int = 5,
     prompt_extend: bool = True,
 ) -> ToolChunk:
-    """Generate a video with character/object references using Wan 2.7.
+    """Generate a video with character/object references.
 
     Uses reference images and/or videos to maintain character
     consistency in the generated video. In the prompt, reference
@@ -988,11 +960,11 @@ async def reference_to_video_wan(
 
     video_lease = None
     try:
-        tool_config = get_tool_config("reference_to_video_wan") or {}
+        tool_config = get_tool_config("generate_video_from_reference") or {}
 
         mode, api_key, base_url, timeout, model = _extract_config(
             tool_config,
-            default_model=_REFERENCE_TO_VIDEO_MODEL,
+            model=_REFERENCE_TO_VIDEO_MODEL,
         )
         if not api_key:
             return _missing_api_key_result()
@@ -1129,8 +1101,6 @@ async def reference_to_video_wan(
             return _quota_denied_result(video_lease.message)
 
         candidates = _model_candidates(model, _R2V_MODEL_FALLBACKS)
-        fallback_note = ""
-        last_unavailable = ""
         for candidate in candidates:
             try:
                 if mode == "openai":
@@ -1209,13 +1179,10 @@ async def reference_to_video_wan(
                         )
 
                     video_url = rsp.output.video_url
-                if candidate != model:
-                    fallback_note = f"（默认模型 {model} 不可用，已自动改用 {candidate}）"
                 break
             except _ModelUnavailableError as exc:
-                last_unavailable = str(exc)
                 logger.warning(
-                    "video model %s unavailable, trying next fallback: %s",
+                    "configured video model %s is unavailable: %s",
                     candidate,
                     exc,
                 )
@@ -1225,11 +1192,7 @@ async def reference_to_video_wan(
                 content=[
                     TextBlock(
                         type="text",
-                        text=(
-                            "Error: 所有候选视频模型均不可用："
-                            f"{'、'.join(candidates)}。"
-                            f"最后一次错误：{last_unavailable}"
-                        ),
+                        text="视频服务当前不可用，请稍后重试或联系管理员。",
                     ),
                 ],
             )
@@ -1259,9 +1222,7 @@ async def reference_to_video_wan(
                 TextBlock(
                     type="text",
                     text=(
-                        f"Video generated successfully using "
-                        f"Wan 2.7{fallback_note}\n"
-                        f"Model: {model}\n"
+                        f"Video generated successfully\n"
                         f"Reference images: {len(reference_images)}, "
                         f"Reference videos: {len(reference_videos)}\n"
                         f"Prompt: {prompt}\n"

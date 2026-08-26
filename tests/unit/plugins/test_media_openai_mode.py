@@ -19,6 +19,29 @@ NEWAPI_TOOL_CONFIG = {
 }
 
 
+def _patch_newapi_media_config(
+    monkeypatch: pytest.MonkeyPatch,
+    module: ModuleType,
+) -> None:
+    """Route media through the global New API config, ignoring legacy fields."""
+
+    monkeypatch.setattr(
+        module,
+        "get_tool_config",
+        lambda _name: {
+            "api_key": "legacy-tool-key",
+            "endpoint": "https://legacy.example/v1",
+            "model": "legacy-model",
+        },
+    )
+
+    def fake_resolve(config: dict) -> tuple[str, str, str]:
+        assert config == {}
+        return "openai", "https://newapi.example/v1", "relay-key"
+
+    monkeypatch.setattr(module, "resolve_media_api", fake_resolve)
+
+
 def _load_tool_module(relative_path: str, module_name: str) -> ModuleType:
     module_path = REPOSITORY_ROOT / relative_path
     spec = importlib.util.spec_from_file_location(module_name, module_path)
@@ -234,11 +257,7 @@ async def test_generate_image_openai_mode_posts_to_images_generations(
         "plugins/tool/qwen-image/qwen_image_tool.py",
         "qwen_image_openai_generate",
     )
-    monkeypatch.setattr(
-        module,
-        "get_tool_config",
-        lambda _name: NEWAPI_TOOL_CONFIG,
-    )
+    _patch_newapi_media_config(monkeypatch, module)
     monkeypatch.setattr(module, "media_quota", _allowed_image_quota())
 
     async def fake_download(*_args: object, **_kwargs: object) -> Path:
@@ -263,7 +282,7 @@ async def test_generate_image_openai_mode_posts_to_images_generations(
     calls: list[tuple] = []
     _patch_httpx(monkeypatch, module, script, calls)
 
-    result = await module.generate_image_qwen(
+    result = await module.generate_image(
         "a red panda",
         size="1024*1024",
     )
@@ -274,7 +293,7 @@ async def test_generate_image_openai_mode_posts_to_images_generations(
     assert method == "POST"
     assert url == "https://newapi.example/v1/images/generations"
     assert payload == {
-        "model": "qwen-image-2.0",
+        "model": "qwen-image-3.0-pro",
         "prompt": "a red panda",
         "n": 1,
         "size": "1024*1024",
@@ -290,11 +309,7 @@ async def test_edit_image_openai_mode_sends_reference_images(
         "plugins/tool/qwen-image/qwen_image_tool.py",
         "qwen_image_openai_edit",
     )
-    monkeypatch.setattr(
-        module,
-        "get_tool_config",
-        lambda _name: NEWAPI_TOOL_CONFIG,
-    )
+    _patch_newapi_media_config(monkeypatch, module)
     monkeypatch.setattr(module, "media_quota", _allowed_image_quota())
 
     async def fake_download(*_args: object, **_kwargs: object) -> Path:
@@ -310,7 +325,7 @@ async def test_edit_image_openai_mode_sends_reference_images(
     calls: list[tuple] = []
     _patch_httpx(monkeypatch, module, script, calls)
 
-    result = await module.edit_image_qwen(
+    result = await module.edit_image(
         "merge 图一 and 图二",
         [
             "https://cdn.example/ref1.png",
@@ -322,7 +337,7 @@ async def test_edit_image_openai_mode_sends_reference_images(
     assert len(calls) == 1
     _method, url, payload, _headers = calls[0]
     assert url == "https://newapi.example/v1/images/generations"
-    assert payload["model"] == "qwen-image-2.0"
+    assert payload["model"] == "qwen-image-3.0-pro"
     assert payload["image"] == "https://cdn.example/ref1.png"
     assert payload["metadata"] == {"images": ["https://cdn.example/ref2.png"]}
 
@@ -335,18 +350,14 @@ async def test_edit_image_openai_mode_surfaces_upstream_error(
         "plugins/tool/qwen-image/qwen_image_tool.py",
         "qwen_image_openai_edit_error",
     )
-    monkeypatch.setattr(
-        module,
-        "get_tool_config",
-        lambda _name: NEWAPI_TOOL_CONFIG,
-    )
+    _patch_newapi_media_config(monkeypatch, module)
     monkeypatch.setattr(module, "media_quota", _allowed_image_quota())
 
     script = [_FakeResponse(status_code=400, text="invalid image field")]
     calls: list[tuple] = []
     _patch_httpx(monkeypatch, module, script, calls)
 
-    result = await module.edit_image_qwen(
+    result = await module.edit_image(
         "add a hat",
         ["https://cdn.example/ref.png"],
     )
@@ -370,11 +381,7 @@ def _prepare_video_module(
         "plugins/tool/wan27/wan27_tool.py",
         module_name,
     )
-    monkeypatch.setattr(
-        module,
-        "get_tool_config",
-        lambda _name: NEWAPI_TOOL_CONFIG,
-    )
+    _patch_newapi_media_config(monkeypatch, module)
     monkeypatch.setattr(module, "media_quota", _allowed_video_quota())
     monkeypatch.setattr(module, "_OPENAI_POLL_INTERVAL", 0)
 
@@ -419,7 +426,7 @@ async def test_text_to_video_openai_mode_create_poll_success(
         calls,
     )
 
-    result = await module.text_to_video_wan(
+    result = await module.generate_video_from_text(
         "a red panda dancing",
         negative_prompt="blur",
     )
@@ -429,7 +436,7 @@ async def test_text_to_video_openai_mode_create_poll_success(
     method, url, payload, headers = calls[0]
     assert method == "POST"
     assert url == "https://newapi.example/v1/video/generations"
-    assert payload["model"] == "wan2.7-t2v"
+    assert payload["model"] == "happyhorse-1.1-t2v"
     assert payload["prompt"] == "a red panda dancing"
     assert payload["duration"] == 5
     assert payload["metadata"]["negative_prompt"] == "blur"
@@ -468,7 +475,7 @@ async def test_image_to_video_openai_mode_includes_image_field(
         calls,
     )
 
-    result = await module.image_to_video_wan(
+    result = await module.generate_video_from_image(
         "animate the logo",
         "https://cdn.example/first.png",
         last_frame_url="https://cdn.example/last.png",
@@ -476,7 +483,7 @@ async def test_image_to_video_openai_mode_includes_image_field(
 
     assert result.state is ToolResultState.SUCCESS
     _method, _url, payload, _headers = calls[0]
-    assert payload["model"] == "wan2.7-i2v"
+    assert payload["model"] == "happyhorse-1.1-i2v"
     assert payload["image"] == "https://cdn.example/first.png"
     assert payload["metadata"]["last_frame"] == "https://cdn.example/last.png"
 
@@ -504,7 +511,7 @@ async def test_reference_to_video_openai_mode_splits_reference_images(
         calls,
     )
 
-    result = await module.reference_to_video_wan(
+    result = await module.generate_video_from_reference(
         "图1在图2的花园里散步",
         [
             "https://cdn.example/ref1.png",
@@ -515,7 +522,7 @@ async def test_reference_to_video_openai_mode_splits_reference_images(
 
     assert result.state is ToolResultState.SUCCESS
     _method, _url, payload, _headers = calls[0]
-    assert payload["model"] == "wan2.7-r2v"
+    assert payload["model"] == "happyhorse-1.1-r2v"
     assert payload["image"] == "https://cdn.example/ref1.png"
     assert payload["metadata"]["images"] == [
         "https://cdn.example/ref2.png",
@@ -546,34 +553,30 @@ async def test_video_openai_mode_failed_status_returns_friendly_error(
         calls,
     )
 
-    result = await module.text_to_video_wan("a red panda")
+    result = await module.generate_video_from_text("a red panda")
 
     assert result.state is ToolResultState.ERROR
     assert "content moderated" in result.content[0].text
 
 
 # ---------------------------------------------------------------------------
-# Model fallback on unavailable models
+# Model-unavailable handling (no automatic fallback)
 # ---------------------------------------------------------------------------
 
 
 @pytest.mark.asyncio
-async def test_generate_image_falls_back_when_default_model_unavailable(
+async def test_generate_image_does_not_fallback_when_model_unavailable(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     module = _load_tool_module(
         "plugins/tool/qwen-image/qwen_image_tool.py",
-        "qwen_image_fallback_generate",
+        "image_no_model_fallback",
     )
-    monkeypatch.setattr(
-        module,
-        "get_tool_config",
-        lambda _name: NEWAPI_TOOL_CONFIG,
-    )
+    _patch_newapi_media_config(monkeypatch, module)
     monkeypatch.setattr(module, "media_quota", _allowed_image_quota())
 
     async def fake_download(*_args: object, **_kwargs: object) -> Path:
-        return Path("/tmp/qwen-fallback.png")
+        return Path("/tmp/image-no-fallback.png")
 
     monkeypatch.setattr(module, "_download_image", fake_download)
 
@@ -582,23 +585,20 @@ async def test_generate_image_falls_back_when_default_model_unavailable(
             status_code=503,
             text=(
                 '{"error": {"code": "model_not_found", "message": '
-                '"No available channel for model qwen-image-2.0"}}'
+                '"No available channel for configured image model"}}'
             ),
-        ),
-        _FakeResponse(
-            payload={"data": [{"url": "https://cdn.example/fallback.png"}]},
         ),
     ]
     calls: list[tuple] = []
     _patch_httpx(monkeypatch, module, script, calls)
 
-    result = await module.generate_image_qwen("a red panda")
+    result = await module.generate_image("a red panda")
 
-    assert result.state is ToolResultState.SUCCESS
-    assert len(calls) == 2
-    assert calls[0][2]["model"] == "qwen-image-2.0"
-    assert calls[1][2]["model"] == "wan2.7-image"
-    assert "已自动改用 wan2.7-image" in result.content[-1].text
+    assert result.state is ToolResultState.ERROR
+    assert len(calls) == 1
+    assert calls[0][2]["model"] == "qwen-image-3.0-pro"
+    assert "已自动改用" not in result.content[0].text
+    assert "qwen" not in result.content[0].text.lower()
 
 
 @pytest.mark.asyncio
@@ -609,11 +609,7 @@ async def test_generate_image_does_not_fallback_on_content_error(
         "plugins/tool/qwen-image/qwen_image_tool.py",
         "qwen_image_no_fallback",
     )
-    monkeypatch.setattr(
-        module,
-        "get_tool_config",
-        lambda _name: NEWAPI_TOOL_CONFIG,
-    )
+    _patch_newapi_media_config(monkeypatch, module)
     monkeypatch.setattr(module, "media_quota", _allowed_image_quota())
 
     script = [
@@ -625,7 +621,7 @@ async def test_generate_image_does_not_fallback_on_content_error(
     calls: list[tuple] = []
     _patch_httpx(monkeypatch, module, script, calls)
 
-    result = await module.generate_image_qwen("a red panda")
+    result = await module.generate_image("a red panda")
 
     assert result.state is ToolResultState.ERROR
     assert len(calls) == 1
@@ -633,18 +629,14 @@ async def test_generate_image_does_not_fallback_on_content_error(
 
 
 @pytest.mark.asyncio
-async def test_video_reports_all_candidates_unavailable(
+async def test_video_does_not_fallback_when_model_unavailable(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     module = _load_tool_module(
         "plugins/tool/wan27/wan27_tool.py",
-        "wan27_fallback_exhausted",
+        "video_no_model_fallback",
     )
-    monkeypatch.setattr(
-        module,
-        "get_tool_config",
-        lambda _name: NEWAPI_TOOL_CONFIG,
-    )
+    _patch_newapi_media_config(monkeypatch, module)
     monkeypatch.setattr(module, "media_quota", _allowed_video_quota())
 
     script = [
@@ -652,15 +644,17 @@ async def test_video_reports_all_candidates_unavailable(
             status_code=503,
             text=(
                 '{"error": {"code": "model_not_found", "message": '
-                '"No available channel for model wan2.7-t2v"}}'
+                '"No available channel for configured video model"}}'
             ),
         ),
     ]
     calls: list[tuple] = []
     _patch_httpx(monkeypatch, module, script, calls)
 
-    result = await module.text_to_video_wan("a red panda dancing")
+    result = await module.generate_video_from_text("a red panda dancing")
 
     assert result.state is ToolResultState.ERROR
     assert len(calls) == 1
-    assert "所有候选视频模型均不可用" in result.content[0].text
+    assert calls[0][2]["model"] == "happyhorse-1.1-t2v"
+    assert "已自动改用" not in result.content[0].text
+    assert "happyhorse" not in result.content[0].text.lower()

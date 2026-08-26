@@ -20,7 +20,7 @@ from qwenpaw.plugins.dashscope_credentials import (
 )
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[3]
-MISSING_KEY_MESSAGE = "请在 GO CLAW 批次凭证或当前数字员工工具配置中填写 " "DashScope API Key"
+MISSING_KEY_MESSAGE = "媒体服务尚未配置，请检查 GO CLAW 全局服务配置"
 
 
 def _load_tool_module(relative_path: str, module_name: str) -> ModuleType:
@@ -120,12 +120,12 @@ def test_employee_dashscope_endpoint_wins_over_global_endpoint() -> None:
         (
             "plugins/tool/qwen-image/qwen_image_tool.py",
             "qwen_image_global_key",
-            {"default_model": "qwen-image-2.0"},
+            {"model": "qwen-image-3.0-pro"},
         ),
         (
             "plugins/tool/wan27/wan27_tool.py",
             "wan27_global_key",
-            {"default_model": "wan2.7-t2v"},
+            {"model": "happyhorse-1.1-t2v"},
         ),
     ],
 )
@@ -161,16 +161,16 @@ def test_both_media_plugins_use_the_shared_global_key_resolver(
         (
             "plugins/tool/qwen-image/qwen_image.py",
             {
-                "generate_image_qwen": ("使用 Qwen-Image 根据文字提示生成图像"),
-                "edit_image_qwen": "使用 Qwen-Image 编辑或融合图像",
+                "generate_image": "根据文字提示生成图片",
+                "edit_image": "编辑或融合图片",
             },
         ),
         (
             "plugins/tool/wan27/wan27.py",
             {
-                "text_to_video_wan": ("使用 Wan 2.7 根据文字提示生成视频"),
-                "image_to_video_wan": ("使用 Wan 2.7 根据图像生成视频"),
-                "reference_to_video_wan": ("使用 Wan 2.7 根据角色参考素材生成视频"),
+                "generate_video_from_text": "根据文字提示生成视频",
+                "generate_video_from_image": "根据图片生成视频",
+                "generate_video_from_reference": "根据参考素材生成视频",
             },
         ),
     ],
@@ -195,7 +195,10 @@ def test_media_plugin_registers_customer_ready_tool_descriptions(
         assert config.enabled is True
         assert config.description == expected_description
         assert any("\u4e00" <= char <= "\u9fff" for char in config.description)
-        assert "QwenPaw" not in config.description
+        assert all(
+            brand not in config.description.lower()
+            for brand in ("qwen", "wan", "happyhorse", "dashscope", "百炼")
+        )
 
 
 @pytest.mark.asyncio
@@ -233,8 +236,8 @@ async def test_qwen_image_never_requests_without_a_nonblank_api_key(
         unexpected_request,
     )
     invocations: dict[str, Callable[[], Awaitable[ToolChunk]]] = {
-        "generate": lambda: module.generate_image_qwen("a red panda"),
-        "edit": lambda: module.edit_image_qwen(
+        "generate": lambda: module.generate_image("a red panda"),
+        "edit": lambda: module.edit_image(
             "add a hat",
             ["https://example.com/reference.png"],
         ),
@@ -277,12 +280,12 @@ async def test_wan_never_requests_without_a_nonblank_api_key(
 
     monkeypatch.setattr(module, "_call_video_synthesis", unexpected_request)
     invocations: dict[str, Callable[[], Awaitable[ToolChunk]]] = {
-        "text": lambda: module.text_to_video_wan("a red panda"),
-        "image": lambda: module.image_to_video_wan(
+        "text": lambda: module.generate_video_from_text("a red panda"),
+        "image": lambda: module.generate_video_from_image(
             "animate the scene",
             "https://example.com/first-frame.png",
         ),
-        "reference": lambda: module.reference_to_video_wan(
+        "reference": lambda: module.generate_video_from_reference(
             "keep the character",
             ["https://example.com/reference.png"],
         ),
@@ -323,31 +326,31 @@ class _AllowedMediaQuota:
         (
             "plugins/tool/qwen-image/qwen_image_tool.py",
             "qwen_generate_quota",
-            "generate_image_qwen",
+            "generate_image",
             ("GO CLAW poster",),
         ),
         (
             "plugins/tool/qwen-image/qwen_image_tool.py",
             "qwen_edit_quota",
-            "edit_image_qwen",
+            "edit_image",
             ("add a headline", ["https://example.com/reference.png"]),
         ),
         (
             "plugins/tool/wan27/wan27_tool.py",
             "wan_text_quota",
-            "text_to_video_wan",
+            "generate_video_from_text",
             ("GO CLAW launch animation",),
         ),
         (
             "plugins/tool/wan27/wan27_tool.py",
             "wan_image_quota",
-            "image_to_video_wan",
+            "generate_video_from_image",
             ("animate the scene", "https://example.com/first.png"),
         ),
         (
             "plugins/tool/wan27/wan27_tool.py",
             "wan_reference_quota",
-            "reference_to_video_wan",
+            "generate_video_from_reference",
             ("keep 图1 consistent", ["https://example.com/reference.png"]),
         ),
     ],
@@ -389,7 +392,7 @@ async def test_media_quota_denial_never_dispatches_provider_request(
 
 
 @pytest.mark.asyncio
-async def test_qwen_generation_uses_requested_default_model_and_2k(
+async def test_image_generation_uses_fixed_token_plan_model_and_2k(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     module = _load_tool_module(
@@ -435,16 +438,16 @@ async def test_qwen_generation_uses_requested_default_model_and_2k(
     )
     monkeypatch.setattr(module, "_download_image", fake_download)
 
-    result = await module.generate_image_qwen("GO CLAW product poster")
+    result = await module.generate_image("GO CLAW product poster")
 
     assert result.state is ToolResultState.SUCCESS
     assert len(calls) == 1
-    assert calls[0]["model"] == "qwen-image-2.0"
+    assert calls[0]["model"] == "qwen-image-3.0-pro"
     assert calls[0]["size"] == "2048*2048"
     assert calls[0]["n"] == 1
 
 
-def test_qwen_manifest_uses_requested_default_model() -> None:
+def test_image_manifest_exposes_only_timeout_configuration() -> None:
     manifest = json.loads(
         (REPOSITORY_ROOT / "plugins/tool/qwen-image/plugin.json").read_text(
             encoding="utf-8",
@@ -453,17 +456,22 @@ def test_qwen_manifest_uses_requested_default_model() -> None:
     generate_tool = next(
         tool
         for tool in manifest["meta"]["tools"]
-        if tool["name"] == "generate_image_qwen"
+        if tool["name"] == "generate_image"
     )
-    model_field = next(
-        field
-        for field in generate_tool["config_fields"]
-        if field["name"] == "model"
+    assert [field["name"] for field in generate_tool["config_fields"]] == [
+        "timeout",
+    ]
+    customer_surface = {
+        "name": manifest["name"],
+        "description": manifest["description"],
+        "description_i18n": manifest["description_i18n"],
+        "tools": manifest["meta"]["tools"],
+    }
+    serialized = json.dumps(customer_surface, ensure_ascii=False).lower()
+    assert all(
+        hidden not in serialized
+        for hidden in ("qwen", "wan", "happyhorse", "dashscope", "百炼")
     )
-
-    assert model_field["default"] == "qwen-image-2.0"
-    assert "qwen-image-2.0" in model_field["options"]
-    assert "qwen-image-2.0" in model_field["help"]
 
 
 @pytest.mark.asyncio
@@ -471,23 +479,23 @@ def test_qwen_manifest_uses_requested_default_model() -> None:
     ("tool_name", "arguments", "expected_model"),
     [
         (
-            "text_to_video_wan",
+            "generate_video_from_text",
             ("GO CLAW launch animation",),
-            "wan2.7-t2v",
+            "happyhorse-1.1-t2v",
         ),
         (
-            "image_to_video_wan",
+            "generate_video_from_image",
             ("animate the logo", "https://example.com/first.png"),
-            "wan2.7-i2v",
+            "happyhorse-1.1-i2v",
         ),
         (
-            "reference_to_video_wan",
+            "generate_video_from_reference",
             ("keep 图1 consistent", ["https://example.com/reference.png"]),
-            "wan2.7-r2v",
+            "happyhorse-1.1-r2v",
         ),
     ],
 )
-async def test_wan_tools_use_requested_default_model_and_720p(
+async def test_video_tools_use_fixed_token_plan_models_and_720p(
     monkeypatch: pytest.MonkeyPatch,
     tool_name: str,
     arguments: tuple[object, ...],

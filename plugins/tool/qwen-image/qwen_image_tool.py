@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 # pylint: disable=too-many-return-statements,too-many-branches
 # pylint: disable=too-many-statements,too-many-locals
-"""Qwen-Image image generation and editing tools."""
+"""Image generation and editing tools."""
 
 import asyncio
 import base64
@@ -28,7 +28,7 @@ _DASHSCOPE_LOCK = threading.Lock()
 
 _DEFAULT_ENDPOINT = "https://dashscope.aliyuncs.com/api/v1"
 _DEFAULT_TIMEOUT = 120.0
-_MISSING_API_KEY_MESSAGE = "请在 GO CLAW 批次凭证或当前数字员工工具配置中填写 DashScope API Key"
+_MISSING_API_KEY_MESSAGE = "媒体服务尚未配置，请检查 GO CLAW 全局服务配置"
 
 _IMAGE_MIME_TYPES = {
     ".png": "image/png",
@@ -37,33 +37,9 @@ _IMAGE_MIME_TYPES = {
     ".webp": "image/webp",
 }
 
-_VALID_MODELS_GENERATE = {
-    "qwen-image-3.0",
-    "qwen-image-2.0-pro",
-    "qwen-image-2.0-pro-2026-04-22",
-    "qwen-image-2.0-pro-2026-03-03",
-    "qwen-image-2.0",
-    "qwen-image-2.0-2026-03-03",
-    "qwen-image-max",
-    "qwen-image-max-2025-12-30",
-    "qwen-image-plus",
-    "qwen-image-plus-2026-01-09",
-    "qwen-image",
-}
-
-_VALID_MODELS_EDIT = {
-    "qwen-image-2.0-pro",
-    "qwen-image-2.0-pro-2026-04-22",
-    "qwen-image-2.0-pro-2026-03-03",
-    "qwen-image-2.0",
-    "qwen-image-2.0-2026-03-03",
-    "qwen-image-edit-max",
-    "qwen-image-edit-max-2026-01-16",
-    "qwen-image-edit-plus",
-    "qwen-image-edit-plus-2025-12-15",
-    "qwen-image-edit-plus-2025-10-30",
-    "qwen-image-edit",
-}
+_IMAGE_MODEL = "qwen-image-3.0-pro"
+_VALID_MODELS_GENERATE = {_IMAGE_MODEL}
+_VALID_MODELS_EDIT = {_IMAGE_MODEL}
 
 
 class _ModelUnavailableError(Exception):
@@ -78,8 +54,8 @@ _MODEL_UNAVAILABLE_MARKERS = (
     "url error",
 )
 
-_GENERATE_MODEL_FALLBACKS = ("qwen-image-2.0", "wan2.7-image")
-_EDIT_MODEL_FALLBACKS = ("qwen-image-2.0",)
+_GENERATE_MODEL_FALLBACKS = ()
+_EDIT_MODEL_FALLBACKS = ()
 
 
 def _is_model_unavailable(message: str) -> bool:
@@ -140,28 +116,26 @@ def _resolve_image_url(path_or_url: str) -> str:
 
 def _extract_config(
     tool_config: dict,
-    default_model: str,
+    model: str,
 ) -> tuple[str, str, str, float, str]:
-    """Extract mode, api_key, base_url, timeout and model from config.
+    """Resolve global media credentials plus a fixed internal model.
 
     Args:
         tool_config: Tool configuration dict.
-        default_model: Fallback model name when not set in config.
+        model: Internal model selected for this media operation.
 
     Returns:
         Tuple of (mode, api_key, base_url, timeout, model). ``mode`` is
         "dashscope" (native SDK) or "openai" (OpenAI-compatible relay);
         ``base_url`` matches the resolved mode.
     """
-    mode, base_url, api_key = resolve_media_api(tool_config)
+    mode, base_url, api_key = resolve_media_api({})
 
     timeout_raw = tool_config.get("timeout")
     if timeout_raw is None or float(timeout_raw) <= 0:
         timeout = _DEFAULT_TIMEOUT
     else:
         timeout = float(timeout_raw)
-
-    model = tool_config.get("model", "") or default_model
 
     return mode, api_key, base_url, timeout, model
 
@@ -241,7 +215,7 @@ async def _generate_images_openai(
     must go through the OpenAI-compatible ``POST {base_url}/images/
     generations`` interface. For edit/fusion requests the reference
     image rides along as the ``image`` field (URL or base64 data URI),
-    which the upstream qwen-image-2.0 model accepts.
+    which the configured upstream image service accepts.
 
     Args:
         base_url: OpenAI-compatible base URL ending in ``/v1``.
@@ -363,22 +337,14 @@ def _parse_image_urls(response) -> List[str]:
     return urls
 
 
-async def generate_image_qwen(
+async def generate_image(
     prompt: str,
     size: str = "2048*2048",
     n: int = 1,
     negative_prompt: str = "",
     prompt_extend: bool = True,
 ) -> ToolChunk:
-    """Generate images from a text prompt using Qwen-Image models.
-
-    Uses Alibaba Cloud's Qwen-Image models for high-quality image
-    generation. Supports complex text rendering, multi-style artwork,
-    and precise semantic adherence.
-
-    The model is selected via the tool's configuration settings.
-    Available models: qwen-image-2.0 (default), qwen-image-2.0-pro,
-    qwen-image-max, qwen-image-plus, and dated snapshot versions.
+    """Generate images from a text prompt.
 
     When the configured endpoint points to an OpenAI-compatible relay
     (e.g. a NewAPI gateway, any non-aliyuncs.com host), the request is
@@ -388,17 +354,12 @@ async def generate_image_qwen(
     Args:
         prompt (str):
             Text description of the image to generate.
-            Supports Chinese and English, up to 800 characters
-            (qwen-image-plus/max series) or longer (2.0 series).
+            Supports Chinese and English prompts.
         size (str, optional):
             Output image size in "width*height" format.
-            For qwen-image-2.0 series: total pixels between
-            512*512 and 2048*2048.
             Recommended sizes: "2048*2048" (1:1, default),
             "2688*1536" (16:9), "1536*2688" (9:16),
             "2368*1728" (4:3).
-            For qwen-image-max/plus: use "1664*928" (16:9),
-            "1328*1328" (1:1), "928*1664" (9:16).
         n (int, optional):
             Number of images to generate (1-6 for 2.0 series,
             fixed 1 for max/plus). Default: 1.
@@ -411,11 +372,11 @@ async def generate_image_qwen(
         ToolChunk: Contains generated images and metadata.
     """
     try:
-        tool_config = get_tool_config("generate_image_qwen") or {}
+        tool_config = get_tool_config("generate_image") or {}
 
         mode, api_key, base_url, timeout, model = _extract_config(
             tool_config,
-            default_model="qwen-image-2.0",
+            model=_IMAGE_MODEL,
         )
         if not api_key:
             return _missing_api_key_result()
@@ -459,8 +420,6 @@ async def generate_image_qwen(
             return _quota_denied_result(quota_lease.message)
 
         candidates = _model_candidates(model, _GENERATE_MODEL_FALLBACKS)
-        fallback_note = ""
-        last_unavailable = ""
         for candidate in candidates:
             try:
                 if mode == "openai":
@@ -521,13 +480,10 @@ async def generate_image_qwen(
                         )
 
                     image_urls = _parse_image_urls(rsp)
-                if candidate != model:
-                    fallback_note = f"（默认模型 {model} 不可用，已自动改用 {candidate}）"
                 break
             except _ModelUnavailableError as exc:
-                last_unavailable = str(exc)
                 logger.warning(
-                    "image model %s unavailable, trying next fallback: %s",
+                    "configured image model %s is unavailable: %s",
                     candidate,
                     exc,
                 )
@@ -537,11 +493,7 @@ async def generate_image_qwen(
                 content=[
                     TextBlock(
                         type="text",
-                        text=(
-                            "Error: 所有候选图像模型均不可用："
-                            f"{'、'.join(candidates)}。"
-                            f"最后一次错误：{last_unavailable}"
-                        ),
+                        text="图片服务当前不可用，请稍后重试或联系管理员。",
                     ),
                 ],
             )
@@ -608,9 +560,7 @@ async def generate_image_qwen(
             TextBlock(
                 type="text",
                 text=(
-                    f"Generated {len(image_urls)} image(s) using "
-                    f"Qwen-Image{fallback_note}\n"
-                    f"Model: {model}\n"
+                    f"Generated {len(image_urls)} image(s)\n"
                     f"Prompt: {prompt}\n"
                     f"Size: {size}, Count: {n}\n"
                     f"Saved to: {', '.join(saved_paths)}"
@@ -636,7 +586,7 @@ async def generate_image_qwen(
         )
 
 
-async def edit_image_qwen(
+async def edit_image(
     prompt: str,
     reference_images: List[str],
     size: str = "",
@@ -644,7 +594,7 @@ async def edit_image_qwen(
     negative_prompt: str = "",
     prompt_extend: bool = True,
 ) -> ToolChunk:
-    """Edit or fuse images using Qwen-Image models.
+    """Edit or fuse images.
 
     Supports single-image editing (modify content, style transfer,
     text rendering) and multi-image fusion (combine elements from
@@ -655,11 +605,6 @@ async def edit_image_qwen(
     image is sent as the ``image`` field together with the prompt to
     ``POST {root}/v1/images/generations`` instead of the native
     DashScope SDK.
-
-    The model is selected via the tool's configuration settings.
-    Available models: qwen-image-2.0-pro (default), qwen-image-2.0,
-    qwen-image-edit-max, qwen-image-edit-plus, qwen-image-edit,
-    and dated snapshot versions.
 
     Args:
         prompt (str):
@@ -675,8 +620,7 @@ async def edit_image_qwen(
         size (str, optional):
             Output image size in "width*height" format.
             Leave empty to auto-detect based on input image.
-            For qwen-image-2.0 series: total pixels 512*512 to
-            2048*2048. Example: "1024*1024", "2048*2048".
+            Example: "1024*1024", "2048*2048".
         n (int, optional):
             Number of output images (1-6 for 2.0/edit-plus,
             fixed 1 for edit-max/edit). Default: 1.
@@ -703,11 +647,11 @@ async def edit_image_qwen(
                 ],
             )
 
-        tool_config = get_tool_config("edit_image_qwen") or {}
+        tool_config = get_tool_config("edit_image") or {}
 
         mode, api_key, base_url, timeout, model = _extract_config(
             tool_config,
-            default_model="qwen-image-2.0",
+            model=_IMAGE_MODEL,
         )
         if not api_key:
             return _missing_api_key_result()
@@ -772,14 +716,12 @@ async def edit_image_qwen(
             return _quota_denied_result(quota_lease.message)
 
         candidates = _model_candidates(model, _EDIT_MODEL_FALLBACKS)
-        fallback_note = ""
-        last_unavailable = ""
         for candidate in candidates:
             try:
                 if mode == "openai":
                     # OpenAI-compatible relay (e.g. NewAPI): send the reference
                     # image(s) with the prompt to /v1/images/generations.
-                    # Upstream qwen-image-2.0 accepts reference images
+                    # The upstream image service accepts reference images
                     # via ``image``; extras go to ``metadata.images``.
                     image_urls = await _generate_images_openai(
                         base_url=base_url,
@@ -837,13 +779,10 @@ async def edit_image_qwen(
                         )
 
                     image_urls = _parse_image_urls(rsp)
-                if candidate != model:
-                    fallback_note = f"（默认模型 {model} 不可用，已自动改用 {candidate}）"
                 break
             except _ModelUnavailableError as exc:
-                last_unavailable = str(exc)
                 logger.warning(
-                    "image edit model %s unavailable, trying next: %s",
+                    "configured image edit model %s is unavailable: %s",
                     candidate,
                     exc,
                 )
@@ -853,11 +792,7 @@ async def edit_image_qwen(
                 content=[
                     TextBlock(
                         type="text",
-                        text=(
-                            "Error: 所有候选图像编辑模型均不可用："
-                            f"{'、'.join(candidates)}。"
-                            f"最后一次错误：{last_unavailable}"
-                        ),
+                        text="图片编辑服务当前不可用，请稍后重试或联系管理员。",
                     ),
                 ],
             )
@@ -924,9 +859,7 @@ async def edit_image_qwen(
             TextBlock(
                 type="text",
                 text=(
-                    f"Edited {len(image_urls)} image(s) using "
-                    f"Qwen-Image{fallback_note}\n"
-                    f"Model: {model}\n"
+                    f"Edited {len(image_urls)} image(s)\n"
                     f"Prompt: {prompt}\n"
                     f"Reference images: {len(reference_images)}\n"
                     f"Saved to: {', '.join(saved_paths)}"

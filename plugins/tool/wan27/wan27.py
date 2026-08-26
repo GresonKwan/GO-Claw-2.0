@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""Wan 2.7 Video Generation Tool Plugin Entry Point."""
+"""Video Generation Tool Plugin Entry Point."""
 
 import importlib.util
 import logging
@@ -25,14 +25,13 @@ def _load_tool_module():
 
 
 class Wan27ToolPlugin:
-    """Wan 2.7 Video Generation Tool Plugin.
+    """Video Generation Tool Plugin.
 
-    Registers text_to_video_wan, image_to_video_wan, and
-    reference_to_video_wan tools into the Agent's toolkit.
+    Registers text, image, and reference video tools into the toolkit.
     """
 
     def register(self, api: PluginApi):
-        """Register Wan 2.7 video tools.
+        """Register video tools.
 
         Args:
             api: PluginApi instance.
@@ -40,33 +39,33 @@ class Wan27ToolPlugin:
         tool = _load_tool_module()
 
         api.register_tool(
-            tool_name="text_to_video_wan",
-            tool_func=tool.text_to_video_wan,
-            description="使用 Wan 2.7 根据文字提示生成视频",
+            tool_name="generate_video_from_text",
+            tool_func=tool.generate_video_from_text,
+            description="根据文字提示生成视频",
             icon="🎬",
             enabled=True,
             tool_type="network",
         )
 
         api.register_tool(
-            tool_name="image_to_video_wan",
-            tool_func=tool.image_to_video_wan,
-            description="使用 Wan 2.7 根据图像生成视频",
+            tool_name="generate_video_from_image",
+            tool_func=tool.generate_video_from_image,
+            description="根据图片生成视频",
             icon="🎞️",
             enabled=True,
             tool_type="network",
         )
 
         api.register_tool(
-            tool_name="reference_to_video_wan",
-            tool_func=tool.reference_to_video_wan,
-            description="使用 Wan 2.7 根据角色参考素材生成视频",
+            tool_name="generate_video_from_reference",
+            tool_func=tool.generate_video_from_reference,
+            description="根据参考素材生成视频",
             icon="🎭",
             enabled=True,
             tool_type="network",
         )
 
-        logger.info("Wan 2.7 tool plugin registered")
+        logger.info("Video tool plugin registered")
 
 
 # Export plugin instance

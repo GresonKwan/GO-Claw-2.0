@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""Qwen-Image Tool Plugin Entry Point."""
+"""Image Tool Plugin Entry Point."""
 
 import importlib.util
 import logging
@@ -25,14 +25,13 @@ def _load_tool_module():
 
 
 class QwenImageToolPlugin:
-    """Qwen-Image Tool Plugin.
+    """Image Tool Plugin.
 
-    Registers generate_image_qwen and edit_image_qwen tools into
-    the Agent's toolkit.
+    Registers image generation and editing tools into the toolkit.
     """
 
     def register(self, api: PluginApi):
-        """Register Qwen-Image tools.
+        """Register image tools.
 
         Args:
             api: PluginApi instance.
@@ -40,24 +39,24 @@ class QwenImageToolPlugin:
         tool = _load_tool_module()
 
         api.register_tool(
-            tool_name="generate_image_qwen",
-            tool_func=tool.generate_image_qwen,
-            description="使用 Qwen-Image 根据文字提示生成图像",
+            tool_name="generate_image",
+            tool_func=tool.generate_image,
+            description="根据文字提示生成图片",
             icon="🖼️",
             enabled=True,
             tool_type="network",
         )
 
         api.register_tool(
-            tool_name="edit_image_qwen",
-            tool_func=tool.edit_image_qwen,
-            description="使用 Qwen-Image 编辑或融合图像",
+            tool_name="edit_image",
+            tool_func=tool.edit_image,
+            description="编辑或融合图片",
             icon="✏️",
             enabled=True,
             tool_type="network",
         )
 
-        logger.info("Qwen-Image tool plugin registered")
+        logger.info("Image tool plugin registered")
 
 
 # Export plugin instance
