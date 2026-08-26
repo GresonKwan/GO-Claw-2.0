@@ -82,6 +82,24 @@ def _validate_dist(dist: Path, repository_root: Path | None) -> Path:
     return resolved
 
 
+def _read_updater_pubkey(repository_root: Path) -> str:
+    config_path = (
+        repository_root
+        / "console"
+        / "src-tauri"
+        / "tauri.conf.json"
+    )
+    try:
+        config_path = _require_file(config_path, "Tauri updater config")
+        payload = json.loads(config_path.read_text(encoding="utf-8"))
+        pubkey = payload["plugins"]["updater"]["pubkey"]
+    except (json.JSONDecodeError, KeyError, TypeError) as exc:
+        raise ValueError("Tauri updater pubkey is structurally invalid") from exc
+    if not isinstance(pubkey, str) or not pubkey.strip():
+        raise ValueError("Tauri updater pubkey is structurally invalid")
+    return pubkey.strip()
+
+
 def _tree_size(root: Path) -> int:
     return sum(
         path.stat().st_size for path in root.rglob("*") if path.is_file()
@@ -181,27 +199,14 @@ def stage_portable(
             provision_file,
             credentials_dir / "provision.json",
         )
-    # 在线更新验签公钥随包分发（公钥非密，与 tauri.conf.json 同源）；
-    # 配置缺失时跳过，后端回退到环境变量。
-    tauri_conf = (
-        repository_root / "console" / "src-tauri" / "tauri.conf.json"
-        if repository_root is not None
-        else None
-    )
-    if tauri_conf is not None and tauri_conf.is_file():
-        updater = (
-            json.loads(
-                tauri_conf.read_text(encoding="utf-8"),
-            )
-            .get("plugins", {})
-            .get("updater", {})
+    # 在线更新验签公钥随包分发（公钥非密，与 tauri.conf.json 同源）。
+    # 正式仓库打包必须 fail closed，避免生成无信任根的 Full ZIP。
+    if repository_root is not None:
+        pubkey = _read_updater_pubkey(repository_root)
+        (credentials_dir / "update-pubkey.txt").write_text(
+            pubkey + "\n",
+            encoding="ascii",
         )
-        pubkey = str(updater.get("pubkey", "")).strip()
-        if pubkey:
-            (credentials_dir / "update-pubkey.txt").write_text(
-                pubkey + "\n",
-                encoding="ascii",
-            )
     (stage_dir / "portable.json").write_text(
         json.dumps(
             {"schemaVersion": 1, "clientMode": "auto"},

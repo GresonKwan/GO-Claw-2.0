@@ -85,11 +85,30 @@ function shouldCreateUpdaterArtifacts() {
   return Boolean(process.env.TAURI_SIGNING_PRIVATE_KEY?.trim());
 }
 
+function resolveUpdaterPubkey(baseUpdater, createUpdaterArtifacts) {
+  const trackedPubkey = baseUpdater.pubkey.trim();
+  const ciPubkey = process.env.TAURI_UPDATER_PUBKEY?.trim();
+  if (createUpdaterArtifacts && !ciPubkey) {
+    throw new Error(
+      "TAURI_UPDATER_PUBKEY is required when signing updater artifacts",
+    );
+  }
+  if (ciPubkey && ciPubkey !== trackedPubkey) {
+    throw new Error(
+      "TAURI_UPDATER_PUBKEY does not match plugins.updater.pubkey in tauri.conf.json",
+    );
+  }
+  return trackedPubkey;
+}
+
 function writeTauriVersionConfig(file, version) {
   const baseUpdater = readBaseUpdaterConfig();
-  const pubkey = process.env.TAURI_UPDATER_PUBKEY?.trim() || baseUpdater.pubkey;
   const endpoints = readUpdaterEndpoints(baseUpdater);
   const createUpdaterArtifacts = shouldCreateUpdaterArtifacts();
+  const pubkey = resolveUpdaterPubkey(
+    baseUpdater,
+    createUpdaterArtifacts,
+  );
   const config = {
     version,
     ...(createUpdaterArtifacts
@@ -107,13 +126,7 @@ function writeTauriVersionConfig(file, version) {
     },
   };
   fs.writeFileSync(file, `${JSON.stringify(config, null, 2)}\n`);
-  console.log(
-    `Using updater pubkey from ${
-      process.env.TAURI_UPDATER_PUBKEY?.trim()
-        ? "TAURI_UPDATER_PUBKEY"
-        : "tauri.conf.json"
-    }`,
-  );
+  console.log("Verified updater pubkey against tracked tauri.conf.json");
   if (process.env.TAURI_UPDATER_ENDPOINTS?.trim()) {
     console.log("Using updater endpoints from TAURI_UPDATER_ENDPOINTS");
   }

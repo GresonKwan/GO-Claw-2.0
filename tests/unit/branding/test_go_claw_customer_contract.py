@@ -120,8 +120,8 @@ PACKAGING_CONSUMER_TOKEN_CONTRACTS: dict[
             'pkill -9 -f "QwenPaw Desktop"',
         ),
         "required": (
-            "GO-CLAW-Portable-Windows-${{ steps.version.outputs.version }}",
-            "dist/GO-CLAW-Portable-*-Windows-x64.zip",
+            "GO-CLAW-Windows-x64-Full-${{ steps.version.outputs.version }}",
+            "dist/GO-CLAW-Windows-x64-Full.zip",
             'Get-Process -Name "GO-CLAW-Portable", "qwenpaw-desktop"',
             'pkill -f "GO CLAW"',
             'pkill -9 -f "GO CLAW"',

@@ -28,6 +28,22 @@ VALID_DASHSCOPE_KEY = VALID_KEY_PREFIX + VALID_KEY_SUFFIX
 EXAMPLE_DASHSCOPE_BASE_URL = "https://example.invalid/compatible-mode/v1"
 
 
+def test_updater_pubkey_reader_is_fail_closed(tmp_path):
+    with pytest.raises(FileNotFoundError, match="Tauri updater config"):
+        MODULE._read_updater_pubkey(tmp_path)
+
+
+def test_updater_pubkey_reader_returns_tracked_value(tmp_path):
+    config = tmp_path / "console/src-tauri/tauri.conf.json"
+    config.parent.mkdir(parents=True)
+    config.write_text(
+        json.dumps({"plugins": {"updater": {"pubkey": "tracked-key"}}}),
+        encoding="utf-8",
+    )
+
+    assert MODULE._read_updater_pubkey(tmp_path) == "tracked-key"
+
+
 def _write_runtime_layout(binaries: Path) -> None:
     for relative in (
         "qwenpaw-backend/qwenpaw-backend.exe",
@@ -228,12 +244,27 @@ def test_windows_workflow_materializes_batch_credentials_from_secrets():
     workflow = (
         Path(__file__).parents[3] / ".github/workflows/desktop-build.yml"
     ).read_text(encoding="utf-8")
-    assert "GO_CLAW_LLM_API_KEY" in workflow
+    assert "GO_CLAW_LLM_API_KEY" not in workflow
     assert "GO_CLAW_DASHSCOPE_API_KEY" in workflow
+    assert "GO_CLAW_PROVISION_URL" not in workflow
+    assert "GO_CLAW_PROVISION_HMAC_SECRET" not in workflow
     assert '"$configDir/credentials.json"' in workflow
     assert "Invoke-RestMethod" in workflow
     assert "TrimEnd('/'))/models\"" in workflow
-    assert 'notcontains "qwen-image-3.0"' in workflow
+    assert 'baseUrl = "https://goclaw.host:8443/v1"' in workflow
+    assert 'compatibleBaseUrl = "https://goclaw.host:8443/v1"' in workflow
+    for model_id in (
+        "deepseek-v4-flash-0731",
+        "qwen3.7-plus",
+        "qwen3.8-max",
+        "qwen-image-3.0-pro",
+        "happyhorse-1.1-t2v",
+        "happyhorse-1.1-i2v",
+        "happyhorse-1.1-r2v",
+    ):
+        assert f'"{model_id}"' in workflow
+    assert "GO-CLAW-Windows-x64-Full.zip" in workflow
+    assert "dist/GO-CLAW-Windows-x64-Full.zip" in workflow
 
 
 def test_stage_refuses_repository_root_as_dist(tmp_path):

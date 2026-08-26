@@ -86,82 +86,59 @@ jobs:
           }
           New-Item -ItemType Directory -Force -Path dist | Out-Null
 
-      - name: Materialize optional GO CLAW batch credentials
+      - name: Materialize required GO CLAW Full ZIP credentials
         shell: pwsh
         env:
-          GO_CLAW_LLM_API_KEY: ${{ secrets.GO_CLAW_LLM_API_KEY }}
           GO_CLAW_DASHSCOPE_API_KEY: ${{ secrets.GO_CLAW_DASHSCOPE_API_KEY }}
         run: |
-          if (
-            [string]::IsNullOrWhiteSpace($env:GO_CLAW_LLM_API_KEY) -or
-            [string]::IsNullOrWhiteSpace($env:GO_CLAW_DASHSCOPE_API_KEY)
-          ) {
-            Write-Host "Batch credentials not configured; packaging template only"
-          } else {
-            $configDir = "scripts/pack-tauri/GO-CLAW-Config"
-            New-Item -ItemType Directory -Force -Path $configDir | Out-Null
-            $payload = [ordered]@{
-              schemaVersion = 1
-              batchId = "go-claw-20260815-batch-01"
-              llm = [ordered]@{
-                providerId = "deepseek"
-                modelId = "deepseek-v4-flash"
-                baseUrl = "https://api.tokenbyte.ai/v1"
-                apiKey = $env:GO_CLAW_LLM_API_KEY
-              }
-              dashscope = [ordered]@{
-                compatibleBaseUrl = "https://llm-y0my8cwttd6ojm5b.cn-beijing.maas.aliyuncs.com/compatible-mode/v1"
-                apiKey = $env:GO_CLAW_DASHSCOPE_API_KEY
-              }
-            }
-            $json = $payload | ConvertTo-Json -Depth 4
-            [IO.File]::WriteAllText(
-              "$configDir/credentials.json",
-              $json,
-              [Text.UTF8Encoding]::new($false)
-            )
-            $headers = @{
-              Authorization = "Bearer $($payload.dashscope.apiKey)"
-            }
-            $modelsUrl = "$($payload.dashscope.compatibleBaseUrl.TrimEnd('/'))/models"
-            $models = Invoke-RestMethod `
-              -Method Get `
-              -Uri $modelsUrl `
-              -Headers $headers `
-              -TimeoutSec 30
-            $modelIds = @($models.data | ForEach-Object { $_.id })
-            if ($modelIds -notcontains "qwen-image-3.0") {
-              throw "DashScope credential is valid but qwen-image-3.0 is unavailable"
-            }
-            Write-Host "DashScope credential preflight passed"
-            Write-Host "Batch credentials staged without displaying secret values"
+          if ([string]::IsNullOrWhiteSpace($env:GO_CLAW_DASHSCOPE_API_KEY)) {
+            throw "GO_CLAW_DASHSCOPE_API_KEY is required for the Full ZIP"
           }
-
-      - name: Materialize optional GO CLAW provision config
-        shell: pwsh
-        env:
-          GO_CLAW_PROVISION_URL: ${{ secrets.GO_CLAW_PROVISION_URL }}
-          GO_CLAW_PROVISION_HMAC_SECRET: ${{ secrets.GO_CLAW_PROVISION_HMAC_SECRET }}
-        run: |
-          if (
-            [string]::IsNullOrWhiteSpace($env:GO_CLAW_PROVISION_URL) -or
-            [string]::IsNullOrWhiteSpace($env:GO_CLAW_PROVISION_HMAC_SECRET)
-          ) {
-            Write-Host "Provision config not configured; skipping"
-          } else {
-            $configDir = "scripts/pack-tauri/GO-CLAW-Config"
-            New-Item -ItemType Directory -Force -Path $configDir | Out-Null
-            $payload = [ordered]@{
-              provisionUrl = $env:GO_CLAW_PROVISION_URL
-              hmacSecret = $env:GO_CLAW_PROVISION_HMAC_SECRET
+          $configDir = "scripts/pack-tauri/GO-CLAW-Config"
+          New-Item -ItemType Directory -Force -Path $configDir | Out-Null
+          $payload = [ordered]@{
+            schemaVersion = 1
+            batchId = "go-claw-main-${{ github.run_id }}"
+            llm = [ordered]@{
+              providerId = "deepseek"
+              modelId = "deepseek-v4-flash-0731"
+              baseUrl = "https://goclaw.host:8443/v1"
+              apiKey = $env:GO_CLAW_DASHSCOPE_API_KEY
             }
-            [IO.File]::WriteAllText(
-              "$configDir/provision.json",
-              ($payload | ConvertTo-Json),
-              [Text.UTF8Encoding]::new($false)
-            )
-            Write-Host "Provision config staged without displaying secret values"
+            dashscope = [ordered]@{
+              compatibleBaseUrl = "https://goclaw.host:8443/v1"
+              apiKey = $env:GO_CLAW_DASHSCOPE_API_KEY
+            }
           }
+          [IO.File]::WriteAllText(
+            "$configDir/credentials.json",
+            ($payload | ConvertTo-Json -Depth 4),
+            [Text.UTF8Encoding]::new($false)
+          )
+          $headers = @{ Authorization = "Bearer $($payload.dashscope.apiKey)" }
+          $modelsUrl = "$($payload.dashscope.compatibleBaseUrl.TrimEnd('/'))/models"
+          $models = Invoke-RestMethod `
+            -Method Get `
+            -Uri $modelsUrl `
+            -Headers $headers `
+            -TimeoutSec 30
+          $modelIds = @($models.data | ForEach-Object { $_.id })
+          $requiredModels = @(
+            "deepseek-v4-flash-0731",
+            "qwen3.7-plus",
+            "qwen3.8-max",
+            "qwen-image-3.0-pro",
+            "happyhorse-1.1-t2v",
+            "happyhorse-1.1-i2v",
+            "happyhorse-1.1-r2v"
+          )
+          foreach ($modelId in $requiredModels) {
+            if ($modelIds -notcontains $modelId) {
+              throw "GO CLAW credential preflight is missing required model: $modelId"
+            }
+          }
+          Write-Host "GO CLAW seven-model credential preflight passed"
+          Write-Host "Full ZIP credentials staged without displaying the key"
 
       - name: Build Tauri Windows package
         shell: pwsh
@@ -343,14 +320,42 @@ jobs:
           name: QwenPaw-Desktop-Tauri-Windows-${{ steps.version.outputs.version }}
           path: dist/QwenPaw-Tauri-*-Windows-setup.exe
 
-      - name: Upload Tauri Windows portable artifact
-        if: always()
+      - name: Stage and validate single GO CLAW Full ZIP
+        shell: pwsh
+        run: |
+          $portable = @(Get-ChildItem dist -File -Filter "GO-CLAW-Portable-*-Windows-x64.zip")
+          if ($portable.Count -ne 1) {
+            throw "Expected exactly one portable ZIP, found $($portable.Count)"
+          }
+          $fullZip = "dist/GO-CLAW-Windows-x64-Full.zip"
+          Copy-Item -LiteralPath $portable[0].FullName -Destination $fullZip
+          Add-Type -AssemblyName System.IO.Compression.FileSystem
+          $archive = [IO.Compression.ZipFile]::OpenRead((Resolve-Path $fullZip))
+          try {
+            $names = @($archive.Entries | ForEach-Object { $_.FullName })
+            $roots = @($names | ForEach-Object { ($_ -split '/')[0] } | Sort-Object -Unique)
+            if ($roots.Count -ne 1) { throw "Full ZIP must contain exactly one version root" }
+            $root = $roots[0]
+            foreach ($required in @(
+              "$root/GO-CLAW-Portable.exe",
+              "$root/portable.json",
+              "$root/GO-CLAW-Config/credentials.json",
+              "$root/GO-CLAW-Config/update-pubkey.txt"
+            )) {
+              if ($names -notcontains $required) { throw "Full ZIP missing $required" }
+            }
+            if ($names -contains "$root/GO-CLAW-Config/provision.json") {
+              throw "Full ZIP must not contain provision.json"
+            }
+          } finally {
+            $archive.Dispose()
+          }
+
+      - name: Upload single GO CLAW Full ZIP
         uses: actions/upload-artifact@v4
         with:
-          name: GO-CLAW-Portable-Windows-${{ steps.version.outputs.version }}
-          path: |
-            dist/GO-CLAW-Portable-*-Windows-x64.zip
-            dist/GO-CLAW-Portable-*-Windows-x64.zip.sha256
+          name: GO-CLAW-Windows-x64-Full-${{ steps.version.outputs.version }}
+          path: dist/GO-CLAW-Windows-x64-Full.zip
           if-no-files-found: error
 
       - name: Upload Tauri Windows updater metadata
