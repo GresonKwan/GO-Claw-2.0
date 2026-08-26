@@ -35,16 +35,13 @@ const AgentConfigPage = lazyImportWithRetry("../../pages/Agent/Config");
 const SkillsPage = lazyImportWithRetry("../../pages/Agent/Skills");
 const SkillPoolPage = lazyImportWithRetry("../../pages/Settings/SkillPool");
 const ToolsPage = lazyImportWithRetry("../../pages/Agent/Tools");
-const WorkspacePage = lazyImportWithRetry("../../pages/Agent/Workspace");
 const MCPPage = lazyImportWithRetry("../../pages/Agent/MCP");
 const ACPPage = lazyImportWithRetry("../../pages/Agent/ACP");
-const ModelsPage = lazyImportWithRetry("../../pages/Settings/Models");
 const EnvironmentsPage = lazyImportWithRetry(
   "../../pages/Settings/Environments",
 );
 const SecurityPage = lazyImportWithRetry("../../pages/Settings/Security");
 const TokenUsagePage = lazyImportWithRetry("../../pages/Settings/TokenUsage");
-const AgentStatsPage = lazyImportWithRetry("../../pages/Settings/AgentStats");
 const VoiceTranscriptionPage = lazyImportWithRetry(
   "../../pages/Settings/VoiceTranscription",
 );
@@ -94,9 +91,7 @@ export const BUILTIN_ROUTES: Route[] = [
   { id: "core.mcp", path: "/mcp", component: MCPPage },
   { id: "core.acp", path: "/acp", component: ACPPage },
   { id: "core.acp-alias", path: "/ACP", component: ACPRedirect },
-  { id: "core.workspace", path: "/workspace", component: WorkspacePage },
   { id: "core.agents", path: "/agents", component: AgentsPage },
-  { id: "core.models", path: "/models", component: ModelsPage },
   {
     id: "core.environments",
     path: "/environments",
@@ -109,7 +104,6 @@ export const BUILTIN_ROUTES: Route[] = [
   },
   { id: "core.security", path: "/security", component: SecurityPage },
   { id: "core.token-usage", path: "/token-usage", component: TokenUsagePage },
-  { id: "core.agent-stats", path: "/agent-stats", component: AgentStatsPage },
   {
     id: "core.voice-transcription",
     path: "/voice-transcription",

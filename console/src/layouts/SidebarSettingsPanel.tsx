@@ -6,15 +6,9 @@ import { Select } from "antd";
 import {
   SparkSunLine,
   SparkMoonLine,
-  SparkChinese02Line,
-  SparkEnglish02Line,
-  SparkJapanLine,
-  SparkRusLine,
-  SparkPtLine,
   SparkFullscreenLine,
   SparkExitFullscreenLine,
 } from "@agentscope-ai/icons";
-import { languageApi } from "../api/modules/language";
 import { useTheme, type ThemeMode } from "../contexts/ThemeContext";
 import { useSidebarModeStore } from "../stores/sidebarModeStore";
 import { UpdateSection } from "./UpdateSection";
@@ -31,15 +25,6 @@ type CloseBehavior = "ask" | CloseAction;
 
 // ── Language config ────────────────────────────────────────────────────────
 
-const LANGS = [
-  { key: "en", label: "English", icon: <SparkEnglish02Line size={14} /> },
-  { key: "zh", label: "简体中文", icon: <SparkChinese02Line size={14} /> },
-  { key: "ja", label: "日本語", icon: <SparkJapanLine size={14} /> },
-  { key: "ru", label: "Русский", icon: <SparkRusLine size={14} /> },
-  { key: "pt-BR", label: "Português", icon: <SparkPtLine size={14} /> },
-];
-const KNOWN_KEYS = new Set(LANGS.map((l) => l.key));
-
 // ── Component ─────────────────────────────────────────────────────────────
 
 interface SidebarSettingsPanelProps {
@@ -49,22 +34,13 @@ interface SidebarSettingsPanelProps {
 export default function SidebarSettingsPanel({
   onClose,
 }: SidebarSettingsPanelProps) {
-  const { t, i18n } = useTranslation();
+  const { t } = useTranslation();
   const { themeMode, setThemeMode } = useTheme();
   const { mode: sidebarMode, toggleMode: toggleSidebarMode } =
     useSidebarModeStore();
   const [closeBehavior, setCloseBehavior] = React.useState<CloseBehavior>(() =>
     isTauriRuntime() ? getRememberedCloseAction() ?? "ask" : "ask",
   );
-
-  const raw = i18n.resolvedLanguage || i18n.language;
-  const currentLang = KNOWN_KEYS.has(raw) ? raw : raw.split("-")[0];
-
-  const changeLanguage = (lang: string) => {
-    i18n.changeLanguage(lang);
-    localStorage.setItem("language", lang);
-    languageApi.updateLanguage(lang).catch(() => {});
-  };
 
   const changeCloseBehavior = (value: CloseBehavior) => {
     if (value === "ask") {
@@ -100,26 +76,6 @@ export default function SidebarSettingsPanel({
   return (
     <div className={styles.panel}>
       {/* ── Language ─────────────────────────────────────── */}
-      <div className={styles.row}>
-        <span className={styles.label}>
-          {t("sidebar.settings.language", "Language")}
-        </span>
-        <div className={styles.options}>
-          {LANGS.map(({ key, label, icon }) => (
-            <button
-              key={key}
-              title={label}
-              className={`${styles.optBtn} ${
-                currentLang === key ? styles.optBtnActive : ""
-              }`}
-              onClick={() => changeLanguage(key)}
-            >
-              {icon}
-            </button>
-          ))}
-        </div>
-      </div>
-
       {/* ── Theme ────────────────────────────────────────── */}
       <div className={styles.row}>
         <span className={styles.label}>

@@ -137,6 +137,10 @@ describe("customer Header", () => {
     expect(screen.queryByText("GitHub")).not.toBeInTheDocument();
     expect(screen.queryByTitle("语言")).not.toBeInTheDocument();
     expect(screen.queryByTitle("文档资料")).not.toBeInTheDocument();
+    expect(screen.queryByText("代码")).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: /代码/ }),
+    ).not.toBeInTheDocument();
   });
 
   it("switches to the white GO CLAW logo in dark theme", async () => {

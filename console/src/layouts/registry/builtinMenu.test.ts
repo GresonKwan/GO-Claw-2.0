@@ -17,15 +17,12 @@ const HIDDEN = [
   "core.voice-transcription",
   "core.debug",
   "core.plugin-manager",
+  "core.workspace",
+  "core.agent-stats",
+  "core.models",
 ];
 
-const KEPT = [
-  "core.inbox",
-  "core.cron-jobs",
-  "core.workspace",
-  "core.skills",
-  "core.agent-stats",
-];
+const KEPT = ["core.inbox", "core.cron-jobs", "core.skills"];
 
 describe("GO CLAW customer menu", () => {
   it("hides over-technical and low-frequency entries", () => {

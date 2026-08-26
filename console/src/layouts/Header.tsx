@@ -1,6 +1,5 @@
 import { Layout, Space, Badge, Tooltip, Popover, message } from "antd";
 import ThemeToggleButton from "../components/ThemeToggleButton";
-import CodingModeToggle from "../components/CodingModeToggle";
 import { useTranslation } from "react-i18next";
 import { Button, Modal } from "@agentscope-ai/design";
 import styles from "./index.module.less";
@@ -313,9 +312,6 @@ export default function Header() {
         <Slot name="header.left" kind="fill" />
         <Space size="middle">
           <Slot name="header.right" kind="fill" />
-          <span className={styles.hideOnMobile}>
-            <CodingModeToggle />
-          </span>
           <div className={styles.headerDivider} />
           <ThemeToggleButton />
         </Space>

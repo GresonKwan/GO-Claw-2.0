@@ -70,11 +70,7 @@ const INBOX_BADGE_POLLING_MS = 6000;
 // ── Simple mode whitelist ─────────────────────────────────────────────────
 
 /** Menu item IDs that remain visible in simple sidebar mode (no groups). */
-const SIMPLE_MODE_WHITELIST = new Set([
-  "core.inbox",
-  "core.cron-jobs",
-  "core.models",
-]);
+const SIMPLE_MODE_WHITELIST = new Set(["core.inbox", "core.cron-jobs"]);
 
 /**
  * Flatten a MenuItem tree into a leaf-only list for simple sidebar mode.

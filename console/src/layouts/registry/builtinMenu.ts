@@ -69,6 +69,9 @@ const CUSTOMER_HIDDEN_MENU_IDS = new Set([
   "core.voice-transcription",
   "core.debug",
   "core.plugin-manager",
+  "core.workspace",
+  "core.agent-stats",
+  "core.models",
 ]);
 
 /** Menu visibility predicate for customer-hidden entries. */
@@ -150,6 +153,7 @@ export const BUILTIN_MENU: MenuItem[] = [
   },
   {
     id: "core.workspace",
+    visible: customerVisible("core.workspace"),
     location: "primary.agentScoped",
     parentId: "core.agent-group",
     label: navLabel("nav.workspace"),
@@ -208,6 +212,7 @@ export const BUILTIN_MENU: MenuItem[] = [
   },
   {
     id: "core.agent-stats",
+    visible: customerVisible("core.agent-stats"),
     location: "primary.agentScoped",
     parentId: "core.agent-group",
     label: navLabel("nav.agentStats"),
@@ -235,6 +240,7 @@ export const BUILTIN_MENU: MenuItem[] = [
   },
   {
     id: "core.models",
+    visible: customerVisible("core.models"),
     location: "primary.settings",
     parentId: "core.settings-group",
     label: navLabel("nav.models"),
