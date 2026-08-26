@@ -189,26 +189,24 @@ PACKAGING_CONSUMER_TOKEN_CONTRACTS: dict[
 STANDALONE_AGENT_PATTERN = re.compile(r"(?<![A-Za-z])Agent(?![A-Za-z])")
 SUSPECTED_API_KEY_PATTERN = re.compile(r"sk-[A-Za-z0-9_-]{16,}")
 CHINESE_CHARACTER_PATTERN = re.compile(r"[\u3400-\u9fff]")
-MISSING_DASHSCOPE_KEY_MESSAGE = (
-    "请在 GO CLAW 批次凭证或当前数字员工工具配置中填写 " "DashScope API Key"
-)
+MISSING_MEDIA_KEY_MESSAGE = "媒体服务尚未配置，请检查 GO CLAW 全局服务配置"
 MEDIA_PLUGIN_CONTRACTS = {
     "plugins/tool/qwen-image": {
         "id": "qwen-image-tool",
-        "product_name": "Qwen-Image",
-        "tool_names": ["generate_image_qwen", "edit_image_qwen"],
-        "config_names": {"api_key", "model", "endpoint", "timeout"},
+        "product_name": "图片生成",
+        "tool_names": ["generate_image", "edit_image"],
+        "config_names": {"timeout"},
         "tool_source": "qwen_image_tool.py",
     },
     "plugins/tool/wan27": {
         "id": "wan27-tool",
-        "product_name": "Wan 2.7",
+        "product_name": "视频生成",
         "tool_names": [
-            "text_to_video_wan",
-            "image_to_video_wan",
-            "reference_to_video_wan",
+            "generate_video_from_text",
+            "generate_video_from_image",
+            "generate_video_from_reference",
         ],
-        "config_names": {"api_key", "endpoint", "model", "timeout"},
+        "config_names": {"timeout"},
         "tool_source": "wan27_tool.py",
     },
 }
@@ -467,7 +465,7 @@ def test_bundled_media_plugin_manifests_are_customer_ready_and_keyless() -> (
 
         assert manifest["id"] == contract["id"]
         assert manifest["author"] == "GO CLAW Team"
-        assert contract["product_name"] in manifest["name"]
+        assert manifest["name"] == contract["product_name"]
         assert _contains_chinese(manifest["name"])
         assert _contains_chinese(manifest["description"])
         assert _contains_chinese(manifest["description_i18n"]["zh-CN"])
@@ -491,15 +489,20 @@ def test_bundled_media_plugin_manifests_are_customer_ready_and_keyless() -> (
             for field in fields.values():
                 assert _contains_chinese(field["label"])
                 assert _contains_chinese(field["help"])
-            api_key_field = fields["api_key"]
-            assert api_key_field["type"] == "password"
-            assert api_key_field["required"] is False
-            assert "GO CLAW 首次导入的全局 DashScope API Key" in (
-                api_key_field["help"]
-            )
-            assert "default" not in api_key_field
 
-        assert _contains_chinese(manifest["meta"]["api_key_hint"])
+        customer_surface = json.dumps(
+            {
+                "name": manifest["name"],
+                "description": manifest["description"],
+                "description_i18n": manifest["description_i18n"],
+                "tools": tools,
+            },
+            ensure_ascii=False,
+        ).lower()
+        assert all(
+            hidden not in customer_surface
+            for hidden in ("qwen", "wan", "happyhorse", "dashscope", "百炼")
+        )
         assert SUSPECTED_API_KEY_PATTERN.search(manifest_text) is None
 
 
@@ -508,7 +511,7 @@ def test_media_tools_expose_the_actionable_missing_key_message() -> None:
         tool_source = _read_customer_text(
             f"{plugin_dir}/{contract['tool_source']}",
         )
-        assert MISSING_DASHSCOPE_KEY_MESSAGE in tool_source
+        assert MISSING_MEDIA_KEY_MESSAGE in tool_source
         assert SUSPECTED_API_KEY_PATTERN.search(tool_source) is None
 
 

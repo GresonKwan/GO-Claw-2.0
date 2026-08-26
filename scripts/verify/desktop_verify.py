@@ -65,11 +65,11 @@ GO_CLAW_EMPLOYEES = (
     ("business-analysis", "商业分析"),
 )
 GO_CLAW_MEDIA_TOOLS = (
-    "generate_image_qwen",
-    "edit_image_qwen",
-    "text_to_video_wan",
-    "image_to_video_wan",
-    "reference_to_video_wan",
+    "generate_image",
+    "edit_image",
+    "generate_video_from_text",
+    "generate_video_from_image",
+    "generate_video_from_reference",
 )
 GO_CLAW_MEDIA_PLUGINS = ("qwen-image-tool", "wan27-tool")
 

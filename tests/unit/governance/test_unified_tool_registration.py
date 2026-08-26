@@ -126,7 +126,7 @@ class TestRegisterToolGovernance:
             )
 
     def test_snake_to_pascal(self):
-        assert snake_to_pascal("generate_image_qwen") == "GenerateImageQwen"
+        assert snake_to_pascal("generate_image") == "GenerateImage"
 
 
 class TestBuiltinDescriptorGovernance:
@@ -210,13 +210,13 @@ class TestPluginGovernanceIssue6114:
 
     def test_plugin_tools_not_denied_as_unregistered(self):
         plugin_tools = [
-            "generate_image_qwen",
-            "edit_image_qwen",
+            "generate_image",
+            "edit_image",
             "generate_image_gpt",
             "edit_image_gpt",
-            "text_to_video_wan",
-            "image_to_video_wan",
-            "reference_to_video_wan",
+            "generate_video_from_text",
+            "generate_video_from_image",
+            "generate_video_from_reference",
         ]
         for py_name in plugin_tools:
             # Idempotent when metadata matches (may already be registered).

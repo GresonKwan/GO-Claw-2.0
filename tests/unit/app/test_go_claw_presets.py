@@ -381,6 +381,94 @@ def test_completed_marker_means_deleted_specialist_is_not_recreated(
     assert not deleted_workspace.exists()
 
 
+def test_completed_marker_still_migrates_legacy_media_tool_names(
+    preset_env: PresetHarness,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    workspace = preset_env.add_existing_agent("legacy-media")
+    config_path = workspace / "agent.json"
+    payload = json.loads(config_path.read_text(encoding="utf-8"))
+    builtin_tools = payload.setdefault("tools", {}).setdefault(
+        "builtin_tools",
+        {},
+    )
+    builtin_tools.update(
+        {
+            "generate_image_qwen": {
+                "name": "generate_image_qwen",
+                "enabled": False,
+                "config": {"timeout": 321, "model": "legacy-model"},
+            },
+            "edit_image_qwen": {
+                "name": "edit_image_qwen",
+                "enabled": True,
+                "config": {},
+            },
+            "text_to_video_wan": {
+                "name": "text_to_video_wan",
+                "enabled": True,
+                "config": {"timeout": 654},
+            },
+            "generate_video_from_text": {
+                "name": "generate_video_from_text",
+                "enabled": False,
+                "config": {"timeout": 777},
+            },
+            "unrelated_tool": {
+                "name": "unrelated_tool",
+                "enabled": True,
+                "config": {"keep": "unchanged"},
+            },
+        },
+    )
+    config_path.write_text(
+        json.dumps(payload, ensure_ascii=False, indent=2),
+        encoding="utf-8",
+    )
+    preset_env.marker.parent.mkdir(parents=True, exist_ok=True)
+    preset_env.marker.write_text(
+        json.dumps(
+            {
+                "version": preset_migration.PRESET_VERSION,
+                "completedAt": "2026-08-26T00:00:00Z",
+            },
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(
+        preset_migration,
+        "install_go_claw_bundled_plugins",
+        lambda: (_ for _ in ()).throw(
+            AssertionError("valid marker must skip plugin installation"),
+        ),
+    )
+
+    assert preset_migration.ensure_go_claw_presets() is True
+    migrated = json.loads(config_path.read_text(encoding="utf-8"))
+    migrated_tools = migrated["tools"]["builtin_tools"]
+    assert "generate_image_qwen" not in migrated_tools
+    assert "edit_image_qwen" not in migrated_tools
+    assert "text_to_video_wan" not in migrated_tools
+    assert migrated_tools["generate_image"] == {
+        "name": "generate_image",
+        "enabled": False,
+        "config": {"timeout": 321, "model": "legacy-model"},
+    }
+    assert migrated_tools["edit_image"]["name"] == "edit_image"
+    assert migrated_tools["generate_video_from_text"]["config"] == {
+        "timeout": 777,
+    }
+    assert migrated_tools["unrelated_tool"] == {
+        "name": "unrelated_tool",
+        "enabled": True,
+        "config": {"keep": "unchanged"},
+    }
+
+    first_bytes = config_path.read_bytes()
+    assert preset_migration.ensure_go_claw_presets() is True
+    assert config_path.read_bytes() == first_bytes
+
+
 def test_failure_on_third_specialist_retries_only_missing_items(
     preset_env: PresetHarness,
     monkeypatch,

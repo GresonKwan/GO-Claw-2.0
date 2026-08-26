@@ -249,7 +249,7 @@ async def test_marker_skips_changed_source_and_preserves_user_changes(
     credential_env.write_payload()
     assert await credential_env.run() is True
     credential_env.profiles["default"].tools.builtin_tools[
-        "generate_image_qwen"
+        "generate_image"
     ].enabled = False
     first_updates = list(credential_env.manager.update_calls)
     changed = deepcopy(VALID_PAYLOAD)
@@ -259,7 +259,7 @@ async def test_marker_skips_changed_source_and_preserves_user_changes(
     assert credential_env.manager.update_calls == first_updates
     assert (
         not credential_env.profiles["default"]
-        .tools.builtin_tools["generate_image_qwen"]
+        .tools.builtin_tools["generate_image"]
         .enabled
     )
 

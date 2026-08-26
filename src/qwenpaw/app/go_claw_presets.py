@@ -47,6 +47,13 @@ _REQUIRED_PLUGIN_IDS = ("qwen-image-tool", "wan27-tool")
 _SPECIALIST_TEMP_LABEL = f"go-claw-{PRESET_VERSION}"
 _MIGRATION_LOCK_FILENAME = "go-claw-presets-v1.lock"
 _STAGING_SENTINEL_FILENAME = ".go-claw-presets-v1.staging.json"
+MEDIA_TOOL_RENAMES = {
+    "generate_image_qwen": "generate_image",
+    "edit_image_qwen": "edit_image",
+    "text_to_video_wan": "generate_video_from_text",
+    "image_to_video_wan": "generate_video_from_image",
+    "reference_to_video_wan": "generate_video_from_reference",
+}
 
 
 def ensure_go_claw_presets() -> bool:
@@ -69,6 +76,7 @@ def _ensure_go_claw_presets() -> bool:
 
 def _ensure_go_claw_presets_locked(data_root: Path) -> bool:
     marker_path = data_root / MARKER_RELATIVE_PATH
+    _migrate_existing_media_tool_names()
     if _has_completed_marker(marker_path):
         return True
 
@@ -109,6 +117,40 @@ def _ensure_go_claw_presets_locked(data_root: Path) -> bool:
     _validate_completed_profiles(persisted_config, expected_order)
     _write_completed_marker(marker_path)
     return True
+
+
+def _migrate_existing_media_tool_names() -> tuple[str, ...]:
+    """Replace legacy media tool keys without changing any other state."""
+    config = load_config(force_reload=True)
+    migrated_ids: list[str] = []
+    for agent_id, ref in config.agents.profiles.items():
+        workspace = Path(ref.workspace_dir).expanduser()
+        payload, _profile = _read_agent_profile(workspace, agent_id)
+        tools = payload.get("tools")
+        if not isinstance(tools, dict):
+            continue
+        builtin_tools = tools.get("builtin_tools")
+        if not isinstance(builtin_tools, dict):
+            continue
+
+        changed = False
+        for old_name, new_name in MEDIA_TOOL_RENAMES.items():
+            if old_name not in builtin_tools:
+                continue
+            old_config = builtin_tools.pop(old_name)
+            changed = True
+            if new_name in builtin_tools:
+                continue
+            if isinstance(old_config, dict):
+                old_config["name"] = new_name
+            builtin_tools[new_name] = old_config
+
+        if not changed:
+            continue
+        write_json_atomic(workspace / "agent.json", payload)
+        invalidate_agent_config_cache(agent_id)
+        migrated_ids.append(agent_id)
+    return tuple(migrated_ids)
 
 
 @contextmanager

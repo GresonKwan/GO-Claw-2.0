@@ -54,11 +54,11 @@ EXPECTED_NAMES = {
 }
 
 CONTENT_PLUGIN_TOOLS = (
-    "generate_image_qwen",
-    "edit_image_qwen",
-    "text_to_video_wan",
-    "image_to_video_wan",
-    "reference_to_video_wan",
+    "generate_image",
+    "edit_image",
+    "generate_video_from_text",
+    "generate_video_from_image",
+    "generate_video_from_reference",
 )
 
 
@@ -277,7 +277,7 @@ def test_all_preset_configs_receive_default_enabled_media_tools(
 def test_saved_media_disable_is_not_overwritten_by_manifest_default(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    tool_name = "generate_image_qwen"
+    tool_name = "generate_image"
     monkeypatch.setattr(
         PluginRegistry,
         "get_all_plugin_manifests",
@@ -315,7 +315,7 @@ def test_content_plugin_manifest_metadata_is_preserved(
     tmp_path: Path,
 ) -> None:
     plugin_id = "__ut_go_claw_media_metadata__"
-    tool_name = "generate_image_qwen"
+    tool_name = "generate_image"
     manifest = {
         "name": plugin_id,
         "meta": {
@@ -402,7 +402,7 @@ def test_workspace_template_resolver_rejects_unknown_go_claw_ids() -> None:
         assert get_workspace_md_template_id(template_id) is None
 
 
-def test_content_template_describes_media_key_resolution_order() -> None:
+def test_content_template_uses_neutral_media_tool_guidance() -> None:
     template_path = (
         Path(__file__).parents[3]
         / "src"
@@ -414,9 +414,18 @@ def test_content_template_describes_media_key_resolution_order() -> None:
         / "AGENTS.md"
     )
     text = template_path.read_text(encoding="utf-8")
-    assert "当前数字员工的专属 DashScope Key" in text
-    assert "GO CLAW 首次导入的全局 DashScope Key" in text
-    assert "不要通过无意义试调用探测配置状态" in text
+    for phrase in (
+        "图片生成",
+        "图片编辑",
+        "文字生成视频",
+        "图片生成视频",
+        "参考图生成视频",
+    ):
+        assert phrase in text
+    assert all(
+        hidden not in text.lower()
+        for hidden in ("qwen", "wan", "happyhorse", "dashscope", "百炼")
+    )
 
 
 TEMPLATE_EXPECTATIONS = {
@@ -442,10 +451,8 @@ TEMPLATE_EXPECTATIONS = {
         "图片提示词",
         "视频脚本",
         "分镜",
-        "DashScope Key",
-        "Qwen-Image",
-        "Wan 2.7",
-        "GO CLAW 首次导入的全局 DashScope Key",
+        "图片生成",
+        "文字生成视频",
         "不声称",
     ),
     "data-processing": (

@@ -31,11 +31,11 @@ logger = logging.getLogger(__name__)
 CREDENTIALS_RELATIVE_PATH = Path("GO-CLAW-Config/credentials.json")
 MARKER_FILENAME = ".go-claw-credentials-imported.json"
 MEDIA_TOOL_NAMES = (
-    "generate_image_qwen",
-    "edit_image_qwen",
-    "text_to_video_wan",
-    "image_to_video_wan",
-    "reference_to_video_wan",
+    "generate_image",
+    "edit_image",
+    "generate_video_from_text",
+    "generate_video_from_image",
+    "generate_video_from_reference",
 )
 ProfileLoader = Callable[[str], AgentProfileConfig]
 ProfileSaver = Callable[[str, AgentProfileConfig], None]
