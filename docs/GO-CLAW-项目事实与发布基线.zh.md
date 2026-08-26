@@ -79,10 +79,10 @@ Nginx 的已验证配置文件是：
   Wan/Qwen Image 模型。
 - 现有 provisioning 签发的样本令牌可以从 `/v1/models` 看到本轮七个必需模型。
 
-“模型出现在 `/v1/models`”只证明路由目录存在，不证明媒体请求体能够被正确转换。当前
-New API 源码只为 `wan2.7-i2v` 做了 `input.media` 特殊归一化，没有实现
-`happyhorse-1.1-i2v` 和 `happyhorse-1.1-r2v` 的同类转换。因此媒体客户端发布前必须先
-部署并验证服务端适配补丁；不得用客户端回退百炼直连来掩盖服务端缺口。
+现有客户媒体插件已对非 `aliyuncs.com` 地址使用 New API OpenAI 兼容模式：
+图片使用 `/v1/images/generations`，视频使用 `/v1/video/generations` 提交和轮询。
+v2.1 保留这条已工作链路，只替换插件默认模型并运行五项真实调用。
+不新建 Ali 类型媒体渠道，不预先修改 New API 源码或媒体协议；真实调用失败时先根据脱敏响应单独诊断。
 
 ### 4.2 唯一产品模型映射（内部）
 
@@ -99,7 +99,7 @@ New API 源码只为 `wan2.7-i2v` 做了 `input.media` 特殊归一化，没有�
 这些 ID 只允许出现在后端私有映射、媒体插件内部、New API 配置、测试和内部文档中。
 客户前端、工具描述、员工提示词和公开产品 API 只使用中文产品标签。
 
-## 5. provisioning 与交付凭据现状
+## 5. 交付凭据和 provisioning 现状
 
 当前代码仍是 schema 1：通用 `provision.json` 内嵌一个所有客户端共享的 HMAC secret，
 客户端用它签名后换取每实例 New API 子令牌。当前实现还有两个必须正视的事实：
@@ -108,16 +108,18 @@ New API 源码只为 `wan2.7-i2v` 做了 `input.media` 特殊归一化，没有�
 2. `go_claw_provision.py` 发现已有 `credentials.json` 时会跳过 provisioning，因此同时打包
    静态共享凭据和 provisioning 配置会直接绕过每实例开户。
 
-发布基线因此规定：
+用户已确认接受低额度 API key 存放在客户本地的交付取舍。v2.1 保留现有
+`credentials.json` schema 1 和一次性本地导入逻辑：
 
-- 通用 Main CI 完整包不得包含 `credentials.json`、API key、共享 HMAC secret 或一次性
-  enrollment ticket；
-- 首次客户交付使用一次性、单用途、短期 enrollment ticket 对通用 CI ZIP 做私下封装；
-- 首次成功后只在客户本地保存该实例自己的 New API token；在线更新包永远不覆盖它；
-- 旧 schema 1 只保留升级读取能力，不再作为新交付格式。
+- Main CI 使用已有 `GO_CLAW_DASHSCOPE_API_KEY` 生成一份指向
+  `https://goclaw.host:8443/v1` 的本地 `credentials.json`；
+- 同一个低额度 New API key 供文字和媒体 provider 使用，不新增 secret；
+- Main Full ZIP 包含该凭据，首次启动自动导入，不出现激活或开户交互；
+- Main Full ZIP 不包含 `provision.json`、共享 HMAC 或 enrollment ticket；
+- 在线更新 payload 不包含 `GO-CLAW-Config`，因此不覆盖客户本地 key。
 
-目标 schema 2 和封装流程以总执行计划的“开户合同”为准。在它完成前，现有 HMAC
-provisioning 只能视为过渡实现，不得用于本轮正式客户 Main 包。
+现有 schema-1 HMAC provisioning 服务可保留用于历史客户，但不是 v2.1 Main Build 前置条件；
+本轮不实施 schema 2、激活码、ticket DB 或客户 ZIP sealing。
 
 ## 6. 更新签名事实
 
@@ -153,9 +155,10 @@ GitHub Secrets 已存在：
 
 GitHub Variable `TAURI_UPDATER_PUBKEY` 已存在并与仓库公钥一致。
 
-`GO_CLAW_LLM_API_KEY` 当前不存在。正式方案不再要求把一个可复用客户 API key 放入通用
-CI 包；如果 CI 需要执行真实模型冒烟测试，应使用权限和额度独立的
-`GO_CLAW_CI_TEST_API_KEY`，并且不得把它写入任何产物。
+`GO_CLAW_LLM_API_KEY` 当前不存在，v2.1 不新增它。Main Build 直接复用已有
+`GO_CLAW_DASHSCOPE_API_KEY` 作为低额度 New API key，同时写入客户本地的文字和媒体凭据字段。
+保留的是 Secret 名称；其值必须通过 `https://goclaw.host:8443/v1/models` 七模型预检。若现值不是
+可用的低额度 New API key，只替换该 Secret 的值。本轮不新建 `GO_CLAW_CI_TEST_API_KEY` 或其他测试额度机制。
 
 ### 7.2 产物与发布现状
 
@@ -190,7 +193,7 @@ GitHub Actions 下载 artifact 时会额外使用平台包装层；客户文件�
 2. 客户前端和其调用的产品 API 响应不出现 provider/model/base URL/API key。
 3. 每个员工独立保存经济/均衡/高性能档位，新员工默认经济。
 4. 五个媒体工具均通过 New API 的 Token Plan 媒体渠道实测，不存在百炼直连自动回退。
-5. 通用完整 ZIP 和在线更新资产不包含任何客户凭据、共享 HMAC 或 enrollment ticket。
+5. Main Full ZIP 包含已接受的低额度本地 `credentials.json`，但不包含 `provision.json`、共享 HMAC、ticket 或签名私钥；在线更新资产不包含客户凭据。
 6. 三处 updater 公钥一致，安装器和更新包均由现有私钥签名并经项目 verifier 复验。
 7. `/updates/latest.json` 返回 `application/json`，文件、SHA-256、签名和 URL 相互一致。
 8. Main Build 的客户 artifact 内恰好有一个完整 ZIP；在两类 Windows 终端完成 Tauri、

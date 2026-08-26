@@ -1,99 +1,103 @@
-# GO CLAW 自动开通与 NewAPI 计费体系
+# GO CLAW 自动开通与 New API 凭据交付
 
-> 当前实现版本：schema 1（2026-08-26 复核）· 适用于 GO CLAW Portable 2.0.1+（Windows）
+> 当前代码实现：schema 1（2026-08-26 复核）。
 >
-> **发布警告：** 下文 HMAC + `credentials.json` 是目前代码的过渡现状，不是 v2.1 正式交付
-> 目标。共享 HMAC 可从客户端提取，且静态 `credentials.json` 会绕过自动开户。v2.1 必须先按
-> `superpowers/plans/2026-08-26-go-claw-v2-1-reviewed-execution-plan.md` P1 改为“通用无凭据
-> CI ZIP + 客户单用途 enrollment ticket”。在该任务完成前，不得用本页 schema 1 流程制作新的
-> 正式客户 Main 包。
+> **v2.1 发布边界：** 本页记录已存在的 HMAC 自动开通机制，供历史客户和运维查阅。
+> v2.1 Main Build 不改造它、不依赖它：正式 Full ZIP 直接携带用户已接受的低额度
+> `credentials.json`，不携带 `provision.json`、共享 HMAC、激活码或 enrollment ticket。
 
-本文档描述 GO CLAW 便携版的**首次启动自动开通**机制：客户双击软件即自动获得
-专属的 NewAPI 子用户与带赠送额度的 API Key，无需任何手动配置。
+## 1. 历史自动开通现状
 
-## 架构总览
+已存在的 Portable schema-1 链路是：
 
-```
-客户便携包（首次启动，联网）                运营服务器（与 NewAPI 同机）
-  data/instance.id (UUID)                  scripts/provisioning 服务
-       │ HMAC 签名请求                        │ 验签 / 时间窗 / IP限流
-       ├──────────────────▶ POST /go-claw/provision（nginx 重写为 /api/provision）
-       │                                     │ 幂等查询（SQLite）
-       │                                     ├─▶ NewAPI 建子用户 gc-xxxxxxxx-yyyy
-       │                                     ├─▶ 签发不限额令牌 go-claw-auto
-       │                                     └─▶ DB 直读完整 Key + 写用户额度
-       │ ◀────────────────── 返回 credentials.json 内容
-       ▼
-  写入 GO-CLAW-Config/credentials.json
-  → 现有批次导入机制同次启动完成配置（LLM + 媒体工具 + 默认模型）
+```text
+客户首次启动
+  → 生成 data/instance.id
+  → 使用 provision.json 中的共享 HMAC 调用 POST /go-claw/provision
+  → 服务端创建/查询 New API 子用户和 token
+  → 客户写入 GO-CLAW-Config/credentials.json
+  → 批次凭据导入逻辑配置文字和媒体 provider
 ```
 
-- **实例绑定**：instance.id 在客户端首次启动时生成（非打包时），同一 U盘
-  拷贝永远拿回同一份凭证；激活后整体复制 U盘则副本共享同一子用户与额度。
-- **防刷**：HMAC 签名（密钥随包分发，可被提取，仅第一道闸）+ 每 IP 每日
-  限流 + 赠送额度较小 + 后台可随时禁用异常子用户。
-- **失败自愈**：开通失败不阻塞启动；因未写导入标记，下次启动自动重试。
+关键文件和服务：
 
-## 链路细节
+- 客户端：`src/qwenpaw/app/go_claw_provision.py`；
+- 凭据导入：`src/qwenpaw/app/go_claw_credentials.py`；
+- 服务端代码：`/opt/go-claw-provisioning/provision_server.py`；
+- systemd：`go-claw-provision.service`，监听 `127.0.0.1:9100`；
+- 公网入口：`https://goclaw.host:8443/go-claw/provision`。
 
-### LLM 聊天
+共享 HMAC 可以从客户包中提取，不是强身份凭据。这是历史机制的已知局限，不在 v2.1 中通过新激活系统扩建。
 
-- 借用内置 `deepseek` provider（OpenAI 兼容、base_url 可改）的壳接 NewAPI；
-  导入时若 modelId 不在内置模型表，自动注册进 `extra_models`。
-- 当前默认模型：`deepseek-v4-flash`（服务端 `CHAT_MODEL_ID` 可改；须与渠道模型名逐字一致）。
+## 2. v2.1 Main Build 凭据合同
 
-### 媒体工具（图像/视频）
+v2.1 沿用已实现的 `credentials.json` schema 1 和一次性导入 marker。Main Build 只使用
+已存在的 GitHub Secret `GO_CLAW_DASHSCOPE_API_KEY`，将同一个低额度 New API key
+写入文字和媒体凭据字段：
 
-> 以下是当前 2.0.1 代码行为，仅用于理解和迁移；它将在 v2.1 被两个中性插件和固定 New API
-> 媒体合同替换。不得把本节路径/模型复制到新实现。
+```json
+{
+  "schemaVersion": 1,
+  "batchId": "go-claw-main-<github-run-id>",
+  "llm": {
+    "providerId": "deepseek",
+    "modelId": "deepseek-v4-flash-0731",
+    "baseUrl": "https://goclaw.host:8443/v1",
+    "apiKey": "<GO_CLAW_DASHSCOPE_API_KEY>"
+  },
+  "dashscope": {
+    "compatibleBaseUrl": "https://goclaw.host:8443/v1",
+    "apiKey": "<GO_CLAW_DASHSCOPE_API_KEY>"
+  }
+}
+```
 
-NewAPI **不透传** DashScope 原生路径（`/api/v1/services/aigc/*`），因此媒体
-插件已改写为双协议（`src/qwenpaw/plugins/dashscope_credentials.py` 的
-`resolve_media_api`）：
+规则：
 
-| 凭证端点 host | 协议 | 图像 | 视频 |
-|---|---|---|---|
-| `*.aliyuncs.com`（百炼官方） | DashScope 原生 SDK | 不变 | 不变 |
-| 其他（NewAPI 中转） | OpenAI 兼容 | `POST {root}/v1/images/generations` | `POST {root}/v1/video/generations` + `GET .../{task_id}` 轮询 |
+- 不新增 `GO_CLAW_LLM_API_KEY`；
+- 不新增 `GO_CLAW_CI_TEST_API_KEY`；
+- desktop-build 不生成 `provision.json`；
+- Full ZIP 中必须有且只有一份 `Portable/GO-CLAW-Config/credentials.json`；
+- 在线更新 payload 不包含 `GO-CLAW-Config`，不覆盖客户已导入的 key；
+- 验证脚本可检查 JSON schema、URL 和 key 形式，但不得输出 key 或完整 JSON。
 
-默认模型：生图 `qwen-image-2.0`；生视频按工具分别为 `wan2.7-t2v` /
-`wan2.7-i2v` / `wan2.7-r2v`（图生视频传 `image` 字段，参考生视频多张图
-放 `metadata.images`）。
+## 3. 文字模型
 
-### NewAPI 侧必备配置
+三档内部映射：
 
-1. 渠道 base_url 填**域名根**（不带 `/compatible-mode`），类型用阿里百炼；
-   图像/视频模型须在建模列表与 abilities 中（后台改模型列表会自动维护）。
-2. `设置 → 模型价格`（ModelPrice）为按次计费模型配价，否则调用报
-   "模型价格尚未配置"。当前配置：图像 $0.03–0.08/次，视频 $0.10–0.12/次。
-3. 子用户额度与令牌额度**双重检查**：消耗同时扣用户 quota 和令牌
-   remain_quota，provisioning 服务两边都会写入赠送额度。
+| 产品档位 | New API 模型 |
+| --- | --- |
+| 经济（默认） | `deepseek-v4-flash-0731` |
+| 均衡 | `qwen3.7-plus` |
+| 高性能 | `qwen3.8-max` |
 
-## 服务端部署
+客户前端不显示上表内部 ID。
 
-见 `scripts/provisioning/README.md`。关键件：
+## 4. 媒体链路
 
-- 服务：`/opt/go-claw-provisioning/`（systemd: `go-claw-provision.service`）
-- 公网入口：nginx `location = /go-claw/provision` → `proxy_pass http://127.0.0.1:9100/api/provision`（公网路径与服务端路由的映射靠这条重写，二者不可互换）
-- 服务环境：`/opt/go-claw-provisioning/.env`（由 systemd `EnvironmentFile` 读取，权限必须只允许
-  root；不得在文档中记录实际值）
+`src/qwenpaw/plugins/dashscope_credentials.py::resolve_media_api` 已根据 endpoint host 选择协议：
 
-## 打包与 CI
+| 凭据 endpoint host | 协议 | 图片 | 视频 |
+| --- | --- | --- | --- |
+| `*.aliyuncs.com` | DashScope 原生 SDK | 保留历史行为 | 保留历史行为 |
+| 其他（GO CLAW New API） | OpenAI 兼容 | `POST /v1/images/generations` | `POST /v1/video/generations` + `GET .../{task_id}` |
 
-- **当前过渡工作流**通过 GitHub Secrets 注入 `GO_CLAW_PROVISION_URL` 与
-  `GO_CLAW_PROVISION_HMAC_SECRET`，工作流（desktop-build /
-  desktop-portable-reverify）自动生成 `GO-CLAW-Config/provision.json`
-  打入 ZIP；该文件被 `.gitignore` 忽略，永不入仓库。
-- 若同时存在旧版共享 `credentials.json`（secrets `GO_CLAW_LLM_API_KEY` 等），
-  批次凭证优先，自动开通会跳过。这正是 v2.1 已确认要删除的冲突，不能再作为新交付建议。
+v2.1 保留上表已工作路径、请求体和响应解析，只替换插件内部默认模型：
 
-v2.1 目标工作流不 materialize 任何客户 API key、共享 HMAC 或 ticket。CI 只生成一个无凭据
-Full ZIP；运营人员在本地为具体客户签发并注入单用途 ticket，在线更新不再携带开户材料。
+| 能力 | 默认模型 |
+| --- | --- |
+| 图片生成/编辑 | `qwen-image-3.0-pro` |
+| 文生视频 | `happyhorse-1.1-t2v` |
+| 图生视频 | `happyhorse-1.1-i2v` |
+| 参考图视频 | `happyhorse-1.1-r2v` |
 
-## 安全清单
+生产 New API 渠道 1 `阿里百炼_TokenPlan_1` 已是 OpenAI 类型并列出上述媒体模型。
+v2.1 不新建媒体渠道，不修改 New API 镜像或 adapter，不修改媒体 endpoint，不自动回退旧模型或百炼直连。
 
-- [x] `credentials.json` / `provision.json` / `.env` / `provision.db` 均已
-      被 .gitignore 覆盖，且从未进入 git 历史
-- [x] 当前过渡交付物不含 NewAPI 管理员令牌
-- [x] 赠送额度仅受用户账号额度约束（令牌自 8561e1d 起默认不限额；令牌层可在 NewAPI 后台单独限额）
-- [ ] v2.1 删除客户端共享 HMAC，改为服务端只存 ticket hash；完成前不得发布新 Main 客户包
+## 5. 安全与运维边界
+
+- [x] 本地 `credentials.json` / `provision.json` / `.env` / `provision.db` 被 `.gitignore` 覆盖。
+- [x] 客户凭据不是 New API 管理员令牌。
+- [x] 用户已接受低额度 API key 保存在客户本地 Full ZIP 中。
+- [ ] v2.1 Main ZIP 不包含 `provision.json`/共享 HMAC/ticket/签名私钥。
+- [ ] 在线更新包继续使用白名单 payload，不包含或覆盖客户本地凭据。

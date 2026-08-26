@@ -1,504 +1,374 @@
-# GO CLAW Token Plan Media Plugins Implementation Plan
-
-> 状态：文件级分计划；2026-08-26 服务器 review 后受
-> `2026-08-26-go-claw-v2-1-reviewed-execution-plan.md` 约束。原始路径/响应和静态凭据方案已
-> 被实测否决，本文以下修订后的合同才可执行。
+# GO CLAW Token Plan 媒体插件实施计划
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Replace vendor-named image/video plugins with two neutral plugins, route every media request through the configured New API and its Token Plan channel, default image generation/editing to `qwen-image-3.0-pro`, and remove all client-side direct-provider and model fallback paths.
+**Goal:** 在不改变现有 New API 媒体请求链路的前提下，把图片和视频插件默认模型换成 Token Plan 已配置的四个模型，将客户可见名称改为“图片生成”和“视频生成”，并删除自动换模型。
 
-**Architecture:** One private GO CLAW routing-state file identifies the configured New API provider. Both plugins obtain its HTTPS `/v1` URL and key from `ProviderManager`, send fixed model IDs in New API-compatible media requests, and parse versioned response shapes. New API alone translates those requests to Token Plan native multimodal/video APIs and owns channel routing. Canonical tools are vendor-neutral; legacy names are registered disabled and hidden solely for old-config compatibility.
+**Architecture:** 继续使用已在生产配置的 OpenAI 类型渠道 `阿里百炼_TokenPlan_1`。现有 `resolve_media_api()`、`/v1/images/generations`、`/v1/video/generations` 和视频任务轮询逻辑保持不变；本计划只修改内部默认模型、客户可见插件/工具名称、员工工具配置和测试期望。不新增 New API 渠道，不构建自定义 New API 镜像，不修改上游 adapter。
 
-**Tech Stack:** Python, FastAPI runtime/config services, httpx, QwenPaw plugin API, New API, Alibaba Cloud Token Plan, Pytest, GitHub Actions.
+**Tech Stack:** Python, httpx, QwenPaw Plugin API, New API OpenAI-compatible media endpoints, Pytest.
 
 ---
 
-## 0. Baseline, external-state boundary, and ordering
+## 0. 已确认基线和禁止扩展
 
-- Exact code baseline: commit `ce18d02f`, 2026-08-26. Symbol anchors override baseline line numbers after earlier edits shift them.
-- Implement the private routing-state module from `2026-08-26-go-claw-customer-ui-model-tiers-plan.md` first.
-- Server access has been verified with `root@1.14.203.54` and `/Users/gresonkwan/Downloads/GoClaw0810.pem`. The running New API is `v1.0.0-rc.24`, source revision `5c3abffe8572aa8a49f15c3916707d2019d66af4`, with the digest recorded in `docs/GO-CLAW-项目事实与发布基线.zh.md`.
-- Server configuration and live contract probes in Task 8 remain a hard release gate. A failed probe blocks release; it must never be “fixed” by restoring direct Bailian calls in the client.
-- Before every task commit, run `git add` for each path listed under that task and no unrelated path; every commit command below assumes that explicit staging has succeeded.
+实施前后都必须保持以下事实：
 
-## 1. Fixed private model mapping
+- `src/qwenpaw/plugins/dashscope_credentials.py::resolve_media_api` 将非 `aliyuncs.com` 地址解析为 OpenAI 兼容模式。
+- 客户 New API 基础地址是 `https://goclaw.host:8443/v1`。
+- 图片插件已通过 `POST /v1/images/generations` 请求 New API。
+- 图片编辑继续使用现有 `images/generations` JSON `image`/`metadata.images` 逻辑；本轮不改 multipart。
+- 视频插件已通过 `POST /v1/video/generations` 提交，并通过 `GET /v1/video/generations/{task_id}` 轮询。
+- New API 渠道 1 已列出三个文字模型和下表四个媒体模型。
 
-Only private runtime mapping/plugin code may contain these transport IDs; tests, CI availability assertions, New API configuration, and this internal plan may repeat them, but public frontend/API/tool descriptions may not:
+| 内部能力 | 唯一默认模型 |
+| --- | --- |
+| 图片生成 | `qwen-image-3.0-pro` |
+| 图片编辑 | `qwen-image-3.0-pro` |
+| 文生视频 | `happyhorse-1.1-t2v` |
+| 图生视频 | `happyhorse-1.1-i2v` |
+| 参考图视频 | `happyhorse-1.1-r2v` |
 
-| Canonical tool                  | Fixed New API request model | Token Plan purpose |
-| ------------------------------- | --------------------------- | ------------------ |
-| `generate_image`                | `qwen-image-3.0-pro`        | text-to-image      |
-| `edit_image`                    | `qwen-image-3.0-pro`        | image edit/fusion  |
-| `generate_video_from_text`      | `happyhorse-1.1-t2v`        | text-to-video      |
-| `generate_video_from_image`     | `happyhorse-1.1-i2v`        | image-to-video     |
-| `generate_video_from_reference` | `happyhorse-1.1-r2v`        | reference-to-video |
+本计划禁止：
 
-There is no tool parameter, manifest field, employee override, environment override, retry candidate, or automatic fallback that changes these values. New API may choose among channels offering the same requested model; it may not silently translate one requested model to a different model family.
+- 新增 `阿里百炼_TokenPlan_Media` 或其他媒体渠道；
+- 将渠道 1 从 OpenAI 类型改为 Ali 类型；
+- 新增 `deploy/new-api/`、New API Dockerfile 或 HappyHorse adapter patch；
+- 将图片编辑改为 `/v1/images/edits`；
+- 将视频路径改为 `/v1/videos`；
+- 媒体请求失败后切换成 Wan/Qwen 旧模型或直连百炼；
+- 在没有真实失败响应的情况下修改 New API 或媒体请求协议。
 
-## 2. Plugin and tool identity contract
+## 1. 客户可见命名和内部兼容边界
 
-### 2.1 Canonical plugins
+为减少升级范围，保留内部插件目录、插件 ID 和 Python 模块文件名；它们不作为客户产品文案。
+客户和对话模型只看到以下名称：
 
-| Directory                       | Plugin ID               | Display name | Entry                 | Tool module                |
-| ------------------------------- | ----------------------- | ------------ | --------------------- | -------------------------- |
-| `plugins/tool/image-generation` | `image-generation-tool` | `图片生成`   | `image_generation.py` | `image_generation_tool.py` |
-| `plugins/tool/video-generation` | `video-generation-tool` | `视频生成`   | `video_generation.py` | `video_generation_tool.py` |
+| 内部目录 / ID（保留） | 客户可见插件名 | 新工具名 |
+| --- | --- | --- |
+| `plugins/tool/qwen-image` / `qwen-image-tool` | `图片生成` | `generate_image`, `edit_image` |
+| `plugins/tool/wan27` / `wan27-tool` | `视频生成` | `generate_video_from_text`, `generate_video_from_image`, `generate_video_from_reference` |
 
-Manifest descriptions and tool descriptions use only “图片生成/编辑服务” and “视频生成服务”. Remove `Qwen`, `Wan`, `DashScope`, `百炼`, `阿里云`, and all model IDs from display strings, README user instructions, prompt files, and successful `ToolChunk` text.
+`plugin.json` 的 `name`、`description`、`description_i18n`、tool `description` 和帮助文本不得出现
+Qwen、Wan、HappyHorse、DashScope、百炼、阿里云或任何模型 ID。`model`、`api_key`、`endpoint`
+不再作为插件页可编辑字段；插件继续从现有全局凭据获取 New API URL/key。
 
-### 2.2 Canonical public tool signatures
+旧工具名不再注册。启动迁移只在员工工具配置中做以下五个等值替换，不备份、不引入别名层、
+不修改用户文件：
 
 ```python
-async def generate_image(
-    prompt: str,
-    size: str = "2048*2048",
-    n: int = 1,
-    negative_prompt: str = "",
-    prompt_extend: bool = True,
-) -> ToolChunk: ...
-
-async def edit_image(
-    prompt: str,
-    reference_images: list[str],
-    n: int = 1,
-) -> ToolChunk: ...
-
-async def generate_video_from_text(
-    prompt: str,
-    aspect_ratio: str = "16:9",
-    duration: int = 5,
-) -> ToolChunk: ...
-
-async def generate_video_from_image(
-    prompt: str,
-    first_frame_url: str,
-    resolution: str = "720P",
-    duration: int = 5,
-) -> ToolChunk: ...
-
-async def generate_video_from_reference(
-    prompt: str,
-    reference_images: list[str],
-    resolution: str = "720P",
-    duration: int = 5,
-) -> ToolChunk: ...
-```
-
-Validation is exact:
-
-- image inputs: `.png`, `.jpg`, `.jpeg`, `.webp`; 1–3 reference images; `n` 1–6.
-- video `resolution`: `720P` or `1080P`.
-- text-video `aspect_ratio`: `16:9`, `9:16`, `1:1`, `4:3`, or `3:4`; map exactly to `1280*720`, `720*1280`, `960*960`, `1088*832`, or `832*1088` in the New API `size` field.
-- video `duration`: integer 3–15 inclusive. Current 2–15 checks are incorrect.
-- Image-to-video takes only the first frame; remove legacy last-frame, audio, template, continuation, and public `prompt_extend` parameters because they are not part of the confirmed customer contract. The adapter sets `prompt_extend=true` internally.
-
-### 2.3 Legacy aliases
-
-Register these aliases against thin wrappers, all with `enabled=False` and `hidden=True`:
-
-| Legacy                   | Canonical target                |
-| ------------------------ | ------------------------------- |
-| `generate_image_qwen`    | `generate_image`                |
-| `edit_image_qwen`        | `edit_image`                    |
-| `text_to_video_wan`      | `generate_video_from_text`      |
-| `image_to_video_wan`     | `generate_video_from_image`     |
-| `reference_to_video_wan` | `generate_video_from_reference` |
-
-Aliases do not appear in `/api/tools`, plugin manifests, prompt schemas, or settings. A one-time migration disables them in every employee config. They remain callable only if an old in-flight runtime already holds the Python function name; no new agent turn receives them.
-
-## 3. Client -> New API wire contract
-
-Resolve `base_url` from the private routing provider and normalize it to exactly
-`https://goclaw.host:8443/v1`. Send `Authorization: Bearer <per-instance token>`; reject every
-non-HTTPS URL and never place the header, data URLs, or signed result URLs in logs. No client function contains
-`aliyuncs.com`, `/api/v1/services`, or a direct-provider fallback.
-
-### 3.1 Image create/edit
-
-Generation is JSON at `POST <newApiBase>/images/generations`:
-
-```json
-{
-  "model": "qwen-image-3.0-pro",
-  "prompt": "用户提示词",
-  "n": 1,
-  "size": "2048x2048",
-  "response_format": "url",
-  "parameters": {
-    "size": "2048*2048",
-    "n": 1,
-    "negative_prompt": "",
-    "prompt_extend": true
-  }
+MEDIA_TOOL_RENAMES = {
+    "generate_image_qwen": "generate_image",
+    "edit_image_qwen": "edit_image",
+    "text_to_video_wan": "generate_video_from_text",
+    "image_to_video_wan": "generate_video_from_image",
+    "reference_to_video_wan": "generate_video_from_reference",
 }
 ```
 
-The pinned New API uses the extension object instead of merging top-level `size/n` when `parameters` exists.
-Therefore the plugin derives both representations in one helper and tests exact equality: OpenAI top-level uses
-`2048x2048`, Ali parameters use `2048*2048`, and `n` is identical in both.
-
-Editing is multipart at `POST <newApiBase>/images/edits`, with scalar fields
-`model=qwen-image-3.0-pro`, `prompt`, `n=1`, `response_format=url` and 1–3 binary files all named
-`image` in input order. It is forbidden to send edit JSON to `/images/generations`. The current New API
-multipart converter does not reliably carry edit `negative_prompt`, `prompt_extend`, or output size, so the
-public edit tool does not expose or promise them.
-
-Both operations accept HTTP 200 only and require a `data` array whose entries contain `url` or `b64_json`.
-URL results are downloaded and base64 results decoded locally. Zero valid results is `MEDIA_EMPTY_RESULT`.
-
-### 3.2 Video create/poll
-
-Only the current OpenAI Video endpoints are legal:
-
-```http
-POST <newApiBase>/videos
-GET  <newApiBase>/videos/<taskId>
-```
-
-Bodies are exact:
-
-```json
-{"model":"happyhorse-1.1-t2v","prompt":"用户提示词","duration":5,"size":"1280*720","metadata":{"input":{"negative_prompt":""},"parameters":{"prompt_extend":true}}}
-```
-
-```json
-{"model":"happyhorse-1.1-i2v","prompt":"用户提示词","duration":5,"size":"720P","image":"data-or-https-url","metadata":{"parameters":{"prompt_extend":true}}}
-```
-
-```json
-{"model":"happyhorse-1.1-r2v","prompt":"用户提示词","duration":5,"size":"720P","images":["data-or-https-url-1","data-or-https-url-2"],"metadata":{"parameters":{"prompt_extend":true}}}
-```
-
-Create accepts HTTP 200 only and reads task ID from top-level `id`. Poll every five seconds within the existing
-600-second cap. Parse top-level `status` only: `queued`/`in_progress` continue, `completed` requires an HTTPS
-`metadata.url`, and `failed` requires an `error`. `data.status`, `data.result_url` and the old
-`/v1/video/generations` shape are explicitly invalid.
-
-Never retry with another model. Do not replay a create whose response may have been lost, because that can create
-a second billable task. After a task ID exists, transient poll retries may query only that same ID.
-
-## 4. New API -> Token Plan translation contract
-
-> **Review correction:** Sections 4.1–4.2 below are retained only as the originally proposed upstream shape;
-> they are not a client contract and must not be copied into GO CLAW. The executable server change is the pinned
-> New API patch in the reviewed master plan: keep channel 1 for text, add one Ali type-17 media channel, and patch
-> `relay/channel/task/ali/{constants.go,adaptor.go,adaptor_test.go}` for HappyHorse i2v/r2v media normalization.
-> The five paid probes, not these examples, decide acceptance.
-
-### 4.1 Image native API
-
-```http
-POST https://token-plan.cn-beijing.maas.aliyuncs.com/api/v1/services/aigc/multimodal-generation/generation
-Authorization: Bearer <Token Plan key>
-Content-Type: application/json
-```
-
-Generation maps to:
-
-```json
-{
-  "model": "qwen-image-3.0-pro",
-  "input": {
-    "messages": [{ "role": "user", "content": [{ "text": "用户提示词" }] }]
-  },
-  "parameters": {
-    "size": "2048*2048",
-    "n": 1,
-    "negative_prompt": "",
-    "prompt_extend": true
-  }
-}
-```
-
-Editing places each input image in order before the text item within the single user message’s `content`. Native result images are read from `output.choices[*].message.content[*].image` and converted to New API `data[*].url`.
-
-### 4.2 Video native API
-
-Submit:
-
-```http
-POST https://token-plan.cn-beijing.maas.aliyuncs.com/api/v1/services/aigc/video-generation/video-synthesis
-X-DashScope-Async: enable
-Authorization: Bearer <Token Plan key>
-Content-Type: application/json
-```
-
-Poll:
-
-```http
-GET https://token-plan.cn-beijing.maas.aliyuncs.com/api/v1/tasks/<nativeTaskId>
-Authorization: Bearer <Token Plan key>
-```
-
-Native bodies are exact:
-
-```json
-{
-  "model": "happyhorse-1.1-t2v",
-  "input": { "prompt": "用户提示词" },
-  "parameters": {
-    "resolution": "720P",
-    "ratio": "16:9",
-    "duration": 5,
-    "negative_prompt": "",
-    "prompt_extend": true
-  }
-}
-```
-
-```json
-{
-  "model": "happyhorse-1.1-i2v",
-  "input": {
-    "prompt": "用户提示词",
-    "media": [
-      { "type": "first_frame", "url": "https://example.invalid/first.png" }
-    ]
-  },
-  "parameters": { "resolution": "720P", "duration": 5, "prompt_extend": true }
-}
-```
-
-```json
-{
-  "model": "happyhorse-1.1-r2v",
-  "input": {
-    "prompt": "用户提示词",
-    "media": [
-      { "type": "reference_image", "url": "https://example.invalid/ref1.png" },
-      { "type": "reference_image", "url": "https://example.invalid/ref2.png" }
-    ]
-  },
-  "parameters": {
-    "resolution": "720P",
-    "ratio": "16:9",
-    "duration": 5,
-    "prompt_extend": true
-  }
-}
-```
-
-New API maps its task ID to the native task ID, polls Token Plan, and exposes the normalized client response from section 3.2. It records the chosen channel and requested model in server logs without recording prompts, input image data URLs, or credentials.
-
-## 5. Credential schema v2 and migration
-
-Static schema-2 credentials in CI have been rejected. The generic Main ZIP contains no `credentials.json`, API key,
-shared HMAC secret, or enrollment ticket. A customer-specific sealing step inserts this one-time file only into a
-private delivery copy:
-
-```json
-{
-  "schemaVersion": 2,
-  "provisionUrl": "https://goclaw.host:8443/go-claw/provision",
-  "ticket": "single-use enrollment ticket"
-}
-```
-
-The server exchanges it for a per-instance schema-2 New API payload whose base URL is
-`https://goclaw.host:8443/v1` and whose model list contains the seven required IDs. Exact ticket hashing,
-single-instance binding, idempotent retry, marker-last order and customer ZIP sealing are defined in master plan P1.
-
-`BatchCredentials` retains schema 1 only as an upgrade reader. It normalizes the old LLM provider but does not update
-the DashScope provider for new media routing. Existing v1 files must never cause the code to ignore a valid schema-2
-enrollment ticket. Successful v2 application registers seven IDs without duplicates, persists the per-instance URL/key,
-activates economy, writes `.go-claw-product-routing.json`, verifies state, writes the enrollment marker, then deletes the
-one-time ticket file.
-
-## 6. Exact current edit map
-
-| Current file and lines                                                             | Symbol/current behavior                                           | Required change                                                                                              |
-| ---------------------------------------------------------------------------------- | ----------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------ |
-| `src/qwenpaw/plugins/dashscope_credentials.py:13-141`                              | direct endpoint defaults and native/OpenAI mode selection         | Replace with `media_gateway.py`; only private New API routing state, provider URL/key, and normalized `/v1`. |
-| `plugins/tool/qwen-image/plugin.json:2-140`                                        | vendor plugin/tool names, model/key/endpoint controls             | Move to new directory/name, neutral copy, canonical tools, no config fields.                                 |
-| `plugins/tool/qwen-image/qwen_image.py:15-64`                                      | vendor loader/registrations                                       | Replace with neutral entry and canonical + hidden alias registrations.                                       |
-| `plugins/tool/qwen-image/qwen_image_tool.py:29-97,141-166,226-328,366-636,639-900` | direct SDK, selectable models, fallback lists, vendor result text | Retain input/download/quota helpers; remove SDK/mode/fallback; fixed New API requests.                       |
-| `plugins/tool/wan27/plugin.json:2-170`                                             | vendor plugin/tools and model/key/endpoint controls               | Move/rename neutral; three canonical tools, no config fields.                                                |
-| `plugins/tool/wan27/wan27.py:15-73`                                                | vendor loader/registrations                                       | Replace with neutral entry and aliases.                                                                      |
-| `plugins/tool/wan27/wan27_tool.py:30-74,125-150,210-324,327-1300`                  | direct SDK, 2-second minimum, fallbacks, legacy options           | Fixed New API-only implementation and canonical signatures.                                                  |
-| `src/qwenpaw/app/go_claw_credentials.py:31-105,145-241,268-339`                    | schema 1, DashScope provider, legacy tools, exists-only marker    | Implement section 5.                                                                                         |
-| `src/qwenpaw/plugins/api.py:256-308,756-899`                                       | config/register functions have no hidden bit                      | Add `hidden: bool = False`, persist it, and pass it through registration.                                    |
-| `src/qwenpaw/config/config.py:1973-1997,2018-2084`                                 | `BuiltinToolConfig`/manifest merge expose every tool              | Add `hidden`; merge manifest `hidden`; default false.                                                        |
-| `src/qwenpaw/app/routers/tools.py:54-76,88-149,152-264,267-500`                    | list and mutation endpoints expose all configs                    | Skip hidden in lists and return 404 from toggle/async/config operations.                                     |
-| `src/qwenpaw/agents/go_claw_presets.py:69-91,151-163`                              | content employee uses five legacy tools                           | Use five canonical tools.                                                                                    |
-| `src/qwenpaw/app/go_claw_presets.py:41-49`                                         | v1 plugin IDs/marker                                              | Add independent media-tools-v2 marker and migration; do not mutate completed v1 marker.                      |
-| `src/qwenpaw/app/go_claw_bundled_plugins.py:18-21`                                 | old plugin ID/directory map                                       | Map two canonical IDs/directories and retire validated old copies recoverably.                               |
-| `src/qwenpaw/agents/md_files/go-claw-content-production/zh/AGENTS.md:14-18`        | tells model to call vendor tools/direct credentials               | Replace with canonical names and prompt rules in section 7.                                                  |
-| `scripts/pack-tauri/qwenpaw.spec:100-107`                                          | bundles old directories                                           | Bundle `image-generation` and `video-generation` to matching destinations.                                   |
-| `scripts/verify/desktop_verify.py:67-74`                                           | expects legacy tool/plugin IDs                                    | Assert canonical IDs and absence of legacy IDs from `/api/tools`.                                            |
-| `.github/workflows/desktop-build.yml:89-138`                                       | creates static credentials/provision files                        | Remove both from generic CI; use a CI-only test key for probes and never materialize it.                      |
-| `scripts/pack-tauri/stage_windows_portable.py:40-53`                               | accepts credential-bearing stages                                 | Release mode rejects credentials/tickets; v1 validation remains only in upgrade fixtures.                    |
-
-## 7. Prompt/tool-description contract
-
-Replace the media section of the content-production prompt with these rules:
-
-1. Use `generate_image` for a new image and `edit_image` only when at least one reference image is supplied.
-2. For image work, collect subject, composition, style, lighting, color, aspect/size, required text, and prohibited content. Do not mention or choose a model.
-3. Use `generate_video_from_text`, `generate_video_from_image`, or `generate_video_from_reference` according to whether zero, one first-frame, or one-to-three identity/style references are available.
-4. For video, state subject action, scene, camera movement, visual style, duration, and text-video aspect ratio where supported. Do not promise or send sound, legacy last-frame, audio, template, or continuation arguments.
-5. Do not call an old vendor tool name and do not probe configuration with a throwaway generation.
-6. If the service returns an error, continue non-generation deliverables and do not claim media exists.
-
-Function docstrings shown to the model use the same rules and contain no old names or transport IDs. Customer-facing success text is `已生成 N 张图片。保存位置：...`, `已完成图片编辑。保存位置：...`, or `已生成视频。保存位置：...`. Errors use stable neutral messages; raw upstream bodies are logged only after redacting credentials/data URLs and are not returned to the model.
-
-## 8. Implementation tasks
-
-### Task 1: Make hidden tool aliases a first-class config capability
+## 2. Task 1：用测试锁定“只换模型，不换协议”
 
 **Files:**
 
-- Modify: `src/qwenpaw/config/config.py:1973-2084`
-- Modify: `src/qwenpaw/plugins/api.py:256-308,756-899`
-- Modify: `src/qwenpaw/app/routers/tools.py:54-500`
-- Create: `tests/unit/plugins/test_plugin_tool_visibility.py`
-- Create: `tests/unit/app/routers/test_tools_visibility.py`
+- Modify: `tests/unit/plugins/test_media_openai_mode.py`
+- Modify: `tests/unit/plugins/test_go_claw_media_plugins.py`
 
-- [ ] Add failing tests that hidden defaults false, hidden registration persists true, list omits hidden tools, and every direct hidden-tool settings endpoint returns 404.
-- [ ] Run the two targeted test files; expect model/signature/list failures.
-- [ ] Implement the `hidden` plumbing and one `_get_visible_tool_or_404` router helper used by all mutations.
-- [ ] Re-run tests; expect pass.
-- [ ] Commit: `git commit -m "feat(plugins): support hidden compatibility tools"`.
+- [ ] **Step 1: 更新图片模型期望**
 
-### Task 2: Replace direct credential resolution with one New API gateway resolver
+把图片生成和编辑的期望 model 改为 `qwen-image-3.0-pro`，并新增断言：请求 URL 仍为
+`https://newapi.example/v1/images/generations`，带参考图时仍在 JSON `image`/`metadata.images` 中传递。
 
-**Files:**
+- [ ] **Step 2: 更新视频模型期望**
 
-- Delete after replacement: `src/qwenpaw/plugins/dashscope_credentials.py`
-- Create: `src/qwenpaw/plugins/media_gateway.py`
-- Create: `tests/unit/plugins/test_media_gateway.py`
+三个视频用例分别断言 `happyhorse-1.1-t2v`、`happyhorse-1.1-i2v`、`happyhorse-1.1-r2v`，
+同时保留现有 URL 期望：
 
-- [ ] Write failing tests for missing/invalid routing state, missing provider/key/HTTPS URL, suffix normalization for root and `/v1`, and explicit rejection of every `aliyuncs.com` host.
-- [ ] Implement `MediaGateway(base_url, api_key)` resolution from `read_product_routing_state()` and `ProviderManager`; no tool config argument is accepted.
-- [ ] Run `uv run pytest -q tests/unit/plugins/test_media_gateway.py`; expect pass.
-- [ ] Run `rg -n 'dashscope_credentials|aliyuncs\.com' src/qwenpaw/plugins`; expect zero matches except historical tests scheduled for replacement.
-- [ ] Commit: `git commit -m "refactor(media): resolve only the configured New API gateway"`.
+```python
+assert calls[0][1] == "https://newapi.example/v1/video/generations"
+assert calls[1][1] == (
+    "https://newapi.example/v1/video/generations/task-123"
+)
+```
 
-### Task 3: Build and test the neutral image plugin
+- [ ] **Step 3: 新增不回退用例**
 
-**Files:**
+让 New API 对默认模型返回“no available channel”，断言只发生一次 POST，结果是 ERROR，请求中没有
+`qwen-image-2.0`、`wan2.7-*` 或其他候选模型。
 
-- Move/rewrite: `plugins/tool/qwen-image` -> `plugins/tool/image-generation`
-- Rewrite: `plugin.json`, `README.md`, `image_generation.py`, `image_generation_tool.py`
-- Rewrite: image portions of `tests/unit/plugins/test_go_claw_media_plugins.py` and `tests/unit/plugins/test_media_openai_mode.py`
-
-- [ ] Change tests first to import the new files and assert exact bodies from section 3.1, model fixed for generate/edit, 1–3 references, URL/base64 responses, neutral output, quota semantics, no fallback retry, and no direct host.
-- [ ] Run image-focused tests with `uv run pytest -q tests/unit/plugins/test_go_claw_media_plugins.py tests/unit/plugins/test_media_openai_mode.py -k image`; expect file/import/name failures.
-- [ ] Reuse safe path/data-URL/download/quota code, but delete DashScope SDK calls, model validation sets, `_ModelUnavailableError`, `_model_candidates`, and fallback constants.
-- [ ] Register canonical functions enabled and aliases hidden/disabled.
-- [ ] Re-run image tests; expect pass and exactly one POST per tool call.
-- [ ] Commit: `git commit -m "feat(media): add neutral New API image plugin"`.
-
-### Task 4: Build and test the neutral video plugin
-
-**Files:**
-
-- Move/rewrite: `plugins/tool/wan27` -> `plugins/tool/video-generation`
-- Rewrite: `plugin.json`, `README.md`, `video_generation.py`, `video_generation_tool.py`
-- Rewrite: video portions of the two media test files
-
-- [ ] Change tests first to exact canonical signatures/bodies, 3–15 seconds, legal ratios/resolutions, state normalization, timeout, duplicate-create prevention, neutral output/errors, and one fixed model per tool.
-- [ ] Run `uv run pytest -q tests/unit/plugins/test_go_claw_media_plugins.py tests/unit/plugins/test_media_openai_mode.py -k video`; expect failures.
-- [ ] Retain safe input/download/quota helpers. Delete direct SDK code, thread lock, selectable models, fallbacks, and unsupported legacy arguments.
-- [ ] Treat a lost POST response as failure; do not resend. Poll GET failures may retry only within the same task and timeout if the existing HTTP policy explicitly classifies them transient.
-- [ ] Re-run video tests; expect pass.
-- [ ] Commit: `git commit -m "feat(media): add neutral New API video plugin"`.
-
-### Task 5: Migrate credentials and employee tool state
-
-**Files:**
-
-- Modify: `src/qwenpaw/app/go_claw_credentials.py:31-339`
-- Modify: `src/qwenpaw/app/go_claw_provision.py:34-38,112-160`
-- Modify: `scripts/provisioning/provision_server.py`
-- Create: `scripts/provisioning/issue_enrollment_ticket.py`
-- Create: `scripts/pack-tauri/seal_customer_bundle.py`
-- Modify: `tests/unit/app/test_go_claw_credentials.py`
-- Modify: `tests/unit/app/test_go_claw_provision.py`
-- Modify: `scripts/pack-tauri/stage_windows_portable.py:40-53`
-- Modify: `tests/unit/scripts/test_stage_windows_portable.py`
-
-- [ ] Write failing enrollment hash/expiry/single-instance/idempotency tests plus v1 normalization, seven-model de-duplication, routing-state, marker-last, and no-DashScope-update tests.
-- [ ] Implement master-plan P1 exactly: a generic CI bundle has no secret; `provision.json` schema 2 contains one ticket; the server returns a per-instance New API token.
-- [ ] Add sealing tests proving the base ZIP is unchanged, the customer ZIP contains one ticket, and neither is uploaded by CI.
-- [ ] Provisioning retries when only a schema-1 import marker exists and never lets an old `credentials.json` suppress a new valid enrollment.
-- [ ] Re-run all affected server/client/packaging test files; expect pass.
-- [ ] Commit: `git commit -m "feat(credentials): enroll each GO CLAW delivery once"`.
-
-### Task 6: Migrate presets, bundled plugins, packaging, and prompts
-
-**Files:**
-
-- Modify: `src/qwenpaw/agents/go_claw_presets.py:69-91,151-163`
-- Modify: `src/qwenpaw/app/go_claw_presets.py:41-111` and add media-v2 migration helpers
-- Modify: `src/qwenpaw/app/go_claw_bundled_plugins.py:18-29` and install/cleanup helpers
-- Modify: `src/qwenpaw/agents/md_files/go-claw-content-production/zh/AGENTS.md:14-18`
-- Modify: `scripts/pack-tauri/qwenpaw.spec:100-107`
-- Modify: `scripts/verify/desktop_verify.py:67-74`
-- Modify tests: `tests/unit/agents/test_go_claw_presets.py`, `tests/unit/app/test_go_claw_presets.py`, `tests/unit/app/test_go_claw_bundled_plugins.py`, `tests/unit/branding/test_go_claw_customer_contract.py`, `tests/unit/scripts/test_desktop_verify_go_claw.py`
-
-- [ ] Update contract fixtures/tests first for two canonical plugin IDs, five canonical tools, neutral prompt copy, new bundle destinations, and absence of old identifiers in customer surfaces.
-- [ ] Add media-tools-v2 migration: install/validate new plugins; migrate employees; move trusted old plugin directories under `<plugins-root>/.go-claw-retired/`; verify; write marker last. Never follow symlinks and never retire a directory whose manifest ID is not the exact bundled legacy ID.
-- [ ] Copy no old per-tool `api_key`, `endpoint`, or `model` configuration. Copy only a numeric timeout within allowed bounds to its canonical target; enable canonical tools if the employee is content-production or the corresponding old tool was enabled.
-- [ ] Apply section 7 prompt text and packaging mappings.
-- [ ] Run the five targeted suites; expect pass.
-- [ ] Commit: `git commit -m "refactor(media): migrate presets and bundles to neutral plugins"`.
-
-### Task 7: Remove delivery secrets from CI and add probe-only preflight
-
-**Files:**
-
-- Modify: `.github/workflows/desktop-build.yml:89-138,204-241,423-427`
-- Modify: `.github/actions/verify-tauri-windows/action.yml:8-16,31-34`
-- Modify: `.github/actions/verify-tauri-windows-portable/action.yml:4-8,27-29`
-- Modify: `.github/workflows/release.yml:122-130`
-
-- [ ] Remove `GO_CLAW_DASHSCOPE_API_KEY`, `QWENPAW_DASHSCOPE_API_KEY`, `GO_CLAW_LLM_API_KEY`, and provision HMAC materialization from the generic product build.
-- [ ] Use only an independent low-quota `GO_CLAW_CI_TEST_API_KEY` for release probes against `https://goclaw.host:8443/v1`; never write it to a file or artifact.
-- [ ] Preflight `/v1/models` for seven IDs, then require Task 8’s five calls. Print only missing internal IDs and sanitized task/channel IDs.
-- [ ] Update verifier input name to `ci-test-new-api-key`; artifact and ZIP scans reject that key and all credential files.
-- [ ] Add a workflow syntax test or run `actionlint`; expect pass.
-- [ ] Commit: `git commit -m "ci(media): provision and verify Token Plan routes through New API"`.
-
-### Task 8: Configure New API and execute live paid contract probes
-
-**Files:**
-
-- Create: `scripts/verify/new_api_media_contract.py`
-- Create: `tests/unit/scripts/test_new_api_media_contract.py`
-
-- [ ] Use the verified server access and record the pre-change revision/digest from the project facts document; do not commit credentials.
-- [ ] Build/deploy the pinned three-file New API patch from master plan P2, then record its actual image digest. Keep channel 1 for text and create the separate Ali type-17 channel `阿里百炼_TokenPlan_Media` with the four media IDs and identity mapping.
-- [ ] Write a mocked verifier test first. The verifier checks `/v1/models`, then performs one smallest valid request for each of the five canonical tools, polls videos, and prints request ID/model/channel ID from sanitized New API logs supplied through an operator export.
-- [ ] Run the live verifier with environment variables read by the process, not CLI arguments. Confirm all five calls are attributed to the Token Plan channel and no client request reaches an `aliyuncs.com` host.
-- [ ] If any translation still differs, amend the pinned server patch and its Go tests, rebuild with a new immutable tag, and rerun. Do not merge/release the client until it passes.
-- [ ] Save only a redacted JSON report as a CI artifact; it contains timestamp, New API version/digest, five pass/fail results, and channel ID—not prompts, URLs with signatures, keys, or media bytes.
-- [ ] Commit verifier code/tests: `git commit -m "test(media): add live New API Token Plan contract probe"`.
-
-## 9. Completion gate
+- [ ] **Step 4: 运行失败测试**
 
 ```bash
 uv run pytest -q \
-  tests/unit/plugins/test_media_gateway.py \
-  tests/unit/plugins/test_go_claw_media_plugins.py \
   tests/unit/plugins/test_media_openai_mode.py \
-  tests/unit/app/test_go_claw_credentials.py \
-  tests/unit/app/test_go_claw_provision.py \
-  tests/unit/agents/test_go_claw_presets.py \
-  tests/unit/app/test_go_claw_presets.py \
-  tests/unit/app/test_go_claw_bundled_plugins.py \
-  tests/unit/branding/test_go_claw_customer_contract.py \
-  tests/unit/scripts/test_desktop_verify_go_claw.py \
-  tests/unit/scripts/test_new_api_media_contract.py
-
-rg -n 'aliyuncs\.com|Qwen|Wan 2\.7|generate_image_qwen|edit_image_qwen|text_to_video_wan|image_to_video_wan|reference_to_video_wan' \
-  plugins/tool/image-generation/plugin.json \
-  plugins/tool/image-generation/README.md \
-  plugins/tool/video-generation/plugin.json \
-  plugins/tool/video-generation/README.md \
-  src/qwenpaw/agents/md_files/go-claw-content-production
-
-git diff --check
+  tests/unit/plugins/test_go_claw_media_plugins.py
 ```
 
-The `rg` command must return no matches from those customer-facing files; hidden alias registrations are permitted only in the neutral Python entry modules. Completion also requires Task 8’s five paid live probes; mocked tests and `/v1/models` availability alone do not prove request-body translation or Token Plan channel selection.
+Expected: 只因旧模型名、旧工具名和回退请求而失败；现有 URL/请求体/响应解析用例仍然通过。
+
+## 3. Task 2：最小修改图片插件
+
+**Files:**
+
+- Modify: `plugins/tool/qwen-image/qwen_image_tool.py`
+- Modify: `plugins/tool/qwen-image/qwen_image.py`
+- Modify: `plugins/tool/qwen-image/plugin.json`
+- Modify: `plugins/tool/qwen-image/README.md`
+
+- [ ] **Step 1: 将内部默认模型收敛为一个常量**
+
+```python
+_IMAGE_MODEL = "qwen-image-3.0-pro"
+_VALID_MODELS_GENERATE = {_IMAGE_MODEL}
+_VALID_MODELS_EDIT = {_IMAGE_MODEL}
+_GENERATE_MODEL_FALLBACKS: tuple[str, ...] = ()
+_EDIT_MODEL_FALLBACKS: tuple[str, ...] = ()
+```
+
+`generate_image_qwen` 和 `edit_image_qwen` 改名为 `generate_image` 和 `edit_image`；两处
+`get_tool_config(...)` 改用新工具名。`_extract_config()` 只从 tool config 读取 `timeout`，
+用 `resolve_media_api({})` 获取现有全局 New API URL/key，并无条件使用 `_IMAGE_MODEL`；忽略升级前留存的 tool-level `api_key`/`endpoint`/`model`。
+
+- [ ] **Step 2: 保持 New API 实现不变**
+
+不修改 `_generate_images_openai()` 的 URL、JSON 字段、`data[*].url` 解析、下载和超时逻辑。
+删除结果文案中的 model/fallback note，错误只显示中性的“图片生成服务当前不可用”。
+
+- [ ] **Step 3: 修改注册和 manifest**
+
+`qwen_image.py` 仅注册 `generate_image`/`edit_image`，描述为“根据文字生成图片”/
+“根据参考图和文字编辑图片”。`plugin.json` 保留 `id=qwen-image-tool` 和现有 entry，但将客户可见名称改为
+`图片生成`，两个 tool name 改为新名，删除 `api_key`、`model`、`endpoint` 配置字段，只保留 `timeout`；
+同时删除 `api_key_url`、`api_key_hint` 和 `model_url`。
+
+- [ ] **Step 4: 运行图片用例**
+
+```bash
+uv run pytest -q \
+  tests/unit/plugins/test_media_openai_mode.py \
+  tests/unit/plugins/test_go_claw_media_plugins.py \
+  -k image
+```
+
+Expected: PASS.
+
+- [ ] **Step 5: 提交**
+
+```bash
+git add plugins/tool/qwen-image tests/unit/plugins/test_media_openai_mode.py tests/unit/plugins/test_go_claw_media_plugins.py
+git commit -m "feat(media): switch image plugin to Token Plan default"
+```
+
+## 4. Task 3：最小修改视频插件
+
+**Files:**
+
+- Modify: `plugins/tool/wan27/wan27_tool.py`
+- Modify: `plugins/tool/wan27/wan27.py`
+- Modify: `plugins/tool/wan27/plugin.json`
+- Modify: `plugins/tool/wan27/README.md`
+
+- [ ] **Step 1: 只替换三个默认模型并删除候选**
+
+```python
+_TEXT_TO_VIDEO_MODEL = "happyhorse-1.1-t2v"
+_IMAGE_TO_VIDEO_MODEL = "happyhorse-1.1-i2v"
+_REFERENCE_TO_VIDEO_MODEL = "happyhorse-1.1-r2v"
+_T2V_MODEL_FALLBACKS: tuple[str, ...] = ()
+_I2V_MODEL_FALLBACKS: tuple[str, ...] = ()
+_R2V_MODEL_FALLBACKS: tuple[str, ...] = ()
+```
+
+- [ ] **Step 2: 改中性工具名，保持参数和网络实现**
+
+`text_to_video_wan`、`image_to_video_wan`、`reference_to_video_wan` 分别改名为
+`generate_video_from_text`、`generate_video_from_image`、`generate_video_from_reference`，
+同步更新 `get_tool_config(...)`。`_extract_config()` 只读取 tool-level `timeout`，用
+`resolve_media_api({})` 获取全局 New API URL/key，并使用上述三个固定默认模型。不修改 `_run_video_task_openai()`、`_call_video_synthesis()`、
+请求 payload、轮询间隔、超时、状态或结果 URL 解析。
+
+- [ ] **Step 3: 修改注册和 manifest**
+
+`wan27.py` 只注册三个新工具名。`plugin.json` 保留 `id=wan27-tool` 和现有 entry，客户可见名称改为
+`视频生成`，删除 `api_key`、`model`、`endpoint` 配置字段，只保留 `timeout`，并删除
+`api_key_url`、`api_key_hint` 和 `model_url`。描述只提及文字生成、图片生成和参考图生成视频。
+
+- [ ] **Step 4: 运行视频用例**
+
+```bash
+uv run pytest -q \
+  tests/unit/plugins/test_media_openai_mode.py \
+  tests/unit/plugins/test_go_claw_media_plugins.py \
+  -k video
+```
+
+Expected: PASS.
+
+- [ ] **Step 5: 提交**
+
+```bash
+git add plugins/tool/wan27 tests/unit/plugins/test_media_openai_mode.py tests/unit/plugins/test_go_claw_media_plugins.py
+git commit -m "feat(media): switch video plugin to Token Plan defaults"
+```
+
+## 5. Task 4：迁移员工的旧工具名
+
+**Files:**
+
+- Modify: `src/qwenpaw/agents/go_claw_presets.py`
+- Modify: `src/qwenpaw/app/go_claw_credentials.py`
+- Modify: `src/qwenpaw/app/go_claw_presets.py`
+- Modify: `tests/unit/agents/test_go_claw_presets.py`
+- Modify: `tests/unit/app/test_go_claw_credentials.py`
+- Modify: `tests/unit/app/test_go_claw_presets.py`
+
+- [ ] **Step 1: 先写失败测试**
+
+新增用例要求：新内容员工只包含五个新工具名；已有员工配置中的旧名被原位替换；重复运行不改变结果；
+同一列表中已有新名时不产生重复项；无关工具名原样保留。
+
+- [ ] **Step 2: 更新新交付默认值**
+
+`SPECIALIST_PRESETS["content-production"].plugin_tools` 和 `go_claw_credentials.py::MEDIA_TOOL_NAMES`
+改为五个新名。不改凭据 schema、provider 导入、marker 或 New API key 写入顺序。
+
+- [ ] **Step 3: 实现一个小型幂等替换函数**
+
+在 `src/qwenpaw/app/go_claw_presets.py` 中定义上文 `MEDIA_TOOL_RENAMES`，并在
+`ensure_go_claw_presets()` 检查旧 presets marker 之前扫描已存在员工的 plugin tool 列表。只替换字符串名称；不改员工其他配置、工作区文件或模型档位。
+
+- [ ] **Step 4: 运行相关测试**
+
+```bash
+uv run pytest -q \
+  tests/unit/agents/test_go_claw_presets.py \
+  tests/unit/app/test_go_claw_credentials.py \
+  tests/unit/app/test_go_claw_presets.py
+```
+
+Expected: PASS.
+
+- [ ] **Step 5: 提交**
+
+```bash
+git add src/qwenpaw/agents/go_claw_presets.py src/qwenpaw/app/go_claw_credentials.py src/qwenpaw/app/go_claw_presets.py tests/unit/agents/test_go_claw_presets.py tests/unit/app/test_go_claw_credentials.py tests/unit/app/test_go_claw_presets.py
+git commit -m "feat(media): migrate employees to neutral media tools"
+```
+
+## 6. Task 5：更新打包、客户合同和提示词
+
+**Files:**
+
+- Modify: `scripts/pack-tauri/qwenpaw.spec`
+- Modify: `src/qwenpaw/app/go_claw_bundled_plugins.py`
+- Modify: `src/qwenpaw/app/go_claw_presets.py`
+- Modify: `src/qwenpaw/agents/md_files/go-claw-content-production/zh/AGENTS.md`
+- Modify: `tests/unit/app/test_go_claw_bundled_plugins.py`
+- Modify: `tests/unit/app/test_go_claw_presets.py`
+- Modify: `tests/unit/branding/test_go_claw_customer_contract.py`
+- Modify: `tests/unit/scripts/test_desktop_verify_go_claw.py`
+- Modify: `tests/unit/governance/test_unified_tool_registration.py`
+
+- [ ] **Step 1: 保留打包目录和插件 ID**
+
+`qwenpaw.spec` 和 `_BUNDLED_PLUGIN_DIRECTORIES` 仍然使用 `qwen-image`/`wan27` 及
+`qwen-image-tool`/`wan27-tool`，避免新增目录迁移和重复插件。只把验证中的工具名和客户可见 display name 更新为第 1 节合同。
+
+- [ ] **Step 2: 收敛内容生产提示词**
+
+`src/qwenpaw/agents/md_files/go-claw-content-production/zh/AGENTS.md` 只指示何时调用“图片生成/图片编辑/文字生成视频/图片生成视频/参考图生成视频”；
+删除厂商、模型、API key、endpoint、自动回退和旧 Wan 独有能力的说明。
+
+- [ ] **Step 3: 运行合同测试**
+
+```bash
+uv run pytest -q \
+  tests/unit/app/test_go_claw_bundled_plugins.py \
+  tests/unit/app/test_go_claw_presets.py \
+  tests/unit/branding/test_go_claw_customer_contract.py \
+  tests/unit/scripts/test_desktop_verify_go_claw.py \
+  tests/unit/governance/test_unified_tool_registration.py
+```
+
+Expected: PASS.
+
+- [ ] **Step 4: 扫描客户可见文本**
+
+```bash
+jq -r '
+  .name,
+  .description,
+  (.description_i18n[]),
+  (.meta.tools[] | .description),
+  (.meta.tools[].config_fields[]? | .label, .placeholder, .help)
+' plugins/tool/qwen-image/plugin.json plugins/tool/wan27/plugin.json \
+  | rg -n -i 'qwen|wan|happyhorse|dashscope|百炼|阿里云|qwen-image|wan2\\.|happyhorse-'
+rg -n -i 'qwen|wan|happyhorse|dashscope|百炼|阿里云|qwen-image|wan2\\.|happyhorse-' \
+  plugins/tool/qwen-image/README.md \
+  plugins/tool/wan27/README.md \
+  src/qwenpaw/agents/md_files/go-claw-content-production/zh/AGENTS.md
+```
+
+Expected: both scans return exit code 1 with zero matches. 内部 plugin ID、Python 文件名、模型常量和内部测试不在客户文本扫描范围内。
+
+- [ ] **Step 5: 提交**
+
+```bash
+git add scripts/pack-tauri/qwenpaw.spec src/qwenpaw/app/go_claw_bundled_plugins.py src/qwenpaw/app/go_claw_presets.py src/qwenpaw/agents/md_files/go-claw-content-production/zh/AGENTS.md tests/unit/app/test_go_claw_bundled_plugins.py tests/unit/app/test_go_claw_presets.py tests/unit/branding/test_go_claw_customer_contract.py tests/unit/scripts/test_desktop_verify_go_claw.py tests/unit/governance/test_unified_tool_registration.py
+git commit -m "refactor(media): expose neutral image and video tools"
+```
+
+## 7. Task 6：New API 零改动核对与真实调用验收
+
+**Files:**
+
+- Modify after successful verification: `docs/GO-CLAW-项目事实与发布基线.zh.md`
+- Modify: `docs/GO-CLAW-变更台账.zh.md`
+
+- [ ] **Step 1: 只读核对渠道 1**
+
+在 New API 中确认 `阿里百炼_TokenPlan_1` 仍为 OpenAI 类型，base URL 仍为
+`https://token-plan.cn-beijing.maas.aliyuncs.com/compatible-mode`，并已启用四个媒体模型。不创建、不删除、不调整任何渠道。
+
+- [ ] **Step 2: 运行完整本地测试**
+
+```bash
+uv run pytest -q \
+  tests/unit/plugins/test_media_openai_mode.py \
+  tests/unit/plugins/test_go_claw_media_plugins.py \
+  tests/unit/app/test_go_claw_bundled_plugins.py \
+  tests/unit/app/test_go_claw_credentials.py \
+  tests/unit/app/test_go_claw_presets.py \
+  tests/unit/agents/test_go_claw_presets.py \
+  tests/unit/branding/test_go_claw_customer_contract.py \
+  tests/unit/scripts/test_desktop_verify_go_claw.py \
+  tests/unit/governance/test_unified_tool_registration.py
+```
+
+Expected: PASS.
+
+- [ ] **Step 3: 使用现有低额度 New API key 做五次人工验收**
+
+在一个测试客户副本中各调用一次图片生成、图片编辑、文生视频、图生视频和参考图视频。验收只记录时间、
+工具名、成功/失败和 New API 中已选渠道；不记录 API key 或完整请求体。
+
+- [ ] **Step 4: 按证据处理失败**
+
+如果任何一项失败，停止本任务并保留脱敏响应。失败不授权修改 New API、新增渠道、更换 endpoint 或加入模型回退；
+先单独诊断，根据确切失败字段向用户报告最小修正建议。
+
+- [ ] **Step 5: 记录结果并提交**
+
+```bash
+git add docs/GO-CLAW-项目事实与发布基线.zh.md docs/GO-CLAW-变更台账.zh.md
+git commit -m "docs(media): record Token Plan media verification"
+```
+
+## 8. 完成定义
+
+本分计划只在以下条件全部满足时完成：
+
+1. 现有 New API 渠道、镜像、路径和请求体未被改动。
+2. 插件客户可见名称为“图片生成”和“视频生成”。
+3. 对话模型只收到五个中性工具名和不含厂商/模型的描述。
+4. 内部默认模型是上表四个 Token Plan 模型，没有自动换模型。
+5. 相关单测全部通过，五个真实媒体调用通过现有 New API 渠道完成。

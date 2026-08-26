@@ -2,13 +2,13 @@
 
 > 状态：文件级分计划；2026-08-26 review 后受
 > `2026-08-26-go-claw-v2-1-reviewed-execution-plan.md` 约束。现有 updater 密钥已实测匹配，
-> 本轮禁止生成第二套密钥；通用 Full ZIP 永远无客户凭据。
+> 本轮禁止生成第二套密钥；Full ZIP 按已确认取舍携带本地低额度 New API key。
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Establish a recoverable GO CLAW signing-key lifecycle, make all signed-build inputs fail closed, produce one canonical complete Windows ZIP from CI, verify the real installer/update signatures and desktop readiness, and use the unified release workflow as the only publishing path for subsequent online updates.
 
-**Architecture:** The tracked Tauri updater public key is the build source of truth. GitHub’s public-key variable is an equality assertion, never an override; the existing private key and password remain only in protected local custody and GitHub Secrets. Windows CI builds portable and installed clients, validates WebView2, signs updater assets, and assembles one credential-free versioned-root ZIP. A separate local sealing operation may add one single-use enrollment ticket to a private customer copy; that copy never returns to GitHub. Public releases receive only credential-free assets.
+**Architecture:** The tracked Tauri updater public key is the build source of truth. GitHub’s public-key variable is an equality assertion, never an override; the existing private key and password remain only in protected local custody and GitHub Secrets. Windows CI builds portable and installed clients, validates WebView2, signs updater assets, and assembles one confidential versioned-root ZIP containing the existing low-quota local credential file. Public installer/update assets remain credential-free and never overwrite local configuration.
 
 **Tech Stack:** Tauri signer/minisign, NSIS, PowerShell, Python, Node.js, GitHub Actions, WebView2 Evergreen, SHA-256, Authenticode.
 
@@ -20,7 +20,7 @@
 - Implement desktop readiness, customer/model tiers, and media routing plans before running the Main build in Task 9.
 - The locally-custodied key has signed a temporary file that the tracked public key verified through `go_claw_updates.py::verify_minisign`; both local/backup public files and GitHub Variable match. No rotation or generation is authorized in this iteration. CI still proves the unreadable Secret by verifying its real output signature.
 - A workflow invoked by `release.yml`, a signed manual Main build, or a Main branch build may not emit unsigned installer/update assets. Unsigned output is allowed only for an explicitly selected diagnostic `workflow_dispatch` input and is never publishable.
-- Never print, archive, cache, upload, or commit a signing private key/password, API key, provision HMAC secret, enrollment ticket, or complete credential JSON.
+- Never print or commit a signing private key/password, API key, provision HMAC secret, enrollment ticket, or complete credential JSON. The only authorized API-key archive is `GO-CLAW-Windows-x64-Full.zip`, produced from the existing masked GitHub Secret for customer delivery; update assets and public Release assets remain credential-free.
 - Before every task commit, run `git add` for each path listed under that task and no unrelated path; every commit command below assumes that explicit staging has succeeded.
 
 ## 1. Signing key custody contract
@@ -104,6 +104,9 @@ GO-CLAW-Windows-x64-Full-<version>/
     GO-CLAW-Portable.exe
     binaries/
     GO-CLAW-Config/
+      credentials.json
+      credentials.example.json
+      update-pubkey.txt
     LICENSE
     README-PORTABLE.zh-CN.txt
     portable.json
@@ -116,8 +119,8 @@ GO-CLAW-Windows-x64-Full-<version>/
 “Full” means a complete zero-install customer cold-start package: Portable includes the application, Python/Node
 runtimes, plugins and configuration shell, while WebView2 provides offline recovery. The independently signed NSIS
 installer and updater exe/sig/manifest remain publish transport assets for Release and `/updates/`; they are not copied
-into the customer ZIP. This keeps one startup/enrollment path and avoids an installer that cannot consume the ticket
-in a post-build sealed Portable directory.
+into the customer ZIP. The client imports `credentials.json` on first start and future updater payloads preserve the
+local configuration directory.
 
 No second archive is nested inside. `SHA256SUMS.txt` covers every regular file except itself and uses lowercase SHA-256, two spaces, and root-relative POSIX paths sorted bytewise. `MANIFEST.json` schema is:
 
@@ -129,8 +132,8 @@ No second archive is nested inside. `SHA256SUMS.txt` covers every regular file e
   "platform": "windows-x86_64",
   "createdAt": "UTC RFC3339 with Z",
   "sourceCommit": "40 lowercase hex characters",
-  "confidential": false,
-  "containsCredentials": false,
+  "confidential": true,
+  "containsCredentials": true,
   "containsEnrollmentTicket": false,
   "webView2": {
     "distribution": "evergreen-standalone-x64",
@@ -148,11 +151,11 @@ No second archive is nested inside. `SHA256SUMS.txt` covers every regular file e
 }
 ```
 
-The generic Main ZIP must set all three booleans exactly as shown. The assembler fails if it sees
-`credentials.json`, `provision.json`, an API-key pattern, a provision HMAC, or private-key material. CI uploads the ZIP
-as artifact `GO-CLAW-Windows-x64-Full-<version>`, whose path list contains only the one ZIP. A separate local
-`seal_customer_bundle.py` operation may create a confidential customer delivery ZIP containing one enrollment ticket;
-that derived ZIP is never uploaded to Actions, Release, cache, or the updater mirror.
+The Main ZIP must set all three booleans exactly as shown. The assembler requires exactly one
+`Portable/GO-CLAW-Config/credentials.json`, validates its schema and expected `https://goclaw.host:8443/v1` URL
+without printing the key, and fails if it sees `provision.json`, an HMAC, an enrollment ticket, or private-key
+material. CI uploads the ZIP as artifact `GO-CLAW-Windows-x64-Full-<version>`, whose path list contains only the one
+ZIP. There is no customer sealing operation and no second delivery ZIP format.
 
 ## 5. WebView2 distribution contract
 
@@ -194,7 +197,7 @@ Publishing is unique: `.github/workflows/release.yml:205-210,322-329` builds the
 | `scripts/pack-tauri/sync_tauri_version.mjs:50-59,84-123`           | env public key overrides tracked key; signing optional             | Assert equality and signed-mode requirements; always copy tracked key.                                                              |
 | `scripts/pack-tauri/stage_windows_portable.py:16,40-53,111-228`    | portable-named archive, old credential validation, key skip        | Keep portable staging as an input, enforce schema/key; Full ZIP is assembled by a separate script.                                  |
 | `scripts/pack-tauri/build_win_pyinstaller.ps1:214-243`             | builds/stages only current portable archive                        | Expose deterministic paths/version for the full-bundle step; do not assemble ZIP in PowerShell.                                     |
-| `.github/workflows/desktop-build.yml:21-32,89-138,166-203,204-361` | optional signing, static secrets, separate artifacts, browser-only verify | Add signed mode, remove delivery secrets, readiness tests, real signature verification, WebView2, full bundle, one final generic artifact. |
+| `.github/workflows/desktop-build.yml:21-32,89-138,166-203,204-361` | optional signing, stale credential URLs/models, provision secret, separate artifacts, browser-only verify | Add signed mode, materialize the one accepted local New API credential, remove provision materialization, add readiness/signature/WebView2 verification, and upload one final confidential Full ZIP artifact. |
 | `.github/workflows/desktop-publish.yml:43-63`                      | attaches installers/update assets, not full ZIP                    | Rename staged installer assets and require exact six public files; explicitly reject/full-ignore confidential ZIP.                  |
 | `.github/workflows/desktop-release.yml:8-16`                       | published releases trigger a second legacy build                   | Remove release trigger; manual emergency only.                                                                                      |
 | `.github/workflows/release.yml:122-130,205-210,322-329`            | checks old API secret and delegates desktop                        | Require GO CLAW New API and signing inputs for non-dry release; keep this as unique publisher.                                      |
@@ -226,14 +229,14 @@ Publishing is unique: `.github/workflows/release.yml:205-210,322-329` builds the
 - [ ] Re-run; expect pass.
 - [ ] Commit: `git commit -m "ci(signing): make updater public key fail closed"`.
 
-### Task 3: Enforce staged key and credential-free release contracts
+### Task 3: Enforce staged updater key and local credential contract
 
 **Files:**
 
 - Modify: `scripts/pack-tauri/stage_windows_portable.py:40-53,111-228`
 - Modify: `tests/unit/scripts/test_stage_windows_portable.py`
 
-- [ ] Add failing tests for strict release key requirement, exact key bytes, malformed/missing key, no credentials/ticket/HMAC, and no private key material in stage.
+- [ ] Add failing tests for strict release key requirement, exact key bytes, required structurally valid `credentials.json`, rejected `provision.json`/HMAC/ticket, and no signing private-key material in stage.
 - [ ] Add a `require_updater_key: bool` argument; release/full builds pass true. Preserve false only for unit fixtures/unsigned diagnostics.
 - [ ] Re-run `uv run pytest -q tests/unit/scripts/test_stage_windows_portable.py`; expect pass.
 - [ ] Commit: `git commit -m "fix(packaging): enforce updater key in portable stage"`.
@@ -246,10 +249,10 @@ Publishing is unique: `.github/workflows/release.yml:205-210,322-329` builds the
 - Create: `tests/unit/scripts/test_build_windows_full_bundle.py`
 - Create: `scripts/pack-tauri/START-HERE.zh-CN.txt`
 
-- [ ] Write failing tests for the exact tree, stable outer name, one root directory, sorted checksums, deterministic path order, schema-2 credential-free manifest, forbidden credential/ticket/secret files, forbidden symlink/path traversal, missing asset failure, and repeated-build byte stability when timestamp/source epoch are fixed.
+- [ ] Write failing tests for the exact tree, stable outer name, one root directory, sorted checksums, deterministic path order, schema-2 manifest with `confidential=true`/`containsCredentials=true`/`containsEnrollmentTicket=false`, exactly one credential file, forbidden provision/ticket/signing-secret files, forbidden symlink/path traversal, missing asset failure, and repeated-build byte stability when timestamp/source epoch is fixed.
 - [ ] Implement CLI requiring `--version`, `--source-commit`, `--portable-stage`, `--webview2-installer`, `--pubkey-config`, and `--dist`. Installer/update assets are verified by Task 5 but are not bundle inputs.
 - [ ] Build in a new temp directory under `dist`, validate every resolved input is a regular file/directory under an expected parent, use `SOURCE_DATE_EPOCH` for ZIP timestamps, and atomically replace only `dist/GO-CLAW-Windows-x64-Full.zip`.
-- [ ] Never read or serialize credential contents; fail on forbidden filenames and run a redacted byte-pattern scanner for API/private-key markers.
+- [ ] Parse only the credential schema fields needed to assert the New API URL and key structure; never print the key or full JSON. Fail on provision/ticket/HMAC/private-key markers.
 - [ ] Run `uv run pytest -q tests/unit/scripts/test_build_windows_full_bundle.py`; expect pass.
 - [ ] Commit: `git commit -m "feat(packaging): assemble canonical full Windows ZIP"`.
 
@@ -275,11 +278,11 @@ Publishing is unique: `.github/workflows/release.yml:205-210,322-329` builds the
 - Modify: `scripts/pack-tauri/build_win_pyinstaller.ps1:214-243`
 
 - [ ] Add `unsigned_test`, calculate signed mode, and validate all signing settings before build.
-- [ ] Materialize no customer credentials, API key, HMAC, or enrollment ticket. A CI-only test key may exist only in process environment for live gates and is scanned out of every output.
+- [ ] Materialize the existing schema-1 `credentials.json` from `GO_CLAW_DASHSCOPE_API_KEY` exactly as specified by the master plan. Do not materialize `provision.json`, HMAC, enrollment ticket, or any new test key.
 - [ ] Keep installed and portable readiness verification; both must pass before packaging.
 - [ ] Download WebView2 from the exact official redirect, validate Authenticode subject/status, and calculate hash.
 - [ ] Require Tauri installer `.sig`; build and require update `.sig`/`latest.json`; run the release-contract verifier.
-- [ ] Call the full-bundle assembler. Upload one generic artifact whose path list contains only `dist/GO-CLAW-Windows-x64-Full.zip`, with `if-no-files-found: error`.
+- [ ] Call the full-bundle assembler. Upload one confidential customer artifact whose path list contains only `dist/GO-CLAW-Windows-x64-Full.zip`, with `if-no-files-found: error`.
 - [ ] Keep separate short-lived raw updater artifacts for the publish workflow. They are implementation transport, not the customer delivery artifact.
 - [ ] Run `go run github.com/rhysd/actionlint/cmd/actionlint@v1.7.7 .github/workflows/desktop-build.yml` and a signed `windows_only=true` dispatch; expect pass.
 - [ ] Commit: `git commit -m "ci(windows): produce signed complete GO CLAW bundle"`.
@@ -292,9 +295,10 @@ Publishing is unique: `.github/workflows/release.yml:205-210,322-329` builds the
 - Modify: `.github/workflows/desktop-release.yml:1-29`
 - Modify: `.github/workflows/release.yml:122-130,205-210,322-329`
 
-- [ ] Add workflow policy tests (or `actionlint` plus script assertions) proving legacy has no release trigger, publish requires the exact public assets, and locally sealed customer ZIP names are not matched by any CI/Release glob.
+- [ ] Add workflow policy tests (or `actionlint` plus script assertions) proving legacy has no release trigger and publish requires the exact credential-free public update assets; the confidential Full ZIP remains an Actions customer artifact and is not attached by the public Release glob.
 - [ ] Rename public setup files to the GO CLAW names in section 6 and fail if any required file is missing; remove `|| true` from required Windows asset moves.
-- [ ] Require the three signing settings for non-dry runs. Require `GO_CLAW_CI_TEST_API_KEY` only for explicit live media verification and never materialize it.
+- [ ] Require the three signing settings and the existing `GO_CLAW_DASHSCOPE_API_KEY` for non-dry Main builds. Do not introduce `GO_CLAW_CI_TEST_API_KEY`.
+- [ ] Before materializing credentials, use that Secret value against `https://goclaw.host:8443/v1/models` and require all seven product model IDs. If it fails, replace only the existing Secret value with a working low-quota New API key.
 - [ ] Run pinned actionlint v1.7.7 for all three workflows; expect pass.
 - [ ] Commit: `git commit -m "ci(release): enforce one signed GO CLAW publishing path"`.
 
@@ -323,7 +327,7 @@ gh workflow run desktop-build.yml --ref main -f ref=main -f windows_only=true -f
 - [ ] Run the release-contract verifier against the downloaded ZIP and public updater assets.
 - [ ] On a clean Windows terminal without WebView2, test browser fallback, install the bundled Evergreen runtime, retry, and require the content-readiness marker. On a normal Windows terminal, require direct Tauri Auto startup.
 - [ ] Launch each standard employee, confirm economy default/per-employee selection, invoke all five live media tools once, and confirm New API Token Plan channel logs.
-- [ ] Preserve the redacted build verification summary and screenshots. Keep the generic Full ZIP as the recovery baseline; create customer-specific delivery ZIPs only with the local one-time sealing process.
+- [ ] Preserve the redacted build verification summary and screenshots. Keep the one Full ZIP as the initial-delivery and recovery baseline; do not create a sealing/ticket derivative.
 
 ## 9. Completion commands
 
