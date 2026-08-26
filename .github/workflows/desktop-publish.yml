@@ -43,22 +43,28 @@ jobs:
       - name: Download all artifacts
         uses: actions/download-artifact@v4
 
-      - name: Attach desktop installers to the draft release
+      - name: Attach signed GO CLAW Windows assets to the draft release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          shopt -s nullglob
-          mv QwenPaw-Desktop-Tauri-Windows-*/QwenPaw-Tauri-*-Windows-setup.exe . 2>/dev/null || true
-          mv QwenPaw-Desktop-Tauri-macOS-*/QwenPaw-Tauri-*-macOS.zip . 2>/dev/null || true
-          mv tauri-updater-meta-macos/QwenPaw-Tauri-*-macOS.app.tar.gz . 2>/dev/null || true
-          mv go-claw-update-package-*/GO-CLAW-Update-*-setup.exe . 2>/dev/null || true
-          mv go-claw-update-package-*/GO-CLAW-Update-*-setup.exe.sig . 2>/dev/null || true
-          mv go-claw-update-package-*/latest.json . 2>/dev/null || true
-          files=(QwenPaw-Tauri-*-Windows-setup.exe QwenPaw-Tauri-*-macOS.zip QwenPaw-Tauri-*-macOS.app.tar.gz GO-CLAW-Update-*-setup.exe GO-CLAW-Update-*-setup.exe.sig latest.json)
-          if [ ${#files[@]} -eq 0 ]; then
-            echo "::error::No desktop installers found to attach to the release"
-            exit 1
-          fi
+          set -euo pipefail
+          copy_one() {
+            local pattern="$1"
+            mapfile -t matches < <(find . -type f -path "$pattern" -print)
+            if [ "${#matches[@]}" -ne 1 ]; then
+              echo "::error::Expected exactly one file for ${pattern}, found ${#matches[@]}"
+              exit 1
+            fi
+            cp "${matches[0]}" .
+          }
+          copy_one './go-claw-windows-installer-*/GO-CLAW-Setup-*-Windows-x64.exe'
+          copy_one './go-claw-windows-installer-*/GO-CLAW-Setup-*-Windows-x64.exe.sig'
+          copy_one './go-claw-update-package-*/GO-CLAW-Update-*-setup.exe'
+          copy_one './go-claw-update-package-*/GO-CLAW-Update-*-setup.exe.sig'
+          copy_one './go-claw-update-package-*/latest.json'
+          copy_one './go-claw-update-package-*/SHA256SUMS.txt'
+          files=(GO-CLAW-Setup-*-Windows-x64.exe GO-CLAW-Setup-*-Windows-x64.exe.sig GO-CLAW-Update-*-setup.exe GO-CLAW-Update-*-setup.exe.sig latest.json SHA256SUMS.txt)
+          sha256sum -c SHA256SUMS.txt
           echo "Attaching to draft release ${{ inputs.tag }}: ${files[*]}"
           gh release upload "${{ inputs.tag }}" "${files[@]}" --clobber --repo "$GITHUB_REPOSITORY"
 
@@ -147,10 +153,10 @@ jobs:
           }
 
           upload_versioned \
-            "QwenPaw-Desktop-Tauri-Windows-*" \
-            "QwenPaw-Tauri-*-Windows-setup.exe" \
+            "go-claw-windows-installer-*" \
+            "GO-CLAW-Setup-*-Windows-x64.exe" \
             "win-tauri" \
-            "QwenPaw-Tauri-${VERSION}-Windows-setup.exe" \
+            "GO-CLAW-Setup-${VERSION}-Windows-x64.exe" \
             "win-tauri-metadata.json"
 
           upload_versioned \

@@ -3,7 +3,7 @@
 # - Tauri desktop: Windows/macOS app bundles with PyInstaller backend sidecar
 # Runs on release publish and manual dispatch.
 
-name: QwenPaw Desktop Build
+name: QwenPaw Desktop Build (Legacy Emergency Manual)
 
 on:
   # NOTE: legacy fallback path. The standard release flow is now release.yml
@@ -11,8 +11,6 @@ on:
   # desktop-publish.yml and gates the web release on the desktop build.
   # Publishing a GitHub Release directly still triggers this OLD, un-gated
   # desktop build. Kept only as an emergency rollback.
-  release:
-    types: [published]
   workflow_dispatch:
     inputs:
       upload_to_oss:

@@ -174,7 +174,7 @@ jobs:
         shell: pwsh
         run: |
           $bundleDir = "console/src-tauri/target/release/bundle/nsis"
-          $output = "dist/QwenPaw-Tauri-${{ steps.version.outputs.version }}-Windows-setup.exe"
+          $output = "dist/GO-CLAW-Setup-${{ steps.version.outputs.version }}-Windows-x64.exe"
           $installers = @(Get-ChildItem -LiteralPath $bundleDir -Filter "*-setup.exe" -File)
           if ($installers.Count -ne 1) {
             throw "Expected exactly one Windows installer, found $($installers.Count)"
@@ -335,8 +335,11 @@ jobs:
       - name: Upload Tauri Windows artifact
         uses: actions/upload-artifact@v4
         with:
-          name: QwenPaw-Desktop-Tauri-Windows-${{ steps.version.outputs.version }}
-          path: dist/QwenPaw-Tauri-*-Windows-setup.exe
+          name: go-claw-windows-installer-${{ steps.version.outputs.version }}
+          path: |
+            dist/GO-CLAW-Setup-*-Windows-x64.exe
+            dist/GO-CLAW-Setup-*-Windows-x64.exe.sig
+          if-no-files-found: error
 
       - name: Download and validate offline WebView2 runtime
         shell: pwsh
@@ -385,7 +388,7 @@ jobs:
       - name: Verify signed Windows release contract
         shell: pwsh
         run: |
-          $installers = @(Get-ChildItem dist -File -Filter "QwenPaw-Tauri-*-Windows-setup.exe")
+          $installers = @(Get-ChildItem dist -File -Filter "GO-CLAW-Setup-*-Windows-x64.exe")
           $updates = @(Get-ChildItem dist -File -Filter "GO-CLAW-Update-*-setup.exe")
           if ($installers.Count -ne 1 -or $updates.Count -ne 1) {
             throw "Expected exactly one installer and one update package"
@@ -401,6 +404,29 @@ jobs:
             --update-payload "dist/payload" `
             --webview2-authenticode-subject $env:WEBVIEW2_AUTHENTICODE_SUBJECT
           if ($LASTEXITCODE -ne 0) { throw "Windows release contract verification failed" }
+
+      - name: Generate public Windows SHA-256 checksums
+        shell: pwsh
+        run: |
+          $files = @(
+            Get-ChildItem dist -File -Filter "GO-CLAW-Setup-*-Windows-x64.exe"
+            Get-ChildItem dist -File -Filter "GO-CLAW-Setup-*-Windows-x64.exe.sig"
+            Get-ChildItem dist -File -Filter "GO-CLAW-Update-*-setup.exe"
+            Get-ChildItem dist -File -Filter "GO-CLAW-Update-*-setup.exe.sig"
+            Get-Item "dist/latest.json"
+          ) | Sort-Object Name
+          if ($files.Count -ne 5) {
+            throw "Expected five public Windows release inputs, found $($files.Count)"
+          }
+          $lines = foreach ($file in $files) {
+            $digest = (Get-FileHash -LiteralPath $file.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
+            "$digest  $($file.Name)"
+          }
+          [IO.File]::WriteAllLines(
+            (Join-Path (Resolve-Path dist) "SHA256SUMS.txt"),
+            $lines,
+            [Text.UTF8Encoding]::new($false)
+          )
 
       - name: Upload single GO CLAW Full ZIP
         uses: actions/upload-artifact@v4
@@ -426,7 +452,8 @@ jobs:
             dist/GO-CLAW-Update-*-setup.exe
             dist/GO-CLAW-Update-*-setup.exe.sig
             dist/latest.json
-          if-no-files-found: ignore
+            dist/SHA256SUMS.txt
+          if-no-files-found: error
 
   build-tauri-macos:
     if: ${{ inputs.windows_only != true }}
