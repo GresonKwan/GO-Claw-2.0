@@ -79,10 +79,22 @@ Nginx 的已验证配置文件是：
   Wan/Qwen Image 模型。
 - 现有 provisioning 签发的样本令牌可以从 `/v1/models` 看到本轮七个必需模型。
 
-现有客户媒体插件已对非 `aliyuncs.com` 地址使用 New API OpenAI 兼容模式：
-图片使用 `/v1/images/generations`，视频使用 `/v1/video/generations` 提交和轮询。
-v2.1 保留这条已工作链路，只替换插件默认模型并运行五项真实调用。
-不新建 Ali 类型媒体渠道，不预先修改 New API 源码或媒体协议；真实调用失败时先根据脱敏响应单独诊断。
+现有客户媒体插件对非 `aliyuncs.com` 地址使用 New API 兼容入口：图片使用
+`/v1/images/generations`，视频使用 `/v1/video/generations` 提交和轮询。2026-08-26 的真实调用证明：
+
+- 旧图片/视频模型实际由渠道 2（`type=17` 的阿里类型直连渠道）承载，所以旧插件可用；
+- 新四个媒体模型目前只挂在渠道 1（`type=1` 的 OpenAI 文字兼容渠道）；
+- 通过渠道 1 调用图片和视频均返回 HTTP 400 `url error`；绕过 New API 直接请求
+  `compatible-mode/v1/images/generations` 仍返回相同错误；
+- 阿里云 Token Plan 官方媒体合同是原生
+  `/api/v1/services/aigc/multimodal-generation/generation`、
+  `/api/v1/services/aigc/video-generation/video-synthesis` 和 `/api/v1/tasks/{task_id}`，
+  不是文字 `compatible-mode` 路径。
+
+因此“模型出现在渠道和 `/v1/models`”只证明可见性，不证明媒体协议可用。发布目前被此项阻断。
+在获得明确运维授权前，不得自行新建媒体渠道或部署 New API 私有补丁。允许的最小修复候选只有：
+为同一 Token Plan 凭据增加独立 `type=17` 媒体渠道，并仅挂四个媒体模型；若当前固定版本的
+阿里适配器仍不识别新模型，再对固定版本做最小模型识别补丁。两种情况下客户端合同均保持不变。
 
 ### 4.2 唯一产品模型映射（内部）
 
@@ -192,7 +204,8 @@ GitHub Actions 下载 artifact 时会额外使用平台包装层；客户文件�
    显示明确故障页而不是打开一个同样不可用的浏览器。
 2. 客户前端和其调用的产品 API 响应不出现 provider/model/base URL/API key。
 3. 每个员工独立保存经济/均衡/高性能档位，新员工默认经济。
-4. 五个媒体工具均通过 New API 的 Token Plan 媒体渠道实测，不存在百炼直连自动回退。
+4. 五个媒体工具均通过 New API 的 Token Plan 原生媒体渠道实测，不存在旧百炼直连自动回退；
+   当前该门禁未通过，禁止 Main Build 发布。
 5. Main Full ZIP 包含已接受的低额度本地 `credentials.json`，但不包含 `provision.json`、共享 HMAC、ticket 或签名私钥；在线更新资产不包含客户凭据。
 6. 三处 updater 公钥一致，安装器和更新包均由现有私钥签名并经项目 verifier 复验。
 7. `/updates/latest.json` 返回 `application/json`，文件、SHA-256、签名和 URL 相互一致。

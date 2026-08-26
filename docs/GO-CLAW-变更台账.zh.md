@@ -141,6 +141,8 @@
 | 建立当前项目事实/发布基线，记录生产服务器、New API revision/digest、真实网关、签名状态、GitHub/CI 和更新镜像现状 | 防止把旧聊天、计划目标或另一台网关误当成生产事实 | （待推送） | SSH/Nginx/Docker/SQLite/GitHub/HTTP 只读复核；现有 updater 私钥签名后由项目 verifier 验证通过 | `docs/GO-CLAW-项目事实与发布基线.zh.md` |
 | 四份原计划统一受一份 review 后总执行计划约束；修正员工页模型泄漏、重复签名密钥、后端失败错误回退和更新镜像等问题 | 原计划之间存在可导致模型泄漏、更新验签分叉和不可用启动的合同冲突 | `5ac46580` | 文档交叉检查、路径/route/symbol 复核、服务器只读核对 | `docs/superpowers/plans/2026-08-26-go-claw-v2-1-reviewed-execution-plan.md` |
 | 按用户确认的最小实施原则修订 v2.1 计划：Full ZIP 保留本地低额度 API key；取消激活/ticket/provisioning v2；媒体只替换 Token Plan 模型和中性名称 | 前一版 review 将未证实风险扩展成了新开户系统、新媒体渠道和 New API 私有补丁，与已工作链路及产品体验冲突 | （本次文档提交） | 现有插件 URL/body/轮询代码复核；计划冲突扫描；`git diff --check` | `docs/superpowers/plans/2026-08-26-go-claw-v2-1-reviewed-execution-plan.md`、`docs/superpowers/plans/2026-08-26-go-claw-token-plan-media-plan.md` |
+| 媒体插件改为中性工具名并固定 Token Plan 目标模型；移除工具级 key/endpoint/model 和自动模型回退；保留现有 New API 请求体 | 收敛客户界面和模型选择，不改变客户端协议 | `cf6b0597`, `e2490713` | 媒体/迁移/客户合同相关测试 223 例 | 同上 |
+| 真实媒体调用推翻“只增加模型名即可”的现场假设：新模型挂在 OpenAI 文字渠道会返回 400 `url error`，旧插件实际由独立 `type=17` 阿里渠道承载 | 防止把 `/v1/models` 可见性误判为媒体协议可用；Main Build 暂停 | （文档待提交） | 服务器 SQLite 只读核对；New API 与上游各一次图片调用；New API 一次视频调用；阿里云 Token Plan 官方媒体接口文档 | `docs/GO-CLAW-项目事实与发布基线.zh.md` |
 
 ## 运营侧变更（非代码，无 commit）
 

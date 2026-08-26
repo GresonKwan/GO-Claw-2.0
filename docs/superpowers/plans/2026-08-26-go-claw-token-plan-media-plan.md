@@ -317,19 +317,26 @@ git add scripts/pack-tauri/qwenpaw.spec src/qwenpaw/app/go_claw_bundled_plugins.
 git commit -m "refactor(media): expose neutral image and video tools"
 ```
 
-## 7. Task 6：New API 零改动核对与真实调用验收
+## 7. Task 6：New API 核对与真实调用验收
+
+> 2026-08-26 执行状态：**阻断**。模型名单核对通过，但图片和视频真实调用均在现有
+> OpenAI 类型 Token Plan 渠道返回 HTTP 400 `url error`。旧媒体模型实际由独立
+> `type=17` 阿里渠道承载；官方 Token Plan 媒体合同也是 `/api/v1/services/aigc/...`
+> 原生接口。继续运维变更前必须取得用户明确授权。
 
 **Files:**
 
 - Modify after successful verification: `docs/GO-CLAW-项目事实与发布基线.zh.md`
 - Modify: `docs/GO-CLAW-变更台账.zh.md`
 
-- [ ] **Step 1: 只读核对渠道 1**
+- [x] **Step 1: 只读核对渠道 1**
 
 在 New API 中确认 `阿里百炼_TokenPlan_1` 仍为 OpenAI 类型，base URL 仍为
 `https://token-plan.cn-beijing.maas.aliyuncs.com/compatible-mode`，并已启用四个媒体模型。不创建、不删除、不调整任何渠道。
 
-- [ ] **Step 2: 运行完整本地测试**
+该步骤只证明模型可见，不能证明媒体可调用。
+
+- [x] **Step 2: 运行完整本地测试**
 
 ```bash
 uv run pytest -q \
@@ -351,10 +358,15 @@ Expected: PASS.
 在一个测试客户副本中各调用一次图片生成、图片编辑、文生视频、图生视频和参考图视频。验收只记录时间、
 工具名、成功/失败和 New API 中已选渠道；不记录 API key 或完整请求体。
 
-- [ ] **Step 4: 按证据处理失败**
+- [x] **Step 4: 按证据处理失败**
 
 如果任何一项失败，停止本任务并保留脱敏响应。失败不授权修改 New API、新增渠道、更换 endpoint 或加入模型回退；
 先单独诊断，根据确切失败字段向用户报告最小修正建议。
+
+- [ ] **Step 4a: 获得用户对最小运维修复的明确授权**
+
+推荐先复用同一 Token Plan key，新建仅包含四个媒体模型的 `type=17` 媒体渠道，保留现有文字渠道不动。
+若固定 New API 版本仍无法识别新模型，再单独评估最小识别补丁。未经授权不得实施任何一种方案。
 
 - [ ] **Step 5: 记录结果并提交**
 
