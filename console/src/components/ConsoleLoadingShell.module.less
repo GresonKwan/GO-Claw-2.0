@@ -1,0 +1,65 @@
+.page {
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  background: #f7f8fa;
+  color: #25282d;
+}
+
+.brand {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 18px;
+}
+
+.logo {
+  width: auto;
+  height: 76px;
+}
+
+.pulse {
+  width: 44px;
+  height: 3px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: linear-gradient(90deg, transparent, #ff6a2a, transparent);
+  animation: console-loading-pulse 1.2s ease-in-out infinite;
+}
+
+.label {
+  margin: 0;
+  color: #777d87;
+  font-size: 15px;
+  line-height: 1.5;
+}
+
+@media (prefers-color-scheme: dark) {
+  .page {
+    background: #151619;
+    color: #f4f4f5;
+  }
+
+  .label {
+    color: #a6a9b0;
+  }
+}
+
+@keyframes console-loading-pulse {
+  0%,
+  100% {
+    opacity: 0.35;
+    transform: scaleX(0.55);
+  }
+
+  50% {
+    opacity: 1;
+    transform: scaleX(1);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pulse {
+    animation: none;
+  }
+}

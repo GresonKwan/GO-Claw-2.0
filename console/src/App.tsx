@@ -33,6 +33,8 @@ import { isTauri } from "@tauri-apps/api/core";
 import { isDesktopTauriRuntime } from "./utils/openExternalLink";
 import { interceptBlankLinkClicks } from "./utils/interceptBlankLinkClicks";
 import { synchronizeFixedChineseLanguage } from "./utils/fixedChineseLanguage";
+import ConsoleLoadingShell from "./components/ConsoleLoadingShell";
+import DesktopConsoleReadyReporter from "./tauri/DesktopConsoleReadyReporter";
 import "./styles/layout.css";
 import "./styles/form-override.css";
 
@@ -91,7 +93,9 @@ function AuthGuard({ children }: { children: React.ReactNode }) {
     };
   }, []);
 
-  if (status === "loading") return null;
+  if (status === "loading") {
+    return <ConsoleLoadingShell label="正在验证登录状态…" />;
+  }
   if (status === "auth-required")
     return (
       <Navigate
@@ -99,7 +103,7 @@ function AuthGuard({ children }: { children: React.ReactNode }) {
         replace
       />
     );
-  return <>{children}</>;
+  return <DesktopConsoleReadyReporter>{children}</DesktopConsoleReadyReporter>;
 }
 
 function getRouterBasename(pathname: string): string | undefined {
@@ -138,7 +142,7 @@ function AppInner() {
 
   // Wait for plugins to load before rendering routes that might be patched
   if (pluginsLoading) {
-    return null;
+    return <ConsoleLoadingShell label="正在加载工作台…" />;
   }
 
   return (
@@ -168,8 +172,14 @@ function AppInner() {
                   <Route
                     path="/login"
                     element={
-                      <Suspense fallback={null}>
-                        <LoginPage />
+                      <Suspense
+                        fallback={
+                          <ConsoleLoadingShell label="正在加载登录页…" />
+                        }
+                      >
+                        <DesktopConsoleReadyReporter>
+                          <LoginPage />
+                        </DesktopConsoleReadyReporter>
                       </Suspense>
                     }
                   />
