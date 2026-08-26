@@ -30,12 +30,18 @@ def test_routing_state_write_is_strict_atomic_and_durable(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
 ) -> None:
-    calls: list[tuple[Path, object, bool]] = []
-    monkeypatch.setattr(product, "get_config_path", lambda: tmp_path / "config.json")
+    calls: list[tuple[Path, dict[str, object], bool]] = []
+    monkeypatch.setattr(
+        product,
+        "get_config_path",
+        lambda: tmp_path / "config.json",
+    )
     monkeypatch.setattr(
         product,
         "write_json_atomic",
-        lambda path, payload, durable=False: calls.append((path, payload, durable)),
+        lambda path, payload, durable=False: calls.append(
+            (path, payload, durable),
+        ),
     )
 
     product.write_routing_state("token-plan")
@@ -52,8 +58,16 @@ def test_routing_state_write_is_strict_atomic_and_durable(
     "payload",
     [
         {},
-        {"schemaVersion": 2, "providerId": "p", "updatedAt": "2026-01-01T00:00:00Z"},
-        {"schemaVersion": 1, "providerId": "", "updatedAt": "2026-01-01T00:00:00Z"},
+        {
+            "schemaVersion": 2,
+            "providerId": "p",
+            "updatedAt": "2026-01-01T00:00:00Z",
+        },
+        {
+            "schemaVersion": 1,
+            "providerId": "",
+            "updatedAt": "2026-01-01T00:00:00Z",
+        },
         {
             "schemaVersion": 1,
             "providerId": "p",
@@ -67,9 +81,14 @@ def test_routing_state_rejects_non_contract_json(
     tmp_path: Path,
     payload: dict,
 ) -> None:
-    monkeypatch.setattr(product, "get_config_path", lambda: tmp_path / "config.json")
+    monkeypatch.setattr(
+        product,
+        "get_config_path",
+        lambda: tmp_path / "config.json",
+    )
     (tmp_path / ".go-claw-product-routing.json").write_text(
-        json.dumps(payload), encoding="utf-8"
+        json.dumps(payload),
+        encoding="utf-8",
     )
     assert product.read_routing_state() is None
 
@@ -78,10 +97,19 @@ def test_v1_derivation_requires_existing_https_provider(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
 ) -> None:
-    monkeypatch.setattr(product, "get_config_path", lambda: tmp_path / "config.json")
+    monkeypatch.setattr(
+        product,
+        "get_config_path",
+        lambda: tmp_path / "config.json",
+    )
     manager = SimpleNamespace(
-        get_active_model=lambda: ModelSlotConfig(provider_id="token-plan", model="legacy"),
-        get_provider=lambda provider_id: SimpleNamespace(base_url="https://new-api.example/v1")
+        get_active_model=lambda: ModelSlotConfig(
+            provider_id="token-plan",
+            model="legacy",
+        ),
+        get_provider=lambda provider_id: SimpleNamespace(
+            base_url="https://new-api.example/v1",
+        )
         if provider_id == "token-plan"
         else None,
     )
@@ -97,7 +125,11 @@ def test_migration_maps_every_profile_once_and_writes_marker_last(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
 ) -> None:
-    monkeypatch.setattr(product, "get_config_path", lambda: tmp_path / "config.json")
+    monkeypatch.setattr(
+        product,
+        "get_config_path",
+        lambda: tmp_path / "config.json",
+    )
     product.write_routing_state("token-plan")
     source_models = {
         "a": "deepseek-v4-flash",
@@ -113,11 +145,13 @@ def test_migration_maps_every_profile_once_and_writes_marker_last(
                 ModelSlotConfig(provider_id="old", model=model)
                 if model is not None
                 else None
-            )
+            ),
         )
         for agent_id, model in source_models.items()
     }
-    root = SimpleNamespace(agents=SimpleNamespace(profiles=dict.fromkeys(source_models)))
+    root = SimpleNamespace(
+        agents=SimpleNamespace(profiles=dict.fromkeys(source_models)),
+    )
     events: list[str] = []
 
     monkeypatch.setattr(product, "load_config", lambda **_kwargs: root)
@@ -143,7 +177,9 @@ def test_migration_maps_every_profile_once_and_writes_marker_last(
         "deepseek-v4-flash-0731",
         "deepseek-v4-flash-0731",
     ]
-    assert {cfg.active_model.provider_id for cfg in persisted.values()} == {"token-plan"}
+    assert {cfg.active_model.provider_id for cfg in persisted.values()} == {
+        "token-plan",
+    }
     marker = tmp_path / ".migrations" / "go-claw-model-tiers-v1.json"
     assert marker.exists()
     assert set(json.loads(marker.read_text(encoding="utf-8"))) == {
@@ -153,7 +189,8 @@ def test_migration_maps_every_profile_once_and_writes_marker_last(
     }
 
     persisted["a"].active_model = ModelSlotConfig(
-        provider_id="token-plan", model="qwen3.8-max"
+        provider_id="token-plan",
+        model="qwen3.8-max",
     )
     events.clear()
     assert product.ensure_go_claw_model_tiers(SimpleNamespace()) is True
@@ -165,7 +202,11 @@ def test_failed_profile_save_never_writes_completion_marker(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
 ) -> None:
-    monkeypatch.setattr(product, "get_config_path", lambda: tmp_path / "config.json")
+    monkeypatch.setattr(
+        product,
+        "get_config_path",
+        lambda: tmp_path / "config.json",
+    )
     product.write_routing_state("token-plan")
     root = SimpleNamespace(agents=SimpleNamespace(profiles={"a": object()}))
     monkeypatch.setattr(product, "load_config", lambda **_kwargs: root)
@@ -181,4 +222,6 @@ def test_failed_profile_save_never_writes_completion_marker(
     )
 
     assert product.ensure_go_claw_model_tiers(SimpleNamespace()) is False
-    assert not (tmp_path / ".migrations" / "go-claw-model-tiers-v1.json").exists()
+    assert not (
+        tmp_path / ".migrations" / "go-claw-model-tiers-v1.json"
+    ).exists()

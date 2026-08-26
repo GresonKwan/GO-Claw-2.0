@@ -269,7 +269,10 @@ def test_windows_workflow_materializes_batch_credentials_from_secrets():
     assert "MicrosoftEdgeWebView2RuntimeInstallerX64.exe" in workflow
     assert "Get-AuthenticodeSignature" in workflow
     assert "windows_release_contract.py" in workflow
-    assert "Copy-Item -LiteralPath $portable[0].FullName -Destination $fullZip" not in workflow
+    assert (
+        "Copy-Item -LiteralPath $portable[0].FullName -Destination $fullZip"
+        not in workflow
+    )
     assert "staged an unsigned test installer" not in workflow
 
 

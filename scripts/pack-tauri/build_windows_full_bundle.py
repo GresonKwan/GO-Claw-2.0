@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# -*- coding: utf-8 -*-
 """Assemble the canonical confidential GO CLAW Windows Full ZIP."""
 
 from __future__ import annotations
@@ -66,10 +67,14 @@ def _validate_portable_tree(portable: Path) -> None:
             raise FileNotFoundError(f"missing portable asset: {relative}")
     credentials = list(portable.rglob("credentials.json"))
     if len(credentials) != 1:
-        raise ValueError("portable stage must contain exactly one credentials.json")
+        raise ValueError(
+            "portable stage must contain exactly one credentials.json",
+        )
     for path in portable.rglob("*"):
         if path.is_symlink():
-            raise ValueError(f"portable stage contains symlink: {path.relative_to(portable)}")
+            raise ValueError(
+                f"portable stage contains symlink: {path.relative_to(portable)}",
+            )
         relative = path.relative_to(portable).as_posix()
         folded = relative.casefold()
         forbidden = (
@@ -99,6 +104,7 @@ def _validate_credentials(path: Path) -> None:
         )
     except (json.JSONDecodeError, KeyError, TypeError) as exc:
         raise ValueError("credentials.json is structurally invalid") from exc
+
     def walk_keys(value: object) -> list[str]:
         if isinstance(value, dict):
             return [str(key) for key in value] + [
@@ -113,7 +119,13 @@ def _validate_credentials(path: Path) -> None:
     if any(
         marker in key.casefold()
         for key in walk_keys(payload)
-        for marker in ("hmac", "enrollment", "ticket", "privatekey", "private_key")
+        for marker in (
+            "hmac",
+            "enrollment",
+            "ticket",
+            "privatekey",
+            "private_key",
+        )
     ):
         raise ValueError("forbidden field in credentials.json")
     schema, model_id, llm_url, llm_key, media_url, media_key = values
@@ -132,7 +144,9 @@ def _validate_credentials(path: Path) -> None:
             for key in keys
         )
     ):
-        raise ValueError("credentials.json does not match the GO CLAW delivery contract")
+        raise ValueError(
+            "credentials.json does not match the GO CLAW delivery contract",
+        )
 
 
 def _read_pubkey(config_path: Path) -> bytes:
@@ -140,7 +154,9 @@ def _read_pubkey(config_path: Path) -> bytes:
         payload = json.loads(config_path.read_text(encoding="utf-8"))
         pubkey = payload["plugins"]["updater"]["pubkey"]
     except (json.JSONDecodeError, KeyError, TypeError) as exc:
-        raise ValueError("updater public key config is structurally invalid") from exc
+        raise ValueError(
+            "updater public key config is structurally invalid",
+        ) from exc
     if not isinstance(pubkey, str) or not pubkey.strip():
         raise ValueError("updater public key config is structurally invalid")
     return (pubkey.strip() + "\n").encode("ascii")
@@ -174,8 +190,17 @@ def _regular_files(root: Path) -> list[Path]:
     )
 
 
-def _write_zip(root: Path, output: Path, zip_timestamp: tuple[int, ...]) -> None:
-    with zipfile.ZipFile(output, "w", compression=zipfile.ZIP_DEFLATED, allowZip64=True) as archive:
+def _write_zip(
+    root: Path,
+    output: Path,
+    zip_timestamp: tuple[int, int, int, int, int, int],
+) -> None:
+    with zipfile.ZipFile(
+        output,
+        "w",
+        compression=zipfile.ZIP_DEFLATED,
+        allowZip64=True,
+    ) as archive:
         for path in _regular_files(root):
             relative = path.relative_to(root.parent).as_posix()
             info = zipfile.ZipInfo(relative, date_time=zip_timestamp)
@@ -197,8 +222,12 @@ def build_full_bundle(
 ) -> Path:
     if not version.strip() or any(char in version for char in "/\\"):
         raise ValueError("version must be a non-empty path-safe value")
-    if len(source_commit) != 40 or any(char not in "0123456789abcdef" for char in source_commit):
-        raise ValueError("source commit must be 40 lowercase hexadecimal characters")
+    if len(source_commit) != 40 or any(
+        char not in "0123456789abcdef" for char in source_commit
+    ):
+        raise ValueError(
+            "source commit must be 40 lowercase hexadecimal characters",
+        )
     portable = _require_directory(portable_stage, "portable stage")
     webview = _require_regular(webview2_installer, "WebView2 installer")
     pubkey_path = _require_regular(pubkey_config, "updater public key config")
@@ -206,9 +235,13 @@ def build_full_bundle(
     _validate_portable_tree(portable)
     _validate_credentials(portable / "GO-CLAW-Config/credentials.json")
     tracked_pubkey = _read_pubkey(pubkey_path)
-    staged_pubkey = (portable / "GO-CLAW-Config/update-pubkey.txt").read_bytes()
+    staged_pubkey = (
+        portable / "GO-CLAW-Config/update-pubkey.txt"
+    ).read_bytes()
     if staged_pubkey != tracked_pubkey:
-        raise ValueError("staged updater public key does not match tracked config")
+        raise ValueError(
+            "staged updater public key does not match tracked config",
+        )
 
     dist = dist.expanduser().resolve()
     if dist == Path(dist.anchor):
@@ -261,7 +294,8 @@ def build_full_bundle(
             for path in checksum_files
         ]
         (root / "SHA256SUMS.txt").write_text(
-            "\n".join(checksum_lines) + "\n", encoding="ascii"
+            "\n".join(checksum_lines) + "\n",
+            encoding="ascii",
         )
 
         temporary_zip = temp_dir / OUTPUT_NAME

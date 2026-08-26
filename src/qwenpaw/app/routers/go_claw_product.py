@@ -9,7 +9,11 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from pydantic import BaseModel, ConfigDict, Field
 
-from ...config.config import ModelSlotConfig, load_agent_config, save_agent_config
+from ...config.config import (
+    ModelSlotConfig,
+    load_agent_config,
+    save_agent_config,
+)
 from ...providers.provider_manager import ProviderManager
 from ..agent_context import get_agent_for_request
 from ..go_claw_product import (
@@ -41,7 +45,7 @@ class ModelTierResponse(BaseModel):
     selected_tier: str = Field(serialization_alias="selectedTier")
     tiers: list[PublicTier]
     effective_max_input_length: int = Field(
-        serialization_alias="effectiveMaxInputLength"
+        serialization_alias="effectiveMaxInputLength",
     )
 
 
@@ -180,7 +184,11 @@ async def set_model_tier(
             tier.model_id,
             exc_info=True,
         )
-        raise _error(500, "TIER_SAVE_FAILED", "employee settings could not be saved") from exc
+        raise _error(
+            500,
+            "TIER_SAVE_FAILED",
+            "employee settings could not be saved",
+        ) from exc
     schedule_agent_reload(request, workspace.agent_id)
     manager.maybe_probe_multimodal(routing.provider_id, tier.model_id)
     return _response(

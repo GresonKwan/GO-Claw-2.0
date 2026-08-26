@@ -10,7 +10,11 @@ from datetime import datetime, timezone
 from pathlib import Path
 from urllib.parse import urlparse
 
-from ..config.config import ModelSlotConfig, load_agent_config, save_agent_config
+from ..config.config import (
+    ModelSlotConfig,
+    load_agent_config,
+    save_agent_config,
+)
 from ..config.utils import get_config_path, load_config
 from ..utils.io_utils import get_sync_path_lock, write_json_atomic
 
@@ -122,7 +126,10 @@ def read_routing_state() -> ProductRoutingState | None:
 def write_routing_state(provider_id: str) -> ProductRoutingState:
     if not isinstance(provider_id, str) or not provider_id.strip():
         raise ValueError("provider_id must be non-empty")
-    state = ProductRoutingState(provider_id=provider_id.strip(), updated_at=_utc_now())
+    state = ProductRoutingState(
+        provider_id=provider_id.strip(),
+        updated_at=_utc_now(),
+    )
     write_json_atomic(
         routing_state_path(),
         {
@@ -147,7 +154,11 @@ def ensure_routing_state(provider_manager) -> ProductRoutingState | None:
     provider = provider_manager.get_provider(provider_id)
     base_url = str(getattr(provider, "base_url", "") or "").strip()
     parsed = urlparse(base_url)
-    if provider is None or parsed.scheme.lower() != "https" or not parsed.netloc:
+    if (
+        provider is None
+        or parsed.scheme.lower() != "https"
+        or not parsed.netloc
+    ):
         return None
     return write_routing_state(provider_id)
 
@@ -179,7 +190,9 @@ def ensure_go_claw_model_tiers(provider_manager) -> bool:
                 return True
             routing = ensure_routing_state(provider_manager)
             if routing is None:
-                logger.warning("GO CLAW model tiers: product routing is not configured")
+                logger.warning(
+                    "GO CLAW model tiers: product routing is not configured",
+                )
                 return False
 
             config = load_config(force_reload=True)
@@ -200,7 +213,8 @@ def ensure_go_claw_model_tiers(provider_manager) -> bool:
                 persisted = load_agent_config(agent_id).active_model
                 if persisted != slot:
                     raise RuntimeError(
-                        f"model tier migration verification failed for {agent_id}"
+                        "model tier migration verification failed for "
+                        f"{agent_id}",
                     )
 
             write_json_atomic(

@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# -*- coding: utf-8 -*-
 from __future__ import annotations
 
 import hashlib
@@ -13,7 +14,10 @@ import pytest
 
 SCRIPTS = Path(__file__).parents[3] / "scripts" / "pack-tauri"
 MODULE_PATH = SCRIPTS / "build_windows_full_bundle.py"
-SPEC = importlib.util.spec_from_file_location("build_windows_full_bundle", MODULE_PATH)
+SPEC = importlib.util.spec_from_file_location(
+    "build_windows_full_bundle",
+    MODULE_PATH,
+)
 assert SPEC and SPEC.loader
 MODULE = importlib.util.module_from_spec(SPEC)
 sys.modules[SPEC.name] = MODULE
@@ -28,9 +32,13 @@ def _fixture(tmp_path: Path) -> dict[str, Path | str]:
     (portable / "GO-CLAW-Portable.exe").write_bytes(b"portable")
     (portable / "binaries/runtime/node.exe").write_bytes(b"node")
     (portable / "LICENSE").write_text("license\n", encoding="utf-8")
-    (portable / "README-PORTABLE.zh-CN.txt").write_text("readme\n", encoding="utf-8")
+    (portable / "README-PORTABLE.zh-CN.txt").write_text(
+        "readme\n",
+        encoding="utf-8",
+    )
     (portable / "portable.json").write_text(
-        '{"schemaVersion":1,"clientMode":"auto"}\n', encoding="utf-8"
+        '{"schemaVersion":1,"clientMode":"auto"}\n',
+        encoding="utf-8",
     )
     credentials = {
         "schemaVersion": 1,
@@ -47,7 +55,8 @@ def _fixture(tmp_path: Path) -> dict[str, Path | str]:
         },
     }
     (config / "credentials.json").write_text(
-        json.dumps(credentials), encoding="utf-8"
+        json.dumps(credentials),
+        encoding="utf-8",
     )
     (config / "credentials.example.json").write_text("{}\n", encoding="utf-8")
     pubkey = tmp_path / "tauri.conf.json"
@@ -75,7 +84,10 @@ def _build(tmp_path: Path):
     return MODULE.build_full_bundle(**_fixture(tmp_path))
 
 
-def test_builds_exact_root_contract_manifest_and_sorted_checksums(tmp_path, monkeypatch):
+def test_builds_exact_root_contract_manifest_and_sorted_checksums(
+    tmp_path,
+    monkeypatch,
+):
     monkeypatch.setenv("SOURCE_DATE_EPOCH", "1767225600")
     output = _build(tmp_path)
     assert output.name == "GO-CLAW-Windows-x64-Full.zip"
@@ -106,16 +118,32 @@ def test_builds_exact_root_contract_manifest_and_sorted_checksums(tmp_path, monk
         assert manifest["confidential"] is True
         assert manifest["containsCredentials"] is True
         assert manifest["containsEnrollmentTicket"] is False
-        assert manifest["webView2"]["sha256"] == hashlib.sha256(b"MZ-webview").hexdigest()
-        assert manifest["updaterPublicKeySha256"] == hashlib.sha256(b"PUBLIC-KEY\n").hexdigest()
+        assert (
+            manifest["webView2"]["sha256"]
+            == hashlib.sha256(b"MZ-webview").hexdigest()
+        )
+        assert (
+            manifest["updaterPublicKeySha256"]
+            == hashlib.sha256(b"PUBLIC-KEY\n").hexdigest()
+        )
 
-        checksum_lines = archive.read(f"{root}/SHA256SUMS.txt").decode().splitlines()
+        checksum_lines = (
+            archive.read(f"{root}/SHA256SUMS.txt").decode().splitlines()
+        )
         checksum_paths = [line.split("  ", 1)[1] for line in checksum_lines]
-        assert checksum_paths == sorted(checksum_paths, key=lambda value: value.encode())
+        assert checksum_paths == sorted(
+            checksum_paths,
+            key=lambda value: value.encode(),
+        )
         assert "SHA256SUMS.txt" not in checksum_paths
         for line in checksum_lines:
             digest, relative = line.split("  ", 1)
-            assert digest == hashlib.sha256(archive.read(f"{root}/{relative}")).hexdigest()
+            assert (
+                digest
+                == hashlib.sha256(
+                    archive.read(f"{root}/{relative}"),
+                ).hexdigest()
+            )
 
 
 def test_repeated_build_is_byte_stable_with_fixed_epoch(tmp_path, monkeypatch):
@@ -137,7 +165,10 @@ def test_repeated_build_is_byte_stable_with_fixed_epoch(tmp_path, monkeypatch):
 )
 def test_rejects_forbidden_delivery_material(tmp_path, forbidden):
     args = _fixture(tmp_path)
-    (Path(args["portable_stage"]) / forbidden).write_text("secret", encoding="utf-8")
+    (Path(args["portable_stage"]) / forbidden).write_text(
+        "secret",
+        encoding="utf-8",
+    )
     with pytest.raises(ValueError, match="forbidden"):
         MODULE.build_full_bundle(**args)
 
@@ -161,7 +192,9 @@ def test_rejects_missing_asset_and_wrong_credentials_url(tmp_path):
         MODULE.build_full_bundle(**args)
 
     args = _fixture(tmp_path / "wrong-url")
-    credentials_path = Path(args["portable_stage"]) / "GO-CLAW-Config/credentials.json"
+    credentials_path = (
+        Path(args["portable_stage"]) / "GO-CLAW-Config/credentials.json"
+    )
     credentials = json.loads(credentials_path.read_text(encoding="utf-8"))
     credentials["dashscope"]["compatibleBaseUrl"] = "https://wrong.invalid/v1"
     credentials_path.write_text(json.dumps(credentials), encoding="utf-8")

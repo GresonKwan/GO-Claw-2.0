@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 from __future__ import annotations
 
 import base64
@@ -13,7 +14,10 @@ from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 
 SCRIPTS = Path(__file__).parents[3] / "scripts" / "verify"
 MODULE_PATH = SCRIPTS / "windows_release_contract.py"
-SPEC = importlib.util.spec_from_file_location("windows_release_contract", MODULE_PATH)
+SPEC = importlib.util.spec_from_file_location(
+    "windows_release_contract",
+    MODULE_PATH,
+)
 assert SPEC and SPEC.loader
 MODULE = importlib.util.module_from_spec(SPEC)
 sys.modules[SPEC.name] = MODULE
@@ -31,7 +35,9 @@ def _write_full_zip(path: Path, pubkey_text: str) -> None:
         "Portable/GO-CLAW-Portable.exe": b"portable",
         "Portable/binaries/node.exe": b"node",
         "Portable/GO-CLAW-Config/credentials.example.json": b"{}",
-        "Portable/GO-CLAW-Config/update-pubkey.txt": (pubkey_text + "\n").encode(),
+        "Portable/GO-CLAW-Config/update-pubkey.txt": (
+            pubkey_text + "\n"
+        ).encode(),
         "Portable/LICENSE": b"license",
         "Portable/README-PORTABLE.zh-CN.txt": b"readme",
         "Portable/portable.json": b"{}",
@@ -49,9 +55,15 @@ def _write_full_zip(path: Path, pubkey_text: str) -> None:
             "apiKey": "sk-test-" + "x" * 32,
         },
     }
-    files["Portable/GO-CLAW-Config/credentials.json"] = json.dumps(credentials).encode()
+    files["Portable/GO-CLAW-Config/credentials.json"] = json.dumps(
+        credentials,
+    ).encode()
     manifest_files = [
-        {"path": name, "size": len(data), "sha256": hashlib.sha256(data).hexdigest()}
+        {
+            "path": name,
+            "size": len(data),
+            "sha256": hashlib.sha256(data).hexdigest(),
+        }
         for name, data in sorted(files.items())
     ]
     manifest = {
@@ -67,7 +79,9 @@ def _write_full_zip(path: Path, pubkey_text: str) -> None:
             "authenticodeSubject": "Microsoft Corporation",
             "sha256": hashlib.sha256(b"webview").hexdigest(),
         },
-        "updaterPublicKeySha256": hashlib.sha256((pubkey_text + "\n").encode()).hexdigest(),
+        "updaterPublicKeySha256": hashlib.sha256(
+            (pubkey_text + "\n").encode(),
+        ).hexdigest(),
         "files": manifest_files,
     }
     files["MANIFEST.json"] = (json.dumps(manifest) + "\n").encode()
@@ -89,7 +103,8 @@ def _fixture(tmp_path: Path) -> dict[str, Path | str]:
     pubkey_text = base64.b64encode(b"Ed" + key_id + public).decode()
     pubkey_config = tmp_path / "tauri.conf.json"
     pubkey_config.write_text(
-        json.dumps({"plugins": {"updater": {"pubkey": pubkey_text}}}), encoding="utf-8"
+        json.dumps({"plugins": {"updater": {"pubkey": pubkey_text}}}),
+        encoding="utf-8",
     )
     installer = tmp_path / "GO-CLAW-Setup-2.1.0-Windows-x64.exe"
     update = tmp_path / "GO-CLAW-Update-2.1.0-setup.exe"
@@ -97,7 +112,10 @@ def _fixture(tmp_path: Path) -> dict[str, Path | str]:
     update.write_bytes(b"update")
     installer_sig = tmp_path / f"{installer.name}.sig"
     update_sig = tmp_path / f"{update.name}.sig"
-    installer_sig.write_text(_sign(installer.read_bytes(), private, key_id), encoding="ascii")
+    installer_sig.write_text(
+        _sign(installer.read_bytes(), private, key_id),
+        encoding="ascii",
+    )
     update_signature = _sign(update.read_bytes(), private, key_id)
     update_sig.write_text(update_signature, encoding="ascii")
     latest = tmp_path / "latest.json"
@@ -109,9 +127,9 @@ def _fixture(tmp_path: Path) -> dict[str, Path | str]:
                     "windows-x86_64": {
                         "url": f"https://example.invalid/{update.name}",
                         "signature": update_signature,
-                    }
+                    },
                 },
-            }
+            },
         ),
         encoding="utf-8",
     )
@@ -129,7 +147,9 @@ def _fixture(tmp_path: Path) -> dict[str, Path | str]:
         "latest_json": latest,
         "pubkey_config": pubkey_config,
         "update_payload": payload,
-        "webview2_authenticode_subject": "CN=Microsoft Corporation, O=Microsoft Corporation",
+        "webview2_authenticode_subject": (
+            "CN=Microsoft Corporation, O=Microsoft Corporation"
+        ),
     }
 
 
@@ -149,7 +169,9 @@ def test_rejects_tampered_release_bytes(tmp_path, target):
                 b"tamper",
             )
     else:
-        Path(args[target]).write_bytes(Path(args[target]).read_bytes() + b"tamper")
+        Path(args[target]).write_bytes(
+            Path(args[target]).read_bytes() + b"tamper",
+        )
     with pytest.raises(ValueError):
         MODULE.verify_release_contract(**args)
 
@@ -160,9 +182,14 @@ def test_rejects_manifest_signature_url_and_forbidden_payload(tmp_path):
         if case == "payload":
             (Path(args["update_payload"]) / "GO-CLAW-Config").mkdir()
         else:
-            latest = json.loads(Path(args["latest_json"]).read_text(encoding="utf-8"))
+            latest = json.loads(
+                Path(args["latest_json"]).read_text(encoding="utf-8"),
+            )
             platform = latest["platforms"]["windows-x86_64"]
             platform[case] = "wrong"
-            Path(args["latest_json"]).write_text(json.dumps(latest), encoding="utf-8")
+            Path(args["latest_json"]).write_text(
+                json.dumps(latest),
+                encoding="utf-8",
+            )
         with pytest.raises(ValueError):
             MODULE.verify_release_contract(**args)

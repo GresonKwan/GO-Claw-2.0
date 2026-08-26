@@ -83,18 +83,15 @@ def _validate_dist(dist: Path, repository_root: Path | None) -> Path:
 
 
 def _read_updater_pubkey(repository_root: Path) -> str:
-    config_path = (
-        repository_root
-        / "console"
-        / "src-tauri"
-        / "tauri.conf.json"
-    )
+    config_path = repository_root / "console" / "src-tauri" / "tauri.conf.json"
     try:
         config_path = _require_file(config_path, "Tauri updater config")
         payload = json.loads(config_path.read_text(encoding="utf-8"))
         pubkey = payload["plugins"]["updater"]["pubkey"]
     except (json.JSONDecodeError, KeyError, TypeError) as exc:
-        raise ValueError("Tauri updater pubkey is structurally invalid") from exc
+        raise ValueError(
+            "Tauri updater pubkey is structurally invalid",
+        ) from exc
     if not isinstance(pubkey, str) or not pubkey.strip():
         raise ValueError("Tauri updater pubkey is structurally invalid")
     return pubkey.strip()

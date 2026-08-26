@@ -284,10 +284,7 @@ def test_create_agent_privately_persists_default_economy_tier(
     assert response.status_code == 201
     assert saved["id"] == "newbot"
     assert saved["config"].active_model.provider_id == "private-relay"
-    assert (
-        saved["config"].active_model.model
-        == "deepseek-v4-flash-0731"
-    )
+    assert saved["config"].active_model.model == "deepseek-v4-flash-0731"
     serialized = str(response.json())
     assert "active_model" not in serialized
     assert "private-relay" not in serialized

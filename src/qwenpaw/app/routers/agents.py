@@ -121,7 +121,9 @@ class CustomerAgentProfileConfig(BaseModel):
     model_tier: str = DEFAULT_MODEL_TIER
 
 
-def _customer_profile(agent_config: AgentProfileConfig) -> CustomerAgentProfileConfig:
+def _customer_profile(
+    agent_config: AgentProfileConfig,
+) -> CustomerAgentProfileConfig:
     return CustomerAgentProfileConfig(
         id=agent_config.id,
         name=agent_config.name,

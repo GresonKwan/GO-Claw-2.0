@@ -46,20 +46,25 @@ def product_client(monkeypatch: pytest.MonkeyPatch):
     profiles = {
         "a": SimpleNamespace(
             active_model=ModelSlotConfig(
-                provider_id="token-plan", model="deepseek-v4-flash-0731"
-            )
+                provider_id="token-plan",
+                model="deepseek-v4-flash-0731",
+            ),
         ),
         "b": SimpleNamespace(
             active_model=ModelSlotConfig(
-                provider_id="token-plan", model="qwen3.7-plus"
-            )
+                provider_id="token-plan",
+                model="qwen3.7-plus",
+            ),
         ),
     }
     reloads: list[str] = []
 
     async def get_agent(_request, agent_id=None):
         if agent_id not in profiles:
-            raise HTTPException(status_code=404, detail="private missing detail")
+            raise HTTPException(
+                status_code=404,
+                detail="private missing detail",
+            )
         return SimpleNamespace(agent_id=agent_id)
 
     monkeypatch.setattr(routes, "get_agent_for_request", get_agent)
@@ -67,16 +72,22 @@ def product_client(monkeypatch: pytest.MonkeyPatch):
         routes,
         "read_routing_state",
         lambda: ProductRoutingState(
-            provider_id="token-plan", updated_at="2026-08-26T00:00:00Z"
+            provider_id="token-plan",
+            updated_at="2026-08-26T00:00:00Z",
         ),
     )
     monkeypatch.setattr(
-        routes, "load_agent_config", lambda agent_id: deepcopy(profiles[agent_id])
+        routes,
+        "load_agent_config",
+        lambda agent_id: deepcopy(profiles[agent_id]),
     )
     monkeypatch.setattr(
         routes,
         "save_agent_config",
-        lambda agent_id, config: profiles.__setitem__(agent_id, deepcopy(config)),
+        lambda agent_id, config: profiles.__setitem__(
+            agent_id,
+            deepcopy(config),
+        ),
     )
     monkeypatch.setattr(
         routes,
@@ -108,7 +119,9 @@ def _assert_public(payload: object) -> None:
         assert forbidden not in text
 
 
-def test_get_returns_exact_public_contract_per_employee(product_client) -> None:
+def test_get_returns_exact_public_contract_per_employee(
+    product_client,
+) -> None:
     client, _manager, _profiles, _reloads = product_client
     response = client.get("/api/go-claw/model-tier", params={"agent_id": "b"})
     assert response.status_code == 200
@@ -127,9 +140,7 @@ def test_get_returns_exact_public_contract_per_employee(product_client) -> None:
         "balanced",
         "performance",
     ]
-    assert body["tiers"][2]["warning"] == (
-        "高性能模型可以提高任务完成质量，但额度消耗更快。"
-    )
+    assert body["tiers"][2]["warning"] == ("高性能模型可以提高任务完成质量，但额度消耗更快。")
     assert body["effectiveMaxInputLength"] == 65536
     _assert_public(body)
 
@@ -165,7 +176,11 @@ def test_put_persists_only_selected_employee_and_schedules_one_reload(
         ),
     ],
 )
-def test_put_uses_versioned_error_contract(product_client, payload, code) -> None:
+def test_put_uses_versioned_error_contract(
+    product_client,
+    payload,
+    code,
+) -> None:
     client, _manager, _profiles, _reloads = product_client
     response = client.put("/api/go-claw/model-tier", json=payload)
     assert response.status_code == 400
@@ -178,7 +193,10 @@ def test_missing_agent_and_routing_errors_hide_private_details(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     client, _manager, _profiles, _reloads = product_client
-    missing = client.get("/api/go-claw/model-tier", params={"agent_id": "missing"})
+    missing = client.get(
+        "/api/go-claw/model-tier",
+        params={"agent_id": "missing"},
+    )
     assert missing.status_code == 404
     assert missing.json()["detail"]["code"] == "AGENT_NOT_FOUND"
     _assert_public(missing.json())

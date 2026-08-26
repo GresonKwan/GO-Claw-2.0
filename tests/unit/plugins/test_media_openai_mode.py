@@ -24,7 +24,7 @@ def _patch_newapi_media_config(
     monkeypatch: pytest.MonkeyPatch,
     module: ModuleType,
 ) -> None:
-    """Route media through the global New API config, ignoring legacy fields."""
+    """Use global New API media config and ignore legacy fields."""
 
     monkeypatch.setattr(
         module,
@@ -52,20 +52,26 @@ def _load_tool_module(relative_path: str, module_name: str) -> ModuleType:
     return module
 
 
-def test_video_tool_signatures_only_expose_supported_token_plan_inputs() -> None:
+def test_video_tool_signatures_only_expose_supported_token_plan_inputs() -> (
+    None
+):
     module = _load_tool_module(
         "plugins/tool/wan27/wan27_tool.py",
         "wan27_supported_signatures",
     )
 
-    assert list(inspect.signature(module.generate_video_from_text).parameters) == [
+    assert list(
+        inspect.signature(module.generate_video_from_text).parameters,
+    ) == [
         "prompt",
         "resolution",
         "ratio",
         "duration",
         "prompt_extend",
     ]
-    assert list(inspect.signature(module.generate_video_from_image).parameters) == [
+    assert list(
+        inspect.signature(module.generate_video_from_image).parameters,
+    ) == [
         "prompt",
         "first_frame_url",
         "resolution",
