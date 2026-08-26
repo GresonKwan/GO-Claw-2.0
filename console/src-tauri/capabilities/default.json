@@ -9,6 +9,7 @@
   "permissions": [
     "backend",
     "backend-download",
+    "client-readiness",
     "core:default",
     "core:webview:allow-internal-toggle-devtools",
     "desktop-updater-check",

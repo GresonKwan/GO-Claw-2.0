@@ -1,0 +1,9 @@
+[[permission]]
+identifier = "client-readiness"
+description = "Allows the local bootstrap and console to report rendered desktop readiness."
+commands.allow = [
+  "client_readiness_snapshot",
+  "client_bootstrap_ready",
+  "client_console_navigating",
+  "client_console_ready",
+]

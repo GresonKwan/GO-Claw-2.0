@@ -41,7 +41,7 @@ pub(super) fn watch(
                             .set_port_if_current(generation, port)
                         {
                             became_ready = true;
-                            client::open_when_ready(app.clone(), port);
+                            client::backend_ready(app.clone(), port);
                         }
                     }
                 }
@@ -58,7 +58,7 @@ pub(super) fn watch(
                         became_ready,
                         startup_error_shown,
                     ) {
-                        client::show_backend_startup_error(
+                        client::backend_failed(
                             &app,
                             "后端进程启动事件异常；详细信息请查看应用日志。",
                         );
@@ -83,7 +83,7 @@ pub(super) fn watch(
                             became_ready,
                             startup_error_shown,
                         ) {
-                            client::show_backend_startup_error(&app, &dialog_message);
+                            client::backend_failed(&app, &dialog_message);
                             startup_error_shown = true;
                         }
                     }

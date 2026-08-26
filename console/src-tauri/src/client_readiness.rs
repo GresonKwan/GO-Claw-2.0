@@ -62,6 +62,7 @@ impl Default for ClientReadinessSnapshot {
 pub(crate) enum ReadinessErrorCode {
     StaleLaunch,
     InvalidPhase,
+    WindowOperationFailed,
 }
 
 impl ReadinessErrorCode {
@@ -69,6 +70,7 @@ impl ReadinessErrorCode {
         match self {
             Self::StaleLaunch => "STALE_LAUNCH",
             Self::InvalidPhase => "INVALID_PHASE",
+            Self::WindowOperationFailed => "WINDOW_OPERATION_FAILED",
         }
     }
 }
@@ -201,7 +203,8 @@ impl ReadinessMachine {
             ClientPhase::BootstrapCreating
             | ClientPhase::BootstrapReady
             | ClientPhase::BackendReady
-            | ClientPhase::ConsoleNavigating => true,
+            | ClientPhase::ConsoleNavigating
+            | ClientPhase::ConsoleReady => true,
             _ => false,
         };
         if !allowed {

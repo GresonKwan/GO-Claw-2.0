@@ -369,7 +369,7 @@ fn start(app: &tauri::AppHandle) {
         Ok(command) => command,
         Err(message) => {
             state.set_error(message.clone());
-            crate::client::show_backend_startup_error(app, &message);
+            crate::client::backend_failed(app, &message);
             return;
         }
     }
@@ -387,7 +387,7 @@ fn start(app: &tauri::AppHandle) {
         Err(err) => {
             let message = format!("failed to spawn backend: {err}");
             state.set_error(message.clone());
-            crate::client::show_backend_startup_error(app, &message);
+            crate::client::backend_failed(app, &message);
             return;
         }
     };
