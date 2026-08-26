@@ -91,6 +91,7 @@ def _validate_credentials(path: Path) -> None:
         media = payload["dashscope"]
         values = (
             payload["schemaVersion"],
+            llm["modelId"],
             llm["baseUrl"],
             llm["apiKey"],
             media["compatibleBaseUrl"],
@@ -98,12 +99,31 @@ def _validate_credentials(path: Path) -> None:
         )
     except (json.JSONDecodeError, KeyError, TypeError) as exc:
         raise ValueError("credentials.json is structurally invalid") from exc
-    schema, llm_url, llm_key, media_url, media_key = values
+    def walk_keys(value: object) -> list[str]:
+        if isinstance(value, dict):
+            return [str(key) for key in value] + [
+                nested
+                for child in value.values()
+                for nested in walk_keys(child)
+            ]
+        if isinstance(value, list):
+            return [nested for child in value for nested in walk_keys(child)]
+        return []
+
+    if any(
+        marker in key.casefold()
+        for key in walk_keys(payload)
+        for marker in ("hmac", "enrollment", "ticket", "privatekey", "private_key")
+    ):
+        raise ValueError("forbidden field in credentials.json")
+    schema, model_id, llm_url, llm_key, media_url, media_key = values
     keys = (llm_key, media_key)
     if (
         schema != 1
+        or model_id != "deepseek-v4-flash-0731"
         or llm_url != EXPECTED_API_URL
         or media_url != EXPECTED_API_URL
+        or llm_key != media_key
         or any(
             not isinstance(key, str)
             or not key.startswith("sk-")

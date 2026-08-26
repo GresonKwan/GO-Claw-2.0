@@ -175,3 +175,21 @@ def test_rejects_pubkey_mismatch(tmp_path):
     staged.write_text("OTHER-KEY\n", encoding="ascii")
     with pytest.raises(ValueError, match="public key"):
         MODULE.build_full_bundle(**args)
+
+
+def test_rejects_wrong_llm_model_mismatched_keys_and_hmac_field(tmp_path):
+    for case in ("model", "key", "hmac"):
+        args = _fixture(tmp_path / case)
+        credentials_path = (
+            Path(args["portable_stage"]) / "GO-CLAW-Config/credentials.json"
+        )
+        credentials = json.loads(credentials_path.read_text(encoding="utf-8"))
+        if case == "model":
+            credentials["llm"]["modelId"] = "wrong-model"
+        elif case == "key":
+            credentials["dashscope"]["apiKey"] = "sk-other-" + "b" * 32
+        else:
+            credentials["hmacSecret"] = "forbidden"
+        credentials_path.write_text(json.dumps(credentials), encoding="utf-8")
+        with pytest.raises(ValueError, match="credentials|forbidden"):
+            MODULE.build_full_bundle(**args)
