@@ -1,0 +1,9 @@
+GO CLAW Windows 客户交付包
+
+1. 打开 Portable 目录，双击 GO-CLAW-Portable.exe。
+2. 首次启动会自动读取 GO-CLAW-Config/credentials.json，无需手工填写 API Key。
+3. 如果客户端自动回退到浏览器，或 Tauri 窗口不显示内容，请先运行：
+   WebView2/MicrosoftEdgeWebView2RuntimeInstallerX64.exe
+   安装完成后重新启动 GO-CLAW-Portable.exe。
+
+注意：本压缩包含客户端访问凭据，请仅交付给指定客户，不要发布到公开 Release。

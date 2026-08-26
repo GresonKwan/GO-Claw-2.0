@@ -265,6 +265,11 @@ def test_windows_workflow_materializes_batch_credentials_from_secrets():
         assert f'"{model_id}"' in workflow
     assert "GO-CLAW-Windows-x64-Full.zip" in workflow
     assert "dist/GO-CLAW-Windows-x64-Full.zip" in workflow
+    assert "build_windows_full_bundle.py" in workflow
+    assert "MicrosoftEdgeWebView2RuntimeInstallerX64.exe" in workflow
+    assert "Get-AuthenticodeSignature" in workflow
+    assert "Copy-Item -LiteralPath $portable[0].FullName -Destination $fullZip" not in workflow
+    assert "staged an unsigned test installer" not in workflow
 
 
 def test_stage_refuses_repository_root_as_dist(tmp_path):

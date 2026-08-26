@@ -86,6 +86,24 @@ jobs:
           }
           New-Item -ItemType Directory -Force -Path dist | Out-Null
 
+      - name: Validate signed GO CLAW build settings
+        shell: pwsh
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+          TAURI_UPDATER_PUBKEY: ${{ vars.TAURI_UPDATER_PUBKEY }}
+        run: |
+          foreach ($name in @(
+            "TAURI_SIGNING_PRIVATE_KEY",
+            "TAURI_SIGNING_PRIVATE_KEY_PASSWORD",
+            "TAURI_UPDATER_PUBKEY"
+          )) {
+            if ([string]::IsNullOrWhiteSpace([Environment]::GetEnvironmentVariable($name))) {
+              throw "$name is required for the signed Windows build"
+            }
+          }
+          Write-Host "Signed Windows build settings are present"
+
       - name: Materialize required GO CLAW Full ZIP credentials
         shell: pwsh
         env:
@@ -163,19 +181,17 @@ jobs:
           }
 
           $signature = "$($installers[0].FullName).sig"
-          if (Test-Path -LiteralPath $signature) {
-            python scripts/pack-tauri/generate_update_manifest.py stage `
-              --bundle-dir $bundleDir `
-              --pattern '*-setup.exe' `
-              --target windows-x86_64 `
-              --output $output `
-              --pubkey-config console/src-tauri/tauri.version.conf.json
-            if ($LASTEXITCODE -ne 0) {
-              throw "Failed to stage signed Windows updater assets"
-            }
-          } else {
-            Copy-Item -LiteralPath $installers[0].FullName -Destination $output
-            Write-Warning "TAURI_SIGNING_PRIVATE_KEY is not configured; staged an unsigned test installer without updater metadata"
+          if (-not (Test-Path -LiteralPath $signature)) {
+            throw "Signed Windows installer sidecar is required: $signature"
+          }
+          python scripts/pack-tauri/generate_update_manifest.py stage `
+            --bundle-dir $bundleDir `
+            --pattern '*-setup.exe' `
+            --target windows-x86_64 `
+            --output $output `
+            --pubkey-config console/src-tauri/tauri.version.conf.json
+          if ($LASTEXITCODE -ne 0) {
+            throw "Failed to stage signed Windows updater assets"
           }
 
       - name: Verify desktop (Tauri Windows Portable)
@@ -300,19 +316,21 @@ jobs:
           if (-not (Test-Path $setup)) { throw "update installer not produced" }
           $setup = (Resolve-Path -LiteralPath $setup).Path
 
-          if ($env:TAURI_SIGNING_PRIVATE_KEY) {
-            npm --prefix console exec -- tauri signer sign $setup
-            if ($LASTEXITCODE -ne 0) { throw "tauri signer sign failed" }
-            python scripts/pack-tauri/build_go_claw_update_manifest.py `
-              --version $version `
-              --setup $setup `
-              --base-url "https://github.com/GresonKwan/GO-Claw-2.0/releases/latest/download" `
-              --notes "GO CLAW $version" `
-              --output "dist/latest.json"
-            if ($LASTEXITCODE -ne 0) { throw "manifest generation failed" }
-          } else {
-            Write-Warning "TAURI_SIGNING_PRIVATE_KEY not configured; update installer stays unsigned, no latest.json"
+          if ([string]::IsNullOrWhiteSpace($env:TAURI_SIGNING_PRIVATE_KEY)) {
+            throw "TAURI_SIGNING_PRIVATE_KEY is required for the update package"
           }
+          npm --prefix console exec -- tauri signer sign $setup
+          if ($LASTEXITCODE -ne 0) { throw "tauri signer sign failed" }
+          if (-not (Test-Path -LiteralPath "$setup.sig")) {
+            throw "Signed update sidecar was not produced"
+          }
+          python scripts/pack-tauri/build_go_claw_update_manifest.py `
+            --version $version `
+            --setup $setup `
+            --base-url "https://github.com/GresonKwan/GO-Claw-2.0/releases/latest/download" `
+            --notes "GO CLAW $version" `
+            --output "dist/latest.json"
+          if ($LASTEXITCODE -ne 0) { throw "manifest generation failed" }
 
       - name: Upload Tauri Windows artifact
         uses: actions/upload-artifact@v4
@@ -320,35 +338,46 @@ jobs:
           name: QwenPaw-Desktop-Tauri-Windows-${{ steps.version.outputs.version }}
           path: dist/QwenPaw-Tauri-*-Windows-setup.exe
 
-      - name: Stage and validate single GO CLAW Full ZIP
+      - name: Download and validate offline WebView2 runtime
         shell: pwsh
         run: |
-          $portable = @(Get-ChildItem dist -File -Filter "GO-CLAW-Portable-*-Windows-x64.zip")
-          if ($portable.Count -ne 1) {
-            throw "Expected exactly one portable ZIP, found $($portable.Count)"
+          $vendorDir = "dist/vendor/WebView2"
+          New-Item -ItemType Directory -Force -Path $vendorDir | Out-Null
+          $installer = Join-Path $vendorDir "MicrosoftEdgeWebView2RuntimeInstallerX64.exe"
+          Invoke-WebRequest `
+            -Uri "https://go.microsoft.com/fwlink/p/?LinkId=2124703" `
+            -OutFile $installer `
+            -MaximumRedirection 10
+          $signature = Get-AuthenticodeSignature -LiteralPath $installer
+          if ($signature.Status -ne "Valid") {
+            throw "WebView2 Authenticode signature is not valid: $($signature.Status)"
           }
-          $fullZip = "dist/GO-CLAW-Windows-x64-Full.zip"
-          Copy-Item -LiteralPath $portable[0].FullName -Destination $fullZip
-          Add-Type -AssemblyName System.IO.Compression.FileSystem
-          $archive = [IO.Compression.ZipFile]::OpenRead((Resolve-Path $fullZip))
-          try {
-            $names = @($archive.Entries | ForEach-Object { $_.FullName })
-            $roots = @($names | ForEach-Object { ($_ -split '/')[0] } | Sort-Object -Unique)
-            if ($roots.Count -ne 1) { throw "Full ZIP must contain exactly one version root" }
-            $root = $roots[0]
-            foreach ($required in @(
-              "$root/GO-CLAW-Portable.exe",
-              "$root/portable.json",
-              "$root/GO-CLAW-Config/credentials.json",
-              "$root/GO-CLAW-Config/update-pubkey.txt"
-            )) {
-              if ($names -notcontains $required) { throw "Full ZIP missing $required" }
-            }
-            if ($names -contains "$root/GO-CLAW-Config/provision.json") {
-              throw "Full ZIP must not contain provision.json"
-            }
-          } finally {
-            $archive.Dispose()
+          if ($signature.SignerCertificate.Subject -notlike "*Microsoft Corporation*") {
+            throw "WebView2 signer is not Microsoft Corporation"
+          }
+          $digest = (Get-FileHash -LiteralPath $installer -Algorithm SHA256).Hash.ToLowerInvariant()
+          Write-Host "Validated Microsoft WebView2 runtime SHA-256: $digest"
+
+      - name: Assemble canonical GO CLAW Full ZIP
+        shell: pwsh
+        run: |
+          $portableStages = @(Get-ChildItem dist -Directory -Filter "GO-CLAW-Portable-*-Windows-x64")
+          if ($portableStages.Count -ne 1) {
+            throw "Expected exactly one portable stage, found $($portableStages.Count)"
+          }
+          $sourceCommit = (git rev-parse HEAD).Trim()
+          $sourceEpoch = (git show -s --format=%ct HEAD).Trim()
+          $env:SOURCE_DATE_EPOCH = $sourceEpoch
+          python scripts/pack-tauri/build_windows_full_bundle.py `
+            --version "${{ steps.version.outputs.version }}" `
+            --source-commit $sourceCommit `
+            --portable-stage $portableStages[0].FullName `
+            --webview2-installer "dist/vendor/WebView2/MicrosoftEdgeWebView2RuntimeInstallerX64.exe" `
+            --pubkey-config "console/src-tauri/tauri.conf.json" `
+            --dist "dist"
+          if ($LASTEXITCODE -ne 0) { throw "Full ZIP assembly failed" }
+          if (-not (Test-Path -LiteralPath "dist/GO-CLAW-Windows-x64-Full.zip")) {
+            throw "Canonical GO CLAW Full ZIP was not produced"
           }
 
       - name: Upload single GO CLAW Full ZIP
