@@ -1,5 +1,9 @@
 # GO CLAW Desktop Content Readiness Implementation Plan
 
+> 状态：文件级分计划；2026-08-26 review 后受
+> `2026-08-26-go-claw-v2-1-reviewed-execution-plan.md` 约束。跨模块顺序、后端 fatal
+> 语义和发布门禁以总计划为准。
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Make Tauri Auto mode the normal client on Windows, treat a rendered React console—not window creation—as startup success, and fall back exactly once to the system browser whenever WebView2 cannot deliver usable content.
@@ -55,6 +59,7 @@ enum ClientPhase {
     ConsoleReady,
     DesktopActive,
     BrowserFallback,
+    FatalStartup,
 }
 
 #[serde(rename_all = "camelCase")]
@@ -62,9 +67,13 @@ enum BrowserFallbackReason {
     ExplicitBrowserMode,
     WebviewBuildFailed,
     BootstrapReadyTimeout,
-    BackendStartupFailed,
     ConsoleNavigationFailed,
     ConsoleReadyTimeout,
+}
+
+#[serde(rename_all = "camelCase")]
+enum FatalStartupReason {
+    BackendStartupFailed,
 }
 
 #[serde(rename_all = "camelCase")]
@@ -75,6 +84,7 @@ struct ClientReadinessSnapshot {
     backend_port: Option<u16>,
     console_url: Option<String>,
     fallback_reason: Option<BrowserFallbackReason>,
+    fatal_reason: Option<FatalStartupReason>,
     browser_opened: bool,
 }
 ```
@@ -90,19 +100,25 @@ processStarting -> browserFallback     // explicit portable browser mode only
 
 bootstrapCreating | bootstrapReady | backendReady | consoleNavigating
   -> browserFallback
+
+processStarting | bootstrapCreating | bootstrapReady
+  -> fatalStartup              // backend startup failure only
+
+browserFallback -> fatalStartup // WebView failed first, then backend failed
 ```
 
 Rules:
 
 1. `launch_id` is allocated before window construction and is never reused in one process.
 2. An IPC carrying a different `launchId` returns `STALE_LAUNCH` and does not mutate state.
-3. `browserFallback` is terminal for that launch. `browser_opened` changes `false -> true` once; every later fallback request is a no-op.
+3. `browserFallback` is terminal for the WebView path, but a later backend startup failure upgrades it to `fatalStartup`. `browser_opened` changes `false -> true` once; every later fallback request is a no-op.
 4. `desktopActive` is reached only through `client_console_ready`; `WebviewWindowBuilder::build()` cannot reach it.
 5. The window is visible only in `bootstrapReady`, `backendReady`, and `desktopActive`. It is hidden in `bootstrapCreating`, `consoleNavigating`, and `browserFallback`.
 6. Timers are failure watchdogs, never success delays: 10 seconds from `bootstrapCreating` to `bootstrapReady`, 30 seconds from `consoleNavigating` to `consoleReady`. Existing sidecar startup timeout remains 180 seconds.
 7. Backend and bootstrap readiness may arrive in either order. If the sidecar port arrives during `bootstrapCreating`, store `backend_port` without changing phase; the accepted `bootstrap_ready` transition then advances immediately through `bootstrapReady` to `backendReady` and emits the event once. If bootstrap arrives first, remain `bootstrapReady` until the port arrives.
 8. Explicit portable browser mode uses terminal `browserFallback` with reason `explicitBrowserMode`; it is not counted as an error, but it reuses the same once-only browser-opening behavior.
 9. A sidecar port arriving after any `browserFallback` reason is stored without changing the terminal phase; if `browser_opened` is still false, that arrival performs the once-only browser open. No backend-ready frontend event is emitted in the terminal browser phase.
+10. Browser fallback may be reserved before the backend is ready, but opening the browser is legal only after a backend port exists and `/api/version` has returned 2xx. Explicit portable browser mode follows the same wait. A backend startup failure, including one received after a WebView failure reserved fallback, enters terminal `fatalStartup`; it shows the branded fatal screen when Bootstrap is usable, otherwise the existing native startup dialog. It never opens a browser that cannot reach a backend.
 
 ### 2.2 Tauri commands
 
@@ -169,7 +185,7 @@ The reporter is mounted in exactly two places: around the committed login page a
 - Create: `console/src-tauri/src/client_readiness.rs`
 - Modify: `console/src-tauri/src/lib.rs:3-9` at the module declarations
 
-- [ ] Write Rust tests first for every legal transition, stale `launchId`, invalid phase, terminal fallback, and the browser once guard. The first test compilation must fail because `client_readiness` does not exist.
+- [ ] Write Rust tests first for every legal transition, stale `launchId`, invalid phase, terminal fallback/fatal state, the browser once guard, and the rule that backend failure cannot open a browser. The first test compilation must fail because `client_readiness` does not exist.
 - [ ] Run `cargo test --manifest-path console/src-tauri/Cargo.toml client_readiness -- --nocapture`; expect compile failure mentioning the missing module/types.
 - [ ] Implement the enum, snapshot, `ReadinessMachine`, typed transition error, and pure `begin_launch`, `bootstrap_ready`, `backend_ready`, `console_navigating`, `console_ready`, `desktop_active`, and `fallback` methods. Do not import Tauri in this file.
 - [ ] Re-run the targeted Cargo test; expect all readiness tests to pass.
@@ -208,7 +224,7 @@ The reporter is mounted in exactly two places: around the committed login page a
 - [ ] Refactor `backend::events::watch` so accepted `set_port_if_current` calls `client::backend_ready(app.clone(), port)` instead of `open_when_ready`; keep the stdout wire prefix unchanged.
 - [ ] Implement all four commands and emit `go-claw-client-backend-ready`. Start watchdog threads with the captured `launchId`; before fallback each watchdog rechecks both ID and phase.
 - [ ] Define permission identifier `client-readiness` allowing exactly `client_readiness_snapshot`, `client_bootstrap_ready`, `client_console_navigating`, and `client_console_ready`; add that identifier to the default capability and keep its remote URL allowlist limited to loopback.
-- [ ] Implement fallback in one function: hide the WebView, atomically reserve the once guard, call `open_browser`, log the enum reason, and show the existing startup dialog only if browser opening also fails.
+- [ ] Implement fallback in one function: require a verified backend URL, hide the WebView, atomically reserve the once guard, call `open_browser`, log the enum reason, and show the existing startup dialog only if browser opening also fails. Implement backend failure separately as `fatalStartup` with retry/open-log/exit actions; never route it through `open_browser`.
 - [ ] In `.setup`, validate portable state, prepare paths, call `client::begin_client_launch`, then start backend and tray in that order. A WebView construction failure is not a Tauri process build failure; it records fallback and allows the backend to start so browser mode can work.
 - [ ] Run `cargo fmt --manifest-path console/src-tauri/Cargo.toml -- --check` and `cargo test --manifest-path console/src-tauri/Cargo.toml`; expect pass.
 - [ ] Commit: `git commit -m "feat(desktop): require content readiness before activating Tauri"`.

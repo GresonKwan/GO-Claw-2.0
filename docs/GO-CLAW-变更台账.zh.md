@@ -1,6 +1,7 @@
-# GO CLAW 变更台账（单一事实源）
+# GO CLAW 变更台账（历史变更单一记录）
 
-> 本文件是 GO CLAW 二次开发所有变更的**唯一权威记录**。规则见 `GO-CLAW-文档规范.zh.md`。
+> 本文件是 GO CLAW 二次开发所有**已发生变更的唯一历史记录**。当前部署与发布状态见
+> `GO-CLAW-项目事实与发布基线.zh.md`。规则见 `GO-CLAW-文档规范.zh.md`。
 > 每条条目：改动内容 / 原因 / commit / 验证方式 / 关联文档。
 > 基线：QwenPaw v2.0.1（`24813b3` 导入）。文档目录见文末索引。
 
@@ -133,6 +134,13 @@
 | 修正：更新编排从 Rust 改为 Python（便携浏览器模式无 Tauri IPC） | 架构事实 | — | — |
 | D2 密钥落地：生成 GO CLAW 专用 Tauri 签名密钥，公钥同步到代码/GitHub Variable/入包链，私钥非空口令加密并做跨磁盘备份；Python 验签兼容 Tauri CLI 的 Base64 minisign 文本格式 | 建立可恢复的密钥保管制度，并修正真实 CI 产物的验签格式断层 | 2f0ab644 | 本地 Tauri 签名探针 + `test_go_claw_updates.py` | `docs/GO-CLAW-在线更新签名密钥运维.zh.md` |
 
+## 2026-08-26 · v2.1 四计划现场 review 与事实基线
+
+| 改动 | 原因 | commit | 验证 | 关联文档 |
+| --- | --- | --- | --- | --- |
+| 建立当前项目事实/发布基线，记录生产服务器、New API revision/digest、真实网关、签名状态、GitHub/CI 和更新镜像现状 | 防止把旧聊天、计划目标或另一台网关误当成生产事实 | （待推送） | SSH/Nginx/Docker/SQLite/GitHub/HTTP 只读复核；现有 updater 私钥签名后由项目 verifier 验证通过 | `docs/GO-CLAW-项目事实与发布基线.zh.md` |
+| 四份原计划统一受一份 review 后总执行计划约束；修正静态凭据与 provisioning 冲突、New API 媒体协议、员工页模型泄漏、重复签名密钥、含凭据 CI ZIP、后端失败错误回退等重大风险 | 原计划之间存在可导致凭据泄漏、媒体调用失败、更新验签分叉和不可用交付物的合同冲突 | （待推送） | 文档交叉检查、路径/route/symbol 复核、上游 New API 固定 revision 源码核对 | `docs/superpowers/plans/2026-08-26-go-claw-v2-1-reviewed-execution-plan.md` |
+
 ## 运营侧变更（非代码，无 commit）
 
 | 日期 | 变更 | 原因 |
@@ -148,7 +156,8 @@
 
 | 文档 | 角色 |
 |------|------|
-| 本文件 | 变更唯一事实源 |
+| 本文件 | 已发生变更的唯一历史记录 |
+| `GO-CLAW-项目事实与发布基线.zh.md` | 当前代码、生产部署、GitHub/CI、签名和发布门禁的权威基线 |
 | `GO-CLAW-文档规范.zh.md` | 文档编写与维护规则 |
 | `go-claw-auto-provisioning.zh.md` | 开通/计费专题（持续更新） |
 | `GO-CLAW-在线更新签名密钥运维.zh.md` | 更新签名密钥的保管、发布前检查、恢复与轮换规则 |

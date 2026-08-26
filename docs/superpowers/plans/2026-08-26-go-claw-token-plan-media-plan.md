@@ -1,5 +1,9 @@
 # GO CLAW Token Plan Media Plugins Implementation Plan
 
+> 状态：文件级分计划；2026-08-26 服务器 review 后受
+> `2026-08-26-go-claw-v2-1-reviewed-execution-plan.md` 约束。原始路径/响应和静态凭据方案已
+> 被实测否决，本文以下修订后的合同才可执行。
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Replace vendor-named image/video plugins with two neutral plugins, route every media request through the configured New API and its Token Plan channel, default image generation/editing to `qwen-image-3.0-pro`, and remove all client-side direct-provider and model fallback paths.
@@ -14,8 +18,8 @@
 
 - Exact code baseline: commit `ce18d02f`, 2026-08-26. Symbol anchors override baseline line numbers after earlier edits shift them.
 - Implement the private routing-state module from `2026-08-26-go-claw-customer-ui-model-tiers-plan.md` first.
-- Current server evidence is limited: repository notes identify `1.14.203.54` and container `new-api`, but `ssh root@1.14.203.54` with the available local key returned `Permission denied (publickey)`. Therefore this plan does not invent a server checkout path, compose filename, database row, or New API version.
-- Server configuration and live contract probes in Task 8 are a hard release gate. Obtain the correct SSH user/key or New API administrator access before that task. A failed server probe blocks release; it must never be “fixed” by restoring direct Bailian calls in the client.
+- Server access has been verified with `root@1.14.203.54` and `/Users/gresonkwan/Downloads/GoClaw0810.pem`. The running New API is `v1.0.0-rc.24`, source revision `5c3abffe8572aa8a49f15c3916707d2019d66af4`, with the digest recorded in `docs/GO-CLAW-项目事实与发布基线.zh.md`.
+- Server configuration and live contract probes in Task 8 remain a hard release gate. A failed probe blocks release; it must never be “fixed” by restoring direct Bailian calls in the client.
 - Before every task commit, run `git add` for each path listed under that task and no unrelated path; every commit command below assumes that explicit staging has succeeded.
 
 ## 1. Fixed private model mapping
@@ -57,19 +61,13 @@ async def generate_image(
 async def edit_image(
     prompt: str,
     reference_images: list[str],
-    size: str = "",
     n: int = 1,
-    negative_prompt: str = "",
-    prompt_extend: bool = True,
 ) -> ToolChunk: ...
 
 async def generate_video_from_text(
     prompt: str,
-    resolution: str = "720P",
-    ratio: str = "16:9",
+    aspect_ratio: str = "16:9",
     duration: int = 5,
-    negative_prompt: str = "",
-    prompt_extend: bool = True,
 ) -> ToolChunk: ...
 
 async def generate_video_from_image(
@@ -77,16 +75,13 @@ async def generate_video_from_image(
     first_frame_url: str,
     resolution: str = "720P",
     duration: int = 5,
-    prompt_extend: bool = True,
 ) -> ToolChunk: ...
 
 async def generate_video_from_reference(
     prompt: str,
     reference_images: list[str],
     resolution: str = "720P",
-    ratio: str = "16:9",
     duration: int = 5,
-    prompt_extend: bool = True,
 ) -> ToolChunk: ...
 ```
 
@@ -94,9 +89,9 @@ Validation is exact:
 
 - image inputs: `.png`, `.jpg`, `.jpeg`, `.webp`; 1–3 reference images; `n` 1–6.
 - video `resolution`: `720P` or `1080P`.
-- video `ratio`: `16:9`, `9:16`, `1:1`, `4:3`, or `3:4` where the signature contains ratio.
+- text-video `aspect_ratio`: `16:9`, `9:16`, `1:1`, `4:3`, or `3:4`; map exactly to `1280*720`, `720*1280`, `960*960`, `1088*832`, or `832*1088` in the New API `size` field.
 - video `duration`: integer 3–15 inclusive. Current 2–15 checks are incorrect.
-- Image-to-video takes only the first frame; remove legacy last-frame, audio, template, and continuation parameters because they are not part of the selected Token Plan model contract.
+- Image-to-video takes only the first frame; remove legacy last-frame, audio, template, continuation, and public `prompt_extend` parameters because they are not part of the confirmed customer contract. The adapter sets `prompt_extend=true` internally.
 
 ### 2.3 Legacy aliases
 
@@ -114,124 +109,82 @@ Aliases do not appear in `/api/tools`, plugin manifests, prompt schemas, or sett
 
 ## 3. Client -> New API wire contract
 
-Resolve `base_url` from the private routing provider, normalize exactly one trailing `/v1`, and send `Authorization: Bearer <provider api_key>` plus `Content-Type: application/json`. Reject non-HTTPS base URLs. No function contains `aliyuncs.com`, `/api/v1/services`, or a default endpoint.
+Resolve `base_url` from the private routing provider and normalize it to exactly
+`https://goclaw.host:8443/v1`. Send `Authorization: Bearer <per-instance token>`; reject every
+non-HTTPS URL and never place the header, data URLs, or signed result URLs in logs. No client function contains
+`aliyuncs.com`, `/api/v1/services`, or a direct-provider fallback.
 
 ### 3.1 Image create/edit
 
-Endpoint:
-
-```http
-POST <newApiBase>/v1/images/generations
-```
-
-Generate body:
+Generation is JSON at `POST <newApiBase>/images/generations`:
 
 ```json
 {
   "model": "qwen-image-3.0-pro",
   "prompt": "用户提示词",
   "n": 1,
-  "size": "2048*2048",
-  "metadata": {
+  "size": "2048x2048",
+  "response_format": "url",
+  "parameters": {
+    "size": "2048*2048",
+    "n": 1,
     "negative_prompt": "",
     "prompt_extend": true
   }
 }
 ```
 
-Edit body with three references:
+The pinned New API uses the extension object instead of merging top-level `size/n` when `parameters` exists.
+Therefore the plugin derives both representations in one helper and tests exact equality: OpenAI top-level uses
+`2048x2048`, Ali parameters use `2048*2048`, and `n` is identical in both.
 
-```json
-{
-  "model": "qwen-image-3.0-pro",
-  "prompt": "用户编辑提示词",
-  "image": "https://example.invalid/one.png",
-  "n": 1,
-  "metadata": {
-    "images": [
-      "https://example.invalid/two.png",
-      "https://example.invalid/three.png"
-    ],
-    "negative_prompt": "",
-    "prompt_extend": true
-  }
-}
-```
+Editing is multipart at `POST <newApiBase>/images/edits`, with scalar fields
+`model=qwen-image-3.0-pro`, `prompt`, `n=1`, `response_format=url` and 1–3 binary files all named
+`image` in input order. It is forbidden to send edit JSON to `/images/generations`. The current New API
+multipart converter does not reliably carry edit `negative_prompt`, `prompt_extend`, or output size, so the
+public edit tool does not expose or promise them.
 
-Omit `size` when edit size is empty. Local references are converted to data URLs before serialization. A successful response is HTTP 200 with `data` array; each element must contain `url` or `b64_json`. URL results are downloaded, and base64 results are decoded directly. Zero valid results is `MEDIA_EMPTY_RESULT`.
+Both operations accept HTTP 200 only and require a `data` array whose entries contain `url` or `b64_json`.
+URL results are downloaded and base64 results decoded locally. Zero valid results is `MEDIA_EMPTY_RESULT`.
 
 ### 3.2 Video create/poll
 
-Endpoint pair:
+Only the current OpenAI Video endpoints are legal:
 
 ```http
-POST <newApiBase>/v1/video/generations
-GET  <newApiBase>/v1/video/generations/<taskId>
+POST <newApiBase>/videos
+GET  <newApiBase>/videos/<taskId>
 ```
 
-Text body:
+Bodies are exact:
 
 ```json
-{
-  "model": "happyhorse-1.1-t2v",
-  "prompt": "用户提示词",
-  "duration": 5,
-  "metadata": {
-    "resolution": "720P",
-    "ratio": "16:9",
-    "negative_prompt": "",
-    "prompt_extend": true
-  }
-}
+{"model":"happyhorse-1.1-t2v","prompt":"用户提示词","duration":5,"size":"1280*720","metadata":{"input":{"negative_prompt":""},"parameters":{"prompt_extend":true}}}
 ```
-
-Image body:
 
 ```json
-{
-  "model": "happyhorse-1.1-i2v",
-  "prompt": "用户提示词",
-  "image": "https://example.invalid/first.png",
-  "duration": 5,
-  "metadata": {
-    "resolution": "720P",
-    "prompt_extend": true
-  }
-}
+{"model":"happyhorse-1.1-i2v","prompt":"用户提示词","duration":5,"size":"720P","image":"data-or-https-url","metadata":{"parameters":{"prompt_extend":true}}}
 ```
-
-Reference body:
 
 ```json
-{
-  "model": "happyhorse-1.1-r2v",
-  "prompt": "用户提示词",
-  "image": "https://example.invalid/ref1.png",
-  "duration": 5,
-  "metadata": {
-    "images": [
-      "https://example.invalid/ref2.png",
-      "https://example.invalid/ref3.png"
-    ],
-    "resolution": "720P",
-    "ratio": "16:9",
-    "prompt_extend": true
-  }
-}
+{"model":"happyhorse-1.1-r2v","prompt":"用户提示词","duration":5,"size":"720P","images":["data-or-https-url-1","data-or-https-url-2"],"metadata":{"parameters":{"prompt_extend":true}}}
 ```
 
-Create accepts HTTP 200 or 201. Read task ID from `id`; accept `task_id` only as a documented compatibility alias. Poll every five seconds within the existing 600-second total timeout. Normalize these response states only:
+Create accepts HTTP 200 only and reads task ID from top-level `id`. Poll every five seconds within the existing
+600-second cap. Parse top-level `status` only: `queued`/`in_progress` continue, `completed` requires an HTTPS
+`metadata.url`, and `failed` requires an `error`. `data.status`, `data.result_url` and the old
+`/v1/video/generations` shape are explicitly invalid.
 
-- `data.status` in `PENDING`, `QUEUED`, `RUNNING`: continue.
-- `data.status == SUCCESS`: require `data.result_url`.
-- `data.status == FAILED`: fail once.
-- any other state/schema: `MEDIA_PROTOCOL_ERROR`; do not guess.
-
-Never retry with another model. Network retries are limited to the HTTP client’s normal connection behavior; do not replay a successful video create request whose response was lost, because it could create duplicate billable tasks.
+Never retry with another model. Do not replay a create whose response may have been lost, because that can create
+a second billable task. After a task ID exists, transient poll retries may query only that same ID.
 
 ## 4. New API -> Token Plan translation contract
 
-This is the server acceptance contract. New API may implement it internally, but the live probes must prove the same semantics.
+> **Review correction:** Sections 4.1–4.2 below are retained only as the originally proposed upstream shape;
+> they are not a client contract and must not be copied into GO CLAW. The executable server change is the pinned
+> New API patch in the reviewed master plan: keep channel 1 for text, add one Ali type-17 media channel, and patch
+> `relay/channel/task/ali/{constants.go,adaptor.go,adaptor_test.go}` for HappyHorse i2v/r2v media normalization.
+> The five paid probes, not these examples, decide acceptance.
 
 ### 4.1 Image native API
 
@@ -330,40 +283,27 @@ New API maps its task ID to the native task ID, polls Token Plan, and exposes th
 
 ## 5. Credential schema v2 and migration
 
-### 5.1 New delivery schema
-
-Replace the separate `llm` + `dashscope` delivery shape with:
-
-```json
-{
-  "schemaVersion": 2,
-  "batchId": "go-claw-20260826-batch-01",
-  "newApi": {
-    "providerId": "deepseek",
-    "baseUrl": "https://api.tokenbyte.ai/v1",
-    "apiKey": "secret supplied by CI"
-  }
-}
-```
-
-`newApi.apiKey` is used by the configured text provider and media gateway. It is never copied into employee tool configs.
-
-### 5.2 Existing v1 normalization
-
-`BatchCredentials` accepts schema 1 and 2 as a discriminated union. Normalize v1 by taking `llm.providerId`, `llm.baseUrl`, and `llm.apiKey` as `newApi`; ignore `dashscope` for routing and do not update the DashScope provider. This makes the already-delivered v1 file migratable without asking customers to replace it.
-
-Change marker handling from “file exists” to parsed version. Schema-1 marker does not suppress v2 import. After successful v2 verification write:
+Static schema-2 credentials in CI have been rejected. The generic Main ZIP contains no `credentials.json`, API key,
+shared HMAC secret, or enrollment ticket. A customer-specific sealing step inserts this one-time file only into a
+private delivery copy:
 
 ```json
 {
   "schemaVersion": 2,
-  "batchId": "go-claw-20260826-batch-01",
-  "sourceSha256": "64 lowercase hex chars",
-  "importedAt": "UTC RFC3339 with Z"
+  "provisionUrl": "https://goclaw.host:8443/go-claw/provision",
+  "ticket": "single-use enrollment ticket"
 }
 ```
 
-Provider import registers all seven allowed model IDs (three text-tier IDs plus four media IDs) in `extra_models` without duplicates, persists URL/key, activates economy globally, writes `.go-claw-product-routing.json`, migrates employee tools, verifies persisted provider/state/tool config, and writes the marker last.
+The server exchanges it for a per-instance schema-2 New API payload whose base URL is
+`https://goclaw.host:8443/v1` and whose model list contains the seven required IDs. Exact ticket hashing,
+single-instance binding, idempotent retry, marker-last order and customer ZIP sealing are defined in master plan P1.
+
+`BatchCredentials` retains schema 1 only as an upgrade reader. It normalizes the old LLM provider but does not update
+the DashScope provider for new media routing. Existing v1 files must never cause the code to ignore a valid schema-2
+enrollment ticket. Successful v2 application registers seven IDs without duplicates, persists the per-instance URL/key,
+activates economy, writes `.go-claw-product-routing.json`, verifies state, writes the enrollment marker, then deletes the
+one-time ticket file.
 
 ## 6. Exact current edit map
 
@@ -386,8 +326,8 @@ Provider import registers all seven allowed model IDs (three text-tier IDs plus 
 | `src/qwenpaw/agents/md_files/go-claw-content-production/zh/AGENTS.md:14-18`        | tells model to call vendor tools/direct credentials               | Replace with canonical names and prompt rules in section 7.                                                  |
 | `scripts/pack-tauri/qwenpaw.spec:100-107`                                          | bundles old directories                                           | Bundle `image-generation` and `video-generation` to matching destinations.                                   |
 | `scripts/verify/desktop_verify.py:67-74`                                           | expects legacy tool/plugin IDs                                    | Assert canonical IDs and absence of legacy IDs from `/api/tools`.                                            |
-| `.github/workflows/desktop-build.yml:89-138`                                       | creates two-secret schema 1 and probes direct image model         | Create one-secret schema 2 and preflight all seven models through New API `/v1/models`.                      |
-| `scripts/pack-tauri/stage_windows_portable.py:40-53`                               | validates `dashscope.apiKey`                                      | Strictly validate schema 2 `newApi`; retain v1 validation only for migration fixtures.                       |
+| `.github/workflows/desktop-build.yml:89-138`                                       | creates static credentials/provision files                        | Remove both from generic CI; use a CI-only test key for probes and never materialize it.                      |
+| `scripts/pack-tauri/stage_windows_portable.py:40-53`                               | accepts credential-bearing stages                                 | Release mode rejects credentials/tickets; v1 validation remains only in upgrade fixtures.                    |
 
 ## 7. Prompt/tool-description contract
 
@@ -396,7 +336,7 @@ Replace the media section of the content-production prompt with these rules:
 1. Use `generate_image` for a new image and `edit_image` only when at least one reference image is supplied.
 2. For image work, collect subject, composition, style, lighting, color, aspect/size, required text, and prohibited content. Do not mention or choose a model.
 3. Use `generate_video_from_text`, `generate_video_from_image`, or `generate_video_from_reference` according to whether zero, one first-frame, or one-to-three identity/style references are available.
-4. For video, state subject action, scene, camera movement, visual style, duration, ratio where supported, and sound intent. Do not send legacy last-frame/audio/template arguments.
+4. For video, state subject action, scene, camera movement, visual style, duration, and text-video aspect ratio where supported. Do not promise or send sound, legacy last-frame, audio, template, or continuation arguments.
 5. Do not call an old vendor tool name and do not probe configuration with a throwaway generation.
 6. If the service returns an error, continue non-generation deliverables and do not claim media exists.
 
@@ -470,17 +410,20 @@ Function docstrings shown to the model use the same rules and contain no old nam
 
 - Modify: `src/qwenpaw/app/go_claw_credentials.py:31-339`
 - Modify: `src/qwenpaw/app/go_claw_provision.py:34-38,112-160`
-- Modify: `scripts/pack-tauri/GO-CLAW-Config/credentials.example.json:1-14`
+- Modify: `scripts/provisioning/provision_server.py`
+- Create: `scripts/provisioning/issue_enrollment_ticket.py`
+- Create: `scripts/pack-tauri/seal_customer_bundle.py`
 - Modify: `tests/unit/app/test_go_claw_credentials.py`
 - Modify: `tests/unit/app/test_go_claw_provision.py`
 - Modify: `scripts/pack-tauri/stage_windows_portable.py:40-53`
 - Modify: `tests/unit/scripts/test_stage_windows_portable.py`
 
-- [ ] Write failing schema-2, v1-normalization, schema-1-marker-upgrade, seven-model de-duplication, routing-state, marker-last, and no-DashScope-update tests.
-- [ ] Implement the discriminated schema and ordered import from section 5. Existing schema-2 marker suppresses repeat import only after its structure validates.
-- [ ] Provisioning validates/stores schema 2 responses; it retries when only a schema-1 import marker exists.
-- [ ] Re-run all four test files; expect pass.
-- [ ] Commit: `git commit -m "feat(credentials): migrate GO CLAW delivery to one New API key"`.
+- [ ] Write failing enrollment hash/expiry/single-instance/idempotency tests plus v1 normalization, seven-model de-duplication, routing-state, marker-last, and no-DashScope-update tests.
+- [ ] Implement master-plan P1 exactly: a generic CI bundle has no secret; `provision.json` schema 2 contains one ticket; the server returns a per-instance New API token.
+- [ ] Add sealing tests proving the base ZIP is unchanged, the customer ZIP contains one ticket, and neither is uploaded by CI.
+- [ ] Provisioning retries when only a schema-1 import marker exists and never lets an old `credentials.json` suppress a new valid enrollment.
+- [ ] Re-run all affected server/client/packaging test files; expect pass.
+- [ ] Commit: `git commit -m "feat(credentials): enroll each GO CLAW delivery once"`.
 
 ### Task 6: Migrate presets, bundled plugins, packaging, and prompts
 
@@ -501,7 +444,7 @@ Function docstrings shown to the model use the same rules and contain no old nam
 - [ ] Run the five targeted suites; expect pass.
 - [ ] Commit: `git commit -m "refactor(media): migrate presets and bundles to neutral plugins"`.
 
-### Task 7: Change CI delivery materialization and preflight
+### Task 7: Remove delivery secrets from CI and add probe-only preflight
 
 **Files:**
 
@@ -510,10 +453,10 @@ Function docstrings shown to the model use the same rules and contain no old nam
 - Modify: `.github/actions/verify-tauri-windows-portable/action.yml:4-8,27-29`
 - Modify: `.github/workflows/release.yml:122-130`
 
-- [ ] Remove `GO_CLAW_DASHSCOPE_API_KEY` and `QWENPAW_DASHSCOPE_API_KEY` from this product build/verify chain. Use only `GO_CLAW_LLM_API_KEY`, retaining the GitHub Secret name to avoid an unnecessary secret rotation.
-- [ ] Materialize schema 2 with batch ID `go-claw-20260826-batch-01`, provider `deepseek`, and `https://api.tokenbyte.ai/v1`.
-- [ ] Preflight `GET https://api.tokenbyte.ai/v1/models` with that key and require the exact seven IDs: three text tiers plus four media models. Print only missing model IDs, never the key or entire response.
-- [ ] Update composite input name to `new-api-key`; desktop verifier’s LLM round uses the same key/provider contract.
+- [ ] Remove `GO_CLAW_DASHSCOPE_API_KEY`, `QWENPAW_DASHSCOPE_API_KEY`, `GO_CLAW_LLM_API_KEY`, and provision HMAC materialization from the generic product build.
+- [ ] Use only an independent low-quota `GO_CLAW_CI_TEST_API_KEY` for release probes against `https://goclaw.host:8443/v1`; never write it to a file or artifact.
+- [ ] Preflight `/v1/models` for seven IDs, then require Task 8’s five calls. Print only missing internal IDs and sanitized task/channel IDs.
+- [ ] Update verifier input name to `ci-test-new-api-key`; artifact and ZIP scans reject that key and all credential files.
 - [ ] Add a workflow syntax test or run `actionlint`; expect pass.
 - [ ] Commit: `git commit -m "ci(media): provision and verify Token Plan routes through New API"`.
 
@@ -524,11 +467,11 @@ Function docstrings shown to the model use the same rules and contain no old nam
 - Create: `scripts/verify/new_api_media_contract.py`
 - Create: `tests/unit/scripts/test_new_api_media_contract.py`
 
-- [ ] Obtain authorized New API access. Record its version/container image digest in the deployment record; do not commit credentials.
-- [ ] Configure one enabled Token Plan channel with the Token Plan base host, secret, and the four media models. Configure model mapping as identity for the four public IDs. Add the same IDs to the token/group available-model list used by the GO CLAW New API key. Leave New API’s automatic channel routing enabled.
+- [ ] Use the verified server access and record the pre-change revision/digest from the project facts document; do not commit credentials.
+- [ ] Build/deploy the pinned three-file New API patch from master plan P2, then record its actual image digest. Keep channel 1 for text and create the separate Ali type-17 channel `阿里百炼_TokenPlan_Media` with the four media IDs and identity mapping.
 - [ ] Write a mocked verifier test first. The verifier checks `/v1/models`, then performs one smallest valid request for each of the five canonical tools, polls videos, and prints request ID/model/channel ID from sanitized New API logs supplied through an operator export.
 - [ ] Run the live verifier with environment variables read by the process, not CLI arguments. Confirm all five calls are attributed to the Token Plan channel and no client request reaches an `aliyuncs.com` host.
-- [ ] If New API lacks the required translation, upgrade or patch New API server-side and rerun. Do not merge/release the client until it passes.
+- [ ] If any translation still differs, amend the pinned server patch and its Go tests, rebuild with a new immutable tag, and rerun. Do not merge/release the client until it passes.
 - [ ] Save only a redacted JSON report as a CI artifact; it contains timestamp, New API version/digest, five pass/fail results, and channel ID—not prompts, URLs with signatures, keys, or media bytes.
 - [ ] Commit verifier code/tests: `git commit -m "test(media): add live New API Token Plan contract probe"`.
 

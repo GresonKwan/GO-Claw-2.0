@@ -1,6 +1,7 @@
 # GO CLAW 在线更新签名密钥运维
 
-> 状态：已生效（2026-08-26 首次建钥）。
+> 状态：密钥保管已生效（2026-08-26 首次建钥；同日 review 重新完成真实签名/项目 verifier
+> 验证）。CI 的“Variable 只校验、不覆盖”尚待 v2.1 release plan Task 2 实施，完成前正式发布受阻。
 > 范围：Tauri updater / minisign(Ed25519) 更新包签名，不是 Windows Authenticode 代码签名证书。
 
 ## 1. 密钥身份与唯一信任链
@@ -19,8 +20,12 @@
 3. 便携包内 `GO-CLAW-Config/update-pubkey.txt`。
 
 第 3 处不手工维护，由 `scripts/pack-tauri/stage_windows_portable.py`
-每次从第 1 处自动生成。GitHub Variable 在 CI 构建时会覆盖基础配置，
-所以第 1、2 处任一不一致都必须停止发布。
+每次从第 1 处自动生成。GitHub Variable 只做相等性断言，绝不覆盖仓库公钥；
+第 1、2 处任一不一致都必须停止发布。
+
+当前已知缺口：`scripts/pack-tauri/sync_tauri_version.mjs` 仍优先采用环境 Variable。v2.1 必须
+先改为读取仓库公钥、对 Variable 做 fail-closed 相等性检查，再生成临时配置；这条目标合同不能
+被误记为已经实现。
 
 ## 2. 私钥保管
 

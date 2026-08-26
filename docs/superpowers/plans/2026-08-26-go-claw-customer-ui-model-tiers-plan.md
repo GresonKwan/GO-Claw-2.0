@@ -1,5 +1,9 @@
 # GO CLAW Customer UI and Model Tiers Implementation Plan
 
+> 状态：文件级分计划；2026-08-26 review 后受
+> `2026-08-26-go-claw-v2-1-reviewed-execution-plan.md` 约束。特别是客户员工 API
+> 必须使用 sanitized tier DTO，不能只隐藏聊天选择器。
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Deliver the simplified customer UI, a fixed bottom sidebar dock, one-step-larger typography/icons, correct browser caret behavior, and three per-employee model tiers whose transport model IDs never reach the frontend.
@@ -186,6 +190,7 @@ Set the private routing provider for every migrated slot, save each profile atom
 | `console/src/layouts/Header.customer.test.tsx:128-140`                       | first customer header test                   | Assert no accessible name/text/title matching `代码`; protects against future reinsertion.                      |
 | `console/src/layouts/registry/builtinMenu.ts:57-72`                          | `CUSTOMER_HIDDEN_MENU_IDS`                   | Add `core.workspace`, `core.agent-stats`, `core.models`; routes remain registered for compatibility.            |
 | `console/src/layouts/registry/builtinMenu.ts:152-159,210-217,237-244`        | three menu declarations                      | Do not delete; visibility predicate hides them.                                                                 |
+| `console/src/layouts/registry/builtinRoutes.tsx:82-112`                     | hidden routes remain directly open           | Keep source components, but omit workspace/files, agent-stats, and models from exported `BUILTIN_ROUTES`; unmatched paths fall back to `/`. |
 | `console/src/layouts/registry/builtinMenu.test.ts:7-28`                      | `HIDDEN`, `KEPT`                             | Move those three IDs into `HIDDEN`; remove them from `KEPT`.                                                    |
 | `console/src/layouts/Sidebar.tsx:72-77`                                      | `SIMPLE_MODE_WHITELIST`                      | Remove `core.models`; no alternate simple-mode leak.                                                            |
 | `console/src/layouts/Sidebar.tsx:433-649`                                    | main render                                  | Split into `sidebarScrollRegion` and one `sidebarBottomDock` containing quota, settings, and collapse controls. |
@@ -194,6 +199,13 @@ Set the private routing provider for every migrated slot, save each profile atom
 | `console/src/App.tsx:41-46,147-160`                                          | `GlobalStyle`, `ConfigProvider.theme.token`  | Add caret policy and exact larger global tokens.                                                                |
 | `console/src/pages/Chat/ModelSelector/index.tsx:1-22,24-34,68-534`           | entire selector implementation               | Replace provider/model catalog UI with the three-tier API and cards.                                            |
 | `console/src/pages/Chat/ModelSelector/ModelSelector.test.tsx:11-337`         | provider-oriented mocks/tests                | Replace with tier contract, per-employee selection, warning, and no-model-name tests.                           |
+| `src/qwenpaw/app/routers/agents.py:46-55,246-264`                            | `AgentSummary.active_model`                  | Product summary returns `model_tier` only; do not serialize `ModelSlotConfig`.                                  |
+| `src/qwenpaw/app/routers/agents.py:70-86,439-460`                            | create request accepts/falls back to raw slot | Remove raw slot from customer create DTO and resolve the new employee's economy tier privately.                 |
+| `src/qwenpaw/app/routers/agents.py:359-365,636-648`                          | raw agent get/update DTO                     | Add a customer editable DTO excluding `active_model`; raw model changes are accepted only through tier PUT.     |
+| `console/src/api/types/agents.ts:12-42`                                      | `AgentSummary`/`AgentProfileConfig`          | Remove frontend `ModelSlotConfig` fields and type the customer `model_tier`.                                    |
+| `console/src/pages/Settings/Agents/index.tsx:52-65,146-155`                  | edit/save raw active model                   | Stop calling the raw agent-config model fields; load/save the employee tier through product API.                |
+| `console/src/pages/Settings/Agents/components/AgentTable.tsx:141-160`        | model ID/provider icon column                | Render the Chinese tier label and leaf/balance/rocket icon only.                                                |
+| `console/src/pages/Settings/Agents/components/AgentModal.tsx:57-97,185-280`  | `listProviders` and raw model controls       | Delete provider loading and reuse the three fixed tier choices.                                                 |
 
 ## 5. Visual and interaction contract
 
@@ -216,6 +228,7 @@ All use `fill="none"`, `stroke="currentColor"`, `stroke-width="1.8"`, `stroke-li
 - Selection sends only `{schemaVersion, agentId, tier}`. While saving, all three options are disabled. On error, keep the old tier and show the server message.
 - A successful response calls the existing `publishActiveMaxInputLength` behavior and emits `model-switched` with `{maxInputLength}`; no other consumer changes.
 - DOM, accessibility names, tooltips, logs, localStorage, and frontend TypeScript fixtures contain none of the three transport model IDs.
+- Browser responses consumed by the customer console obey the same rule. Hiding text in the DOM is insufficient: `/api/agents`, customer agent edit responses, and their request bodies contain a tier ID only.
 
 ### 5.3 Fixed bottom dock
 
@@ -265,9 +278,9 @@ Add exactly this selector policy to `GlobalStyle`:
 
 #root input,
 #root textarea,
-#root [contenteditable="true"],
+#root [contenteditable]:not([contenteditable="false"]),
 #root .monaco-editor textarea,
-#root .cm-editor [contenteditable="true"] {
+#root .cm-editor [contenteditable]:not([contenteditable="false"]) {
   caret-color: auto;
 }
 ```
@@ -305,6 +318,23 @@ Do not disable selection, `user-select`, focus outlines, or keyboard navigation.
 - [ ] Re-run both product test files; expect pass.
 - [ ] Commit: `git commit -m "feat(api): expose customer model tiers"`.
 
+### Task 2A: Remove raw model slots from customer employee traffic
+
+**Files:**
+
+- Modify: `src/qwenpaw/app/routers/agents.py:46-86,246-264,359-365,439-460,636-648`
+- Modify: `console/src/api/types/agents.ts:12-42`
+- Modify: `console/src/pages/Settings/Agents/index.tsx:52-65,146-155`
+- Modify: `console/src/pages/Settings/Agents/components/AgentTable.tsx:141-160`
+- Modify: `console/src/pages/Settings/Agents/components/AgentModal.tsx:57-97,185-280`
+- Modify tests: agent router tests and the three matching frontend test files
+
+- [ ] Add backend tests that recursively scan customer list/get/create/update JSON and reject the keys `active_model`, `provider_id`, `model`, `base_url`, and `api_key`, while requiring `model_tier`; a new employee must privately persist economy.
+- [ ] Add frontend tests proving opening/editing the employee modal never calls `providerApi.listProviders`, never imports provider icons, and sends only a tier ID to the product route.
+- [ ] Implement sanitized customer DTOs and tier-only employee UI. Keep the private persisted `active_model` in backend config; it is resolved only inside `go_claw_product.py`.
+- [ ] Run the targeted backend/frontend tests and capture one browser network trace; no request or response used by the customer console may contain any transport model ID.
+- [ ] Commit: `git commit -m "fix(product): keep raw model slots out of customer APIs"`.
+
 ### Task 3: Replace the frontend provider selector with tier cards and SVG icons
 
 **Files:**
@@ -334,14 +364,17 @@ Do not disable selection, `user-select`, focus outlines, or keyboard navigation.
 - Modify: `console/src/layouts/Header.customer.test.tsx:128-140`
 - Modify: `console/src/layouts/registry/builtinMenu.ts:57-72`
 - Modify: `console/src/layouts/registry/builtinMenu.test.ts:7-28`
+- Modify: `console/src/layouts/registry/builtinRoutes.tsx:82-112`
+- Modify/create: route registry customer-guard tests
 - Modify: `console/src/layouts/Sidebar.tsx:72-77`
 - Modify: `console/src/layouts/SidebarSettingsPanel.tsx:1-121`
 - Create: `console/src/layouts/SidebarSettingsPanel.test.tsx`
 
 - [ ] Update/add tests first: code, files/workspace, employee statistics, model menu, and language controls must have no accessible DOM entry; theme/update/close-window controls remain.
+- [ ] Add direct-navigation tests: `/models`, `/agent-stats`, and the workspace/files path are absent from exported product routes and the existing unmatched-route fallback redirects to `/`.
 - [ ] Run `npm --prefix console run test:run -- src/layouts/Header.customer.test.tsx src/layouts/registry/builtinMenu.test.ts src/layouts/SidebarSettingsPanel.test.tsx`; expect failures for current visible entries.
 - [ ] Remove `CodingModeToggle`, add the three menu IDs to the hidden set/remove simple leak, and delete language imports/constants/logic/row.
-- [ ] Do not delete routes or `languageApi`; other product surfaces may still depend on them.
+- [ ] Do not delete route component source or `languageApi`; remove the three entries from the exported product route array so internal code remains recoverable without a customer deep link.
 - [ ] Re-run targeted tests; expect pass.
 - [ ] Commit: `git commit -m "refactor(console): hide technical customer navigation"`.
 

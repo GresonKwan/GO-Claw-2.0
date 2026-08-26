@@ -1,10 +1,14 @@
 # GO CLAW Signing, Full Windows Bundle, and Main Build Implementation Plan
 
+> 状态：文件级分计划；2026-08-26 review 后受
+> `2026-08-26-go-claw-v2-1-reviewed-execution-plan.md` 约束。现有 updater 密钥已实测匹配，
+> 本轮禁止生成第二套密钥；通用 Full ZIP 永远无客户凭据。
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Establish a recoverable GO CLAW signing-key lifecycle, make all signed-build inputs fail closed, produce one canonical complete Windows ZIP from CI, verify the real installer/update signatures and desktop readiness, and use the unified release workflow as the only publishing path for subsequent online updates.
 
-**Architecture:** The tracked Tauri updater public key is the build source of truth. GitHub’s public-key variable is an equality assertion, never an override; the private key and password exist only in protected local custody and GitHub Secrets. Windows CI builds portable and installed clients, downloads and validates the Evergreen WebView2 standalone installer, builds/signs updater assets, verifies every cross-component contract, then assembles one versioned-root ZIP with an internal manifest/checksums. Confidential customer-delivery ZIPs remain restricted Actions artifacts; public releases receive only credential-free updater assets.
+**Architecture:** The tracked Tauri updater public key is the build source of truth. GitHub’s public-key variable is an equality assertion, never an override; the existing private key and password remain only in protected local custody and GitHub Secrets. Windows CI builds portable and installed clients, validates WebView2, signs updater assets, and assembles one credential-free versioned-root ZIP. A separate local sealing operation may add one single-use enrollment ticket to a private customer copy; that copy never returns to GitHub. Public releases receive only credential-free assets.
 
 **Tech Stack:** Tauri signer/minisign, NSIS, PowerShell, Python, Node.js, GitHub Actions, WebView2 Evergreen, SHA-256, Authenticode.
 
@@ -14,52 +18,42 @@
 
 - Exact code baseline: `ce18d02f`, 2026-08-26. Symbol anchors are normative after line shifts.
 - Implement desktop readiness, customer/model tiers, and media routing plans before running the Main build in Task 9.
-- Current tracked updater key is present at `console/src-tauri/tauri.conf.json:78`, but GitHub Secret contents are unreadable by design. If no locally-custodied private key can be proven to match, rotate to a newly generated pair; do not assume the existing Secret matches.
+- The locally-custodied key has signed a temporary file that the tracked public key verified through `go_claw_updates.py::verify_minisign`; both local/backup public files and GitHub Variable match. No rotation or generation is authorized in this iteration. CI still proves the unreadable Secret by verifying its real output signature.
 - A workflow invoked by `release.yml`, a signed manual Main build, or a Main branch build may not emit unsigned installer/update assets. Unsigned output is allowed only for an explicitly selected diagnostic `workflow_dispatch` input and is never publishable.
-- Never print, archive, cache, upload, or commit a signing private key/password, API key, provision HMAC secret, or complete credential JSON.
+- Never print, archive, cache, upload, or commit a signing private key/password, API key, provision HMAC secret, enrollment ticket, or complete credential JSON.
 - Before every task commit, run `git add` for each path listed under that task and no unrelated path; every commit command below assumes that explicit staging has succeeded.
 
 ## 1. Signing key custody contract
 
 ### 1.1 Local paths and generated files
 
-Use this exact external directory, outside the repository:
+Use the already-established files; do not create or rename them:
 
 ```text
-/Users/gresonkwan/.config/go-claw/keys/
-  updater-2026-08.key       # encrypted private key, mode 0600
-  updater-2026-08.key.pub   # public key, mode 0644
+/Users/gresonkwan/Library/Application Support/GO CLAW/keys/
+  tauri-updater.key
+  tauri-updater.key.pub
+
+/Volumes/固态2/GO-CLAW-Secrets/
+  tauri-updater.key
+  tauri-updater.key.pub
 ```
 
-Generation command from repository root:
-
-```bash
-install -d -m 700 /Users/gresonkwan/.config/go-claw/keys
-umask 077
-npm --prefix console exec -- tauri signer generate -- --write-keys /Users/gresonkwan/.config/go-claw/keys/updater-2026-08.key
-chmod 600 /Users/gresonkwan/.config/go-claw/keys/updater-2026-08.key
-chmod 644 /Users/gresonkwan/.config/go-claw/keys/updater-2026-08.key.pub
-```
-
-Enter a new non-empty private-key password interactively. Store the private file and password as separate password-manager items and make one encrypted offline backup. The repository records only public metadata in `docs/operations/GO-CLAW-updater-key-operations.zh-CN.md`: algorithm `minisign/Ed25519`, key ID decoded from the public key, SHA-256 of the public-key text, creation date, custodian, GitHub Secret/Variable names, and rotation/recovery steps.
+The password is in macOS Login Keychain with service `GO CLAW Tauri Updater` and account
+`TAURI_SIGNING_PRIVATE_KEY_PASSWORD`. The complete custody, recovery, Key ID, and bridge-rotation procedure is
+maintained only in `docs/GO-CLAW-在线更新签名密钥运维.zh.md`. This plan does not duplicate or replace it.
 
 ### 1.2 GitHub names and equality
 
 | GitHub setting                       | Kind     | Value                                                |
 | ------------------------------------ | -------- | ---------------------------------------------------- |
-| `TAURI_SIGNING_PRIVATE_KEY`          | Secret   | complete encrypted contents of `updater-2026-08.key` |
+| `TAURI_SIGNING_PRIVATE_KEY`          | Secret   | complete encrypted contents of the existing `tauri-updater.key` |
 | `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` | Secret   | private-key password                                 |
-| `TAURI_UPDATER_PUBKEY`               | Variable | trimmed exact contents of `updater-2026-08.key.pub`  |
+| `TAURI_UPDATER_PUBKEY`               | Variable | trimmed exact contents of the existing `tauri-updater.key.pub` |
 
-Update with GitHub CLI without passing secrets on the command line:
-
-```bash
-gh secret set TAURI_SIGNING_PRIVATE_KEY < /Users/gresonkwan/.config/go-claw/keys/updater-2026-08.key
-gh secret set TAURI_SIGNING_PRIVATE_KEY_PASSWORD
-gh variable set TAURI_UPDATER_PUBKEY --body "$(tr -d '\r\n' < /Users/gresonkwan/.config/go-claw/keys/updater-2026-08.key.pub)"
-```
-
-The second command prompts securely. Replace `plugins.updater.pubkey` in tracked `tauri.conf.json` with the trimmed `.pub` contents in the same change. A key rotation is atomic in this order: prepare code/public key, update both Secrets/Variable, run signed Main verification, then publish the client that trusts the new key. Retain the previous private key encrypted until all supported clients have upgraded or a bridge release has been completed.
+Do not rewrite the Secrets/Variable merely because their secret contents cannot be read. The Main build signs a real
+asset and immediately verifies it with the tracked public key; that is the proof that the Secret matches. Only a failed
+proof triggers the incident/bridge-rotation procedure in the signing operations document, not ad-hoc key generation.
 
 ## 2. Three-copy public-key contract
 
@@ -113,30 +107,31 @@ GO-CLAW-Windows-x64-Full-<version>/
     LICENSE
     README-PORTABLE.zh-CN.txt
     portable.json
-  Installer/
-    GO-CLAW-Setup-<version>-Windows-x64.exe
   WebView2/
     MicrosoftEdgeWebView2RuntimeInstallerX64.exe
-  Update/
-    GO-CLAW-Update-<version>-setup.exe
-    GO-CLAW-Update-<version>-setup.exe.sig
-    latest.json
   MANIFEST.json
   SHA256SUMS.txt
 ```
+
+“Full” means a complete zero-install customer cold-start package: Portable includes the application, Python/Node
+runtimes, plugins and configuration shell, while WebView2 provides offline recovery. The independently signed NSIS
+installer and updater exe/sig/manifest remain publish transport assets for Release and `/updates/`; they are not copied
+into the customer ZIP. This keeps one startup/enrollment path and avoids an installer that cannot consume the ticket
+in a post-build sealed Portable directory.
 
 No second archive is nested inside. `SHA256SUMS.txt` covers every regular file except itself and uses lowercase SHA-256, two spaces, and root-relative POSIX paths sorted bytewise. `MANIFEST.json` schema is:
 
 ```json
 {
-  "schemaVersion": 1,
+  "schemaVersion": 2,
   "product": "GO CLAW",
   "version": "2.1.0",
   "platform": "windows-x86_64",
   "createdAt": "UTC RFC3339 with Z",
   "sourceCommit": "40 lowercase hex characters",
-  "confidential": true,
-  "containsBatchCredentials": true,
+  "confidential": false,
+  "containsCredentials": false,
+  "containsEnrollmentTicket": false,
   "webView2": {
     "distribution": "evergreen-standalone-x64",
     "authenticodeSubject": "Microsoft Corporation",
@@ -153,7 +148,11 @@ No second archive is nested inside. `SHA256SUMS.txt` covers every regular file e
 }
 ```
 
-`confidential` and `containsBatchCredentials` are derived by checking whether `Portable/GO-CLAW-Config/credentials.json` or `provision.json` exists. A confidential ZIP is uploaded only as Actions artifact `GO-CLAW-Windows-x64-Full-<version>-CONFIDENTIAL`, retention 3 days; it is never sent to `gh release upload` or OSS. A credential-free build sets both fields false and may be published only after an explicit future policy change; this iteration still does not attach the Full ZIP to the public release.
+The generic Main ZIP must set all three booleans exactly as shown. The assembler fails if it sees
+`credentials.json`, `provision.json`, an API-key pattern, a provision HMAC, or private-key material. CI uploads the ZIP
+as artifact `GO-CLAW-Windows-x64-Full-<version>`, whose path list contains only the one ZIP. A separate local
+`seal_customer_bundle.py` operation may create a confidential customer delivery ZIP containing one enrollment ticket;
+that derived ZIP is never uploaded to Actions, Release, cache, or the updater mirror.
 
 ## 5. WebView2 distribution contract
 
@@ -195,25 +194,24 @@ Publishing is unique: `.github/workflows/release.yml:205-210,322-329` builds the
 | `scripts/pack-tauri/sync_tauri_version.mjs:50-59,84-123`           | env public key overrides tracked key; signing optional             | Assert equality and signed-mode requirements; always copy tracked key.                                                              |
 | `scripts/pack-tauri/stage_windows_portable.py:16,40-53,111-228`    | portable-named archive, old credential validation, key skip        | Keep portable staging as an input, enforce schema/key; Full ZIP is assembled by a separate script.                                  |
 | `scripts/pack-tauri/build_win_pyinstaller.ps1:214-243`             | builds/stages only current portable archive                        | Expose deterministic paths/version for the full-bundle step; do not assemble ZIP in PowerShell.                                     |
-| `.github/workflows/desktop-build.yml:21-32,89-138,166-203,204-361` | optional signing, separate artifacts, browser-only portable verify | Add signed mode, new credentials, readiness tests, real signature verification, WebView2, full bundle, one final customer artifact. |
+| `.github/workflows/desktop-build.yml:21-32,89-138,166-203,204-361` | optional signing, static secrets, separate artifacts, browser-only verify | Add signed mode, remove delivery secrets, readiness tests, real signature verification, WebView2, full bundle, one final generic artifact. |
 | `.github/workflows/desktop-publish.yml:43-63`                      | attaches installers/update assets, not full ZIP                    | Rename staged installer assets and require exact six public files; explicitly reject/full-ignore confidential ZIP.                  |
 | `.github/workflows/desktop-release.yml:8-16`                       | published releases trigger a second legacy build                   | Remove release trigger; manual emergency only.                                                                                      |
 | `.github/workflows/release.yml:122-130,205-210,322-329`            | checks old API secret and delegates desktop                        | Require GO CLAW New API and signing inputs for non-dry release; keep this as unique publisher.                                      |
 
 ## 8. Implementation tasks
 
-### Task 1: Write and verify the key operations record
+### Task 1: Re-verify the existing key operations record
 
 **Files:**
 
-- Create: `docs/operations/GO-CLAW-updater-key-operations.zh-CN.md`
-- Modify only if rotating: `console/src-tauri/tauri.conf.json:78`
+- Verify/modify only if facts changed: `docs/GO-CLAW-在线更新签名密钥运维.zh.md`
+- Do not modify in normal flow: `console/src-tauri/tauri.conf.json:78`
 
-- [ ] Determine whether the local custodian has a matching private key. Proof requires signing a temporary file and verifying it with the tracked public key; a matching key ID string alone is insufficient.
-- [ ] If proof is unavailable, execute section 1 generation and rotate all three GitHub settings plus tracked key. Do not create any key file under the repository.
-- [ ] Use `mktemp -d` for a test payload, sign it with the local encrypted key, and verify through the project minisign verifier. Delete the temporary directory after success.
-- [ ] Record actual public metadata and recovery/rotation procedure; scan the doc for private-key header/password patterns.
-- [ ] Commit public-only changes: `git commit -m "docs(ops): establish GO CLAW updater key custody"`.
+- [ ] Repeat the already-successful temporary-file signing proof with the existing Application Support key and Keychain password; verify through the project minisign verifier. A matching key ID string alone is insufficient.
+- [ ] Compare both local/backup public files, tracked config, and GitHub Variable after trimming. Record only hashes and pass/fail.
+- [ ] Do not rotate on success. On failure, stop the release and follow the existing operations document's bridge procedure; do not create an unrelated key path.
+- [ ] Scan any doc change for private-key header/password patterns.
 
 ### Task 2: Make generated Tauri config fail closed
 
@@ -228,14 +226,14 @@ Publishing is unique: `.github/workflows/release.yml:205-210,322-329` builds the
 - [ ] Re-run; expect pass.
 - [ ] Commit: `git commit -m "ci(signing): make updater public key fail closed"`.
 
-### Task 3: Enforce staged key and schema-2 credential contracts
+### Task 3: Enforce staged key and credential-free release contracts
 
 **Files:**
 
 - Modify: `scripts/pack-tauri/stage_windows_portable.py:40-53,111-228`
 - Modify: `tests/unit/scripts/test_stage_windows_portable.py`
 
-- [ ] Add failing tests for schema 2, strict release key requirement, exact key bytes, malformed/missing key, and no private key material in stage.
+- [ ] Add failing tests for strict release key requirement, exact key bytes, malformed/missing key, no credentials/ticket/HMAC, and no private key material in stage.
 - [ ] Add a `require_updater_key: bool` argument; release/full builds pass true. Preserve false only for unit fixtures/unsigned diagnostics.
 - [ ] Re-run `uv run pytest -q tests/unit/scripts/test_stage_windows_portable.py`; expect pass.
 - [ ] Commit: `git commit -m "fix(packaging): enforce updater key in portable stage"`.
@@ -248,10 +246,10 @@ Publishing is unique: `.github/workflows/release.yml:205-210,322-329` builds the
 - Create: `tests/unit/scripts/test_build_windows_full_bundle.py`
 - Create: `scripts/pack-tauri/START-HERE.zh-CN.txt`
 
-- [ ] Write failing tests for the exact tree, stable outer name, one root directory, sorted checksums, deterministic path order, manifest schema, confidentiality detection, forbidden symlink/path traversal, missing asset failure, and repeated-build byte stability when timestamp/source epoch are fixed.
-- [ ] Implement CLI requiring `--version`, `--source-commit`, `--portable-stage`, `--installer`, `--webview2-installer`, `--update-installer`, `--update-signature`, `--latest-json`, `--pubkey-config`, and `--dist`.
+- [ ] Write failing tests for the exact tree, stable outer name, one root directory, sorted checksums, deterministic path order, schema-2 credential-free manifest, forbidden credential/ticket/secret files, forbidden symlink/path traversal, missing asset failure, and repeated-build byte stability when timestamp/source epoch are fixed.
+- [ ] Implement CLI requiring `--version`, `--source-commit`, `--portable-stage`, `--webview2-installer`, `--pubkey-config`, and `--dist`. Installer/update assets are verified by Task 5 but are not bundle inputs.
 - [ ] Build in a new temp directory under `dist`, validate every resolved input is a regular file/directory under an expected parent, use `SOURCE_DATE_EPOCH` for ZIP timestamps, and atomically replace only `dist/GO-CLAW-Windows-x64-Full.zip`.
-- [ ] Never read or serialize credential contents; detect presence by filename only.
+- [ ] Never read or serialize credential contents; fail on forbidden filenames and run a redacted byte-pattern scanner for API/private-key markers.
 - [ ] Run `uv run pytest -q tests/unit/scripts/test_build_windows_full_bundle.py`; expect pass.
 - [ ] Commit: `git commit -m "feat(packaging): assemble canonical full Windows ZIP"`.
 
@@ -277,11 +275,11 @@ Publishing is unique: `.github/workflows/release.yml:205-210,322-329` builds the
 - Modify: `scripts/pack-tauri/build_win_pyinstaller.ps1:214-243`
 
 - [ ] Add `unsigned_test`, calculate signed mode, and validate all signing settings before build.
-- [ ] Materialize schema-2 New API credentials as defined by the media plan.
+- [ ] Materialize no customer credentials, API key, HMAC, or enrollment ticket. A CI-only test key may exist only in process environment for live gates and is scanned out of every output.
 - [ ] Keep installed and portable readiness verification; both must pass before packaging.
 - [ ] Download WebView2 from the exact official redirect, validate Authenticode subject/status, and calculate hash.
 - [ ] Require Tauri installer `.sig`; build and require update `.sig`/`latest.json`; run the release-contract verifier.
-- [ ] Call the full-bundle assembler. Upload one customer artifact whose path list contains only `dist/GO-CLAW-Windows-x64-Full.zip`, `if-no-files-found: error`, retention 3 days when confidential.
+- [ ] Call the full-bundle assembler. Upload one generic artifact whose path list contains only `dist/GO-CLAW-Windows-x64-Full.zip`, with `if-no-files-found: error`.
 - [ ] Keep separate short-lived raw updater artifacts for the publish workflow. They are implementation transport, not the customer delivery artifact.
 - [ ] Run `go run github.com/rhysd/actionlint/cmd/actionlint@v1.7.7 .github/workflows/desktop-build.yml` and a signed `windows_only=true` dispatch; expect pass.
 - [ ] Commit: `git commit -m "ci(windows): produce signed complete GO CLAW bundle"`.
@@ -294,9 +292,9 @@ Publishing is unique: `.github/workflows/release.yml:205-210,322-329` builds the
 - Modify: `.github/workflows/desktop-release.yml:1-29`
 - Modify: `.github/workflows/release.yml:122-130,205-210,322-329`
 
-- [ ] Add workflow policy tests (or `actionlint` plus script assertions) proving legacy has no release trigger, publish requires the exact public assets, and confidential Full ZIP is not matched by release globs.
+- [ ] Add workflow policy tests (or `actionlint` plus script assertions) proving legacy has no release trigger, publish requires the exact public assets, and locally sealed customer ZIP names are not matched by any CI/Release glob.
 - [ ] Rename public setup files to the GO CLAW names in section 6 and fail if any required file is missing; remove `|| true` from required Windows asset moves.
-- [ ] Replace release secret checks with `GO_CLAW_LLM_API_KEY` plus the three signing settings for non-dry runs.
+- [ ] Require the three signing settings for non-dry runs. Require `GO_CLAW_CI_TEST_API_KEY` only for explicit live media verification and never materialize it.
 - [ ] Run pinned actionlint v1.7.7 for all three workflows; expect pass.
 - [ ] Commit: `git commit -m "ci(release): enforce one signed GO CLAW publishing path"`.
 
@@ -321,11 +319,11 @@ gh workflow run desktop-build.yml --ref main -f ref=main -f windows_only=true -f
 ```
 
 - [ ] Record run ID and wait for completion. A rerun of failed jobs is acceptable; do not start a parallel second release candidate.
-- [ ] Download the `GO-CLAW-Windows-x64-Full-<version>-CONFIDENTIAL` artifact into a newly created temporary directory and confirm it contains exactly one file named `GO-CLAW-Windows-x64-Full.zip`.
+- [ ] Download the `GO-CLAW-Windows-x64-Full-<version>` artifact into a newly created temporary directory and confirm it contains exactly one file named `GO-CLAW-Windows-x64-Full.zip`.
 - [ ] Run the release-contract verifier against the downloaded ZIP and public updater assets.
 - [ ] On a clean Windows terminal without WebView2, test browser fallback, install the bundled Evergreen runtime, retry, and require the content-readiness marker. On a normal Windows terminal, require direct Tauri Auto startup.
 - [ ] Launch each standard employee, confirm economy default/per-employee selection, invoke all five live media tools once, and confirm New API Token Plan channel logs.
-- [ ] Preserve the redacted build verification summary and screenshots. Hand off the Full ZIP through the approved confidential delivery channel before its 3-day artifact expiry.
+- [ ] Preserve the redacted build verification summary and screenshots. Keep the generic Full ZIP as the recovery baseline; create customer-specific delivery ZIPs only with the local one-time sealing process.
 
 ## 9. Completion commands
 

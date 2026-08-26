@@ -1,6 +1,12 @@
 # GO CLAW 自动开通与 NewAPI 计费体系
 
-> 版本：2026-08-19 · 适用于 GO CLAW Portable 2.0.1+（Windows）
+> 当前实现版本：schema 1（2026-08-26 复核）· 适用于 GO CLAW Portable 2.0.1+（Windows）
+>
+> **发布警告：** 下文 HMAC + `credentials.json` 是目前代码的过渡现状，不是 v2.1 正式交付
+> 目标。共享 HMAC 可从客户端提取，且静态 `credentials.json` 会绕过自动开户。v2.1 必须先按
+> `superpowers/plans/2026-08-26-go-claw-v2-1-reviewed-execution-plan.md` P1 改为“通用无凭据
+> CI ZIP + 客户单用途 enrollment ticket”。在该任务完成前，不得用本页 schema 1 流程制作新的
+> 正式客户 Main 包。
 
 本文档描述 GO CLAW 便携版的**首次启动自动开通**机制：客户双击软件即自动获得
 专属的 NewAPI 子用户与带赠送额度的 API Key，无需任何手动配置。
@@ -38,6 +44,9 @@
 
 ### 媒体工具（图像/视频）
 
+> 以下是当前 2.0.1 代码行为，仅用于理解和迁移；它将在 v2.1 被两个中性插件和固定 New API
+> 媒体合同替换。不得把本节路径/模型复制到新实现。
+
 NewAPI **不透传** DashScope 原生路径（`/api/v1/services/aigc/*`），因此媒体
 插件已改写为双协议（`src/qwenpaw/plugins/dashscope_credentials.py` 的
 `resolve_media_api`）：
@@ -66,22 +75,25 @@ NewAPI **不透传** DashScope 原生路径（`/api/v1/services/aigc/*`），因
 
 - 服务：`/opt/go-claw-provisioning/`（systemd: `go-claw-provision.service`）
 - 公网入口：nginx `location = /go-claw/provision` → `proxy_pass http://127.0.0.1:9100/api/provision`（公网路径与服务端路由的映射靠这条重写，二者不可互换）
-- 服务器机密（权限 600，勿外泄）：`/root/.newapi_admin_token`、
-  `/root/.go-claw-hmac-secret`
+- 服务环境：`/opt/go-claw-provisioning/.env`（由 systemd `EnvironmentFile` 读取，权限必须只允许
+  root；不得在文档中记录实际值）
 
 ## 打包与 CI
 
-- 构建机/CI 通过 GitHub Secrets 注入 `GO_CLAW_PROVISION_URL` 与
+- **当前过渡工作流**通过 GitHub Secrets 注入 `GO_CLAW_PROVISION_URL` 与
   `GO_CLAW_PROVISION_HMAC_SECRET`，工作流（desktop-build /
   desktop-portable-reverify）自动生成 `GO-CLAW-Config/provision.json`
   打入 ZIP；该文件被 `.gitignore` 忽略，永不入仓库。
 - 若同时存在旧版共享 `credentials.json`（secrets `GO_CLAW_LLM_API_KEY` 等），
-  批次凭证优先，自动开通会跳过。新交付建议只配 provision 两个 secret。
+  批次凭证优先，自动开通会跳过。这正是 v2.1 已确认要删除的冲突，不能再作为新交付建议。
+
+v2.1 目标工作流不 materialize 任何客户 API key、共享 HMAC 或 ticket。CI 只生成一个无凭据
+Full ZIP；运营人员在本地为具体客户签发并注入单用途 ticket，在线更新不再携带开户材料。
 
 ## 安全清单
 
 - [x] `credentials.json` / `provision.json` / `.env` / `provision.db` 均已
       被 .gitignore 覆盖，且从未进入 git 历史
-- [x] 交付物只含 HMAC 密钥；NewAPI 管理员令牌不出服务器
+- [x] 当前过渡交付物不含 NewAPI 管理员令牌
 - [x] 赠送额度仅受用户账号额度约束（令牌自 8561e1d 起默认不限额；令牌层可在 NewAPI 后台单独限额）
-- [ ] 建议定期轮换 HMAC 密钥与管理员令牌（轮换后需重新出包）
+- [ ] v2.1 删除客户端共享 HMAC，改为服务端只存 ticket hash；完成前不得发布新 Main 客户包
