@@ -3,6 +3,7 @@
 mod backend;
 mod backend_download;
 mod client;
+mod client_readiness;
 mod external_link;
 mod portable;
 mod tray;
