@@ -1,14 +1,4 @@
-import {
-  Layout,
-  Menu,
-  Button,
-  Modal,
-  Input,
-  Form,
-  Tooltip,
-  Badge,
-  Popover,
-} from "antd";
+import { Layout, Menu, Button, Modal, Input, Form, Tooltip, Badge } from "antd";
 import { useState, useEffect, useMemo, useCallback } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
@@ -18,13 +8,10 @@ import {
   SparkChatTabFill,
   SparkExitFullscreenLine,
   SparkSearchUserLine,
-  SparkMenuExpandLine,
-  SparkMenuFoldLine,
   SparkEmailLine,
-  SparkSettingLine,
 } from "@agentscope-ai/icons";
 import SidebarSessionList from "./SidebarSessionList";
-import SidebarSettingsPanel from "./SidebarSettingsPanel";
+import { SidebarBottomDock } from "./SidebarBottomDock";
 import { clearAuthToken } from "../api/config";
 import { authApi } from "../api/modules/auth";
 import api from "../api";
@@ -38,7 +25,6 @@ import { buildSessionPath, getSessionIdFromPath } from "../utils/sessionRoute";
 import sessionApi from "../pages/Chat/sessionApi";
 import styles from "./index.module.less";
 import { useTheme } from "../contexts/ThemeContext";
-import { QuotaBar } from "./QuotaBar";
 import { useMenuItems, useRoutes } from "../plugins/registry/hooks";
 import { Slot } from "../plugins/registry/Slot";
 import {
@@ -124,7 +110,6 @@ export default function Sidebar({ selectedKey }: SidebarProps) {
   // Start collapsed on mobile so the first paint does not overlay/obscure
   // the main content on narrow viewports.
   const [collapsed, setCollapsed] = useState(isMobileSidebarViewport);
-  const [settingsOpen, setSettingsOpen] = useState(false);
   const [isMobile, setIsMobile] = useState(isMobileSidebarViewport);
   const [hasInboxUnread, setHasInboxUnread] = useState(false);
 
@@ -156,8 +141,8 @@ export default function Sidebar({ selectedKey }: SidebarProps) {
   const simpleFlatNav = useMemo(() => {
     if (sidebarMode !== "simple") return [];
     return [
-      ...flattenMenu(agentMenu, routes, 16),
-      ...flattenMenu(settingsMenu, routes, 16),
+      ...flattenMenu(agentMenu, routes, 18),
+      ...flattenMenu(settingsMenu, routes, 18),
     ];
   }, [agentMenu, settingsMenu, routes, sidebarMode]);
 
@@ -258,14 +243,14 @@ export default function Sidebar({ selectedKey }: SidebarProps) {
   };
 
   const agentMenuItems = useMemo(
-    () => toAntdItems(agentMenu, { collapsed, decorateLabel }),
+    () => toAntdItems(agentMenu, { collapsed, decorateLabel, iconSize: 18 }),
     // hasInboxUnread closure inside decorateLabel — listed as dep explicitly.
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [agentMenu, collapsed, hasInboxUnread],
   );
 
   const settingsMenuItems = useMemo(
-    () => toAntdItems(settingsMenu, { collapsed }),
+    () => toAntdItems(settingsMenu, { collapsed, iconSize: 18 }),
     [settingsMenu, collapsed],
   );
 
@@ -435,214 +420,194 @@ export default function Sidebar({ selectedKey }: SidebarProps) {
         isSimpleExpanded ? ` ${styles.siderSimple}` : ""
       }`}
     >
-      {collapsed ? (
-        <nav className={styles.collapsedNav}>
-          {collapsedNavItems.map((item) => {
-            const isActive =
-              item.key === "core.chat"
-                ? isChatActive
-                : selectedKey === item.key;
-            return (
-              <Tooltip
-                key={item.key}
-                title={item.label}
-                placement="right"
-                overlayInnerStyle={{
-                  background: "rgba(0,0,0,0.75)",
-                  color: "#fff",
-                }}
-              >
-                <button
-                  className={`${styles.collapsedNavItem} ${
-                    isActive ? styles.collapsedNavItemActive : ""
-                  }`}
-                  onClick={() =>
-                    item.href
-                      ? window.open(item.href, "_blank", "noopener,noreferrer")
-                      : navigate(item.path)
-                  }
+      <div
+        className={styles.sidebarScrollRegion}
+        data-testid="sidebar-scroll-region"
+      >
+        {collapsed ? (
+          <nav className={styles.collapsedNav}>
+            {collapsedNavItems.map((item) => {
+              const isActive =
+                item.key === "core.chat"
+                  ? isChatActive
+                  : selectedKey === item.key;
+              return (
+                <Tooltip
+                  key={item.key}
+                  title={item.label}
+                  placement="right"
+                  overlayInnerStyle={{
+                    background: "rgba(0,0,0,0.75)",
+                    color: "#fff",
+                  }}
                 >
-                  {item.icon}
-                </button>
-              </Tooltip>
-            );
-          })}
-        </nav>
-      ) : isSimpleExpanded ? (
-        <>
-          {/* Simple mode: flat nav items + session list */}
-          <div className={styles.agentScopedSection}>
-            <div className={styles.agentSelectorContainer}>
-              <AgentSelector collapsed={collapsed} />
-            </div>
-            {/* Flat nav items (no groups) */}
-            <div className={styles.simpleNavItems}>
-              {simpleFlatNav.map((entry) => {
-                const isInbox = entry.key === "core.inbox";
-                const isActive = selectedKey === entry.key;
-                return (
                   <button
-                    key={entry.key}
-                    className={`${styles.simpleNavItem} ${
-                      isActive ? styles.simpleNavItemActive : ""
+                    className={`${styles.collapsedNavItem} ${
+                      isActive ? styles.collapsedNavItemActive : ""
                     }`}
                     onClick={() =>
-                      entry.href
+                      item.href
                         ? window.open(
-                            entry.href,
+                            item.href,
                             "_blank",
                             "noopener,noreferrer",
                           )
-                        : navigate(entry.path)
+                        : navigate(item.path)
                     }
                   >
-                    {isInbox ? (
-                      <span
-                        style={{
-                          position: "relative",
-                          display: "inline-flex",
-                        }}
-                      >
-                        {entry.icon ?? <SparkEmailLine size={16} />}
-                        {hasInboxUnread && (
-                          <span
-                            style={{
-                              position: "absolute",
-                              top: -1,
-                              right: -3,
-                              width: 6,
-                              height: 6,
-                              borderRadius: "50%",
-                              background: "rgba(255, 157, 77, 1)",
-                            }}
-                          />
-                        )}
-                      </span>
-                    ) : (
-                      entry.icon
-                    )}
-                    <span>{entry.label}</span>
+                    {item.icon}
                   </button>
-                );
-              })}
+                </Tooltip>
+              );
+            })}
+          </nav>
+        ) : isSimpleExpanded ? (
+          <>
+            {/* Simple mode: flat nav items + session list */}
+            <div className={styles.agentScopedSection}>
+              <div className={styles.agentSelectorContainer}>
+                <AgentSelector collapsed={collapsed} />
+              </div>
+              {/* Flat nav items (no groups) */}
+              <div className={styles.simpleNavItems}>
+                {simpleFlatNav.map((entry) => {
+                  const isInbox = entry.key === "core.inbox";
+                  const isActive = selectedKey === entry.key;
+                  return (
+                    <button
+                      key={entry.key}
+                      className={`${styles.simpleNavItem} ${
+                        isActive ? styles.simpleNavItemActive : ""
+                      }`}
+                      onClick={() =>
+                        entry.href
+                          ? window.open(
+                              entry.href,
+                              "_blank",
+                              "noopener,noreferrer",
+                            )
+                          : navigate(entry.path)
+                      }
+                    >
+                      {isInbox ? (
+                        <span
+                          style={{
+                            position: "relative",
+                            display: "inline-flex",
+                          }}
+                        >
+                          {entry.icon ?? <SparkEmailLine size={18} />}
+                          {hasInboxUnread && (
+                            <span
+                              style={{
+                                position: "absolute",
+                                top: -1,
+                                right: -3,
+                                width: 6,
+                                height: 6,
+                                borderRadius: "50%",
+                                background: "rgba(255, 157, 77, 1)",
+                              }}
+                            />
+                          )}
+                        </span>
+                      ) : (
+                        entry.icon
+                      )}
+                      <span>{entry.label}</span>
+                    </button>
+                  );
+                })}
+              </div>
             </div>
-          </div>
 
-          {/* Session list — fills remaining space */}
-          <SidebarSessionList
-            onNewChat={handleNewChat}
-            onSessionClick={handleSidebarSessionClick}
-          />
-        </>
-      ) : (
-        <>
-          {/* Agent-scoped section: selector + Chat + Control + Workspace */}
-          <div className={styles.agentScopedSection}>
-            <div className={styles.agentSelectorContainer}>
-              <AgentSelector collapsed={collapsed} />
-              {/* Chat entry — sticky together with agent selector */}
-              <button
-                className={`${styles.stickyChatButton}${
-                  isChatActive ? ` ${styles.stickyChatButtonActive}` : ""
-                }`}
-                onClick={() => navigate(chatPath)}
-              >
-                <SparkChatTabFill size={16} />
-                <span>{t("nav.chat")}</span>
-              </button>
+            {/* Session list — fills remaining space */}
+            <SidebarSessionList
+              onNewChat={handleNewChat}
+              onSessionClick={handleSidebarSessionClick}
+            />
+          </>
+        ) : (
+          <>
+            {/* Agent-scoped section: selector + Chat + Control + Workspace */}
+            <div className={styles.agentScopedSection}>
+              <div className={styles.agentSelectorContainer}>
+                <AgentSelector collapsed={collapsed} />
+                {/* Chat entry — sticky together with agent selector */}
+                <button
+                  className={`${styles.stickyChatButton}${
+                    isChatActive ? ` ${styles.stickyChatButtonActive}` : ""
+                  }`}
+                  onClick={() => navigate(chatPath)}
+                >
+                  <SparkChatTabFill size={18} />
+                  <span>{t("nav.chat")}</span>
+                </button>
+              </div>
+              <Slot name="sider.top" kind="fill" />
+              <Menu
+                mode="inline"
+                selectedKeys={[selectedKey]}
+                openKeys={openKeys}
+                onClick={({ key }) => handleMenuClick(String(key), agentMenu)}
+                items={agentMenuItems}
+                theme={isDark ? "dark" : "light"}
+                className={styles.sideMenu}
+              />
             </div>
-            <Slot name="sider.top" kind="fill" />
+
+            {/* Global settings section */}
             <Menu
               mode="inline"
               selectedKeys={[selectedKey]}
               openKeys={openKeys}
-              onClick={({ key }) => handleMenuClick(String(key), agentMenu)}
-              items={agentMenuItems}
+              onClick={({ key }) => handleMenuClick(String(key), settingsMenu)}
+              items={settingsMenuItems}
               theme={isDark ? "dark" : "light"}
               className={styles.sideMenu}
             />
-          </div>
+            <Slot name="sider.bottom" kind="fill" />
+          </>
+        )}
 
-          {/* Global settings section */}
-          <Menu
-            mode="inline"
-            selectedKeys={[selectedKey]}
-            openKeys={openKeys}
-            onClick={({ key }) => handleMenuClick(String(key), settingsMenu)}
-            items={settingsMenuItems}
-            theme={isDark ? "dark" : "light"}
-            className={styles.sideMenu}
-          />
-          <Slot name="sider.bottom" kind="fill" />
-        </>
-      )}
-
-      {!collapsed && <QuotaBar />}
-
-      {authEnabled && !collapsed && (
-        <div className={styles.authActions}>
-          <Button
-            type="text"
-            icon={<SparkSearchUserLine size={16} />}
-            onClick={() => {
-              accountForm.resetFields();
-              setAccountModalOpen(true);
-            }}
-            block
-            className={`${styles.authBtn} ${
-              collapsed ? styles.authBtnCollapsed : ""
-            }`}
-          >
-            {!collapsed && t("account.title")}
-          </Button>
-          <Button
-            type="text"
-            icon={<SparkExitFullscreenLine size={16} />}
-            onClick={() => {
-              clearAuthToken();
-              window.location.href = "/login";
-            }}
-            block
-            className={`${styles.authBtn} ${
-              collapsed ? styles.authBtnCollapsed : ""
-            }`}
-          >
-            {!collapsed && t("login.logout")}
-          </Button>
-        </div>
-      )}
-
-      <div className={styles.collapseToggleContainer}>
-        {!collapsed && (
-          <Popover
-            open={settingsOpen}
-            onOpenChange={setSettingsOpen}
-            placement="topRight"
-            trigger="click"
-            content={
-              <SidebarSettingsPanel onClose={() => setSettingsOpen(false)} />
-            }
-          >
+        {authEnabled && !collapsed && (
+          <div className={styles.authActions}>
             <Button
               type="text"
-              icon={<SparkSettingLine size={18} />}
-              className={styles.collapseToggle}
-            />
-          </Popover>
+              icon={<SparkSearchUserLine size={18} />}
+              onClick={() => {
+                accountForm.resetFields();
+                setAccountModalOpen(true);
+              }}
+              block
+              className={`${styles.authBtn} ${
+                collapsed ? styles.authBtnCollapsed : ""
+              }`}
+            >
+              {!collapsed && t("account.title")}
+            </Button>
+            <Button
+              type="text"
+              icon={<SparkExitFullscreenLine size={18} />}
+              onClick={() => {
+                clearAuthToken();
+                window.location.href = "/login";
+              }}
+              block
+              className={`${styles.authBtn} ${
+                collapsed ? styles.authBtnCollapsed : ""
+              }`}
+            >
+              {!collapsed && t("login.logout")}
+            </Button>
+          </div>
         )}
-        <Button
-          type="text"
-          icon={
-            collapsed ? (
-              <SparkMenuExpandLine size={20} />
-            ) : (
-              <SparkMenuFoldLine size={20} />
-            )
-          }
-          onClick={() => setCollapsed(!collapsed)}
-          className={styles.collapseToggle}
-        />
       </div>
+
+      <SidebarBottomDock
+        collapsed={collapsed}
+        onCollapsedChange={setCollapsed}
+      />
 
       <Modal
         open={accountModalOpen}

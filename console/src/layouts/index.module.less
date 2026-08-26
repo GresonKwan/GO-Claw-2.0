@@ -47,9 +47,19 @@
 // ─── Sidebar ─────────────────────────────────────────────────────────────────
 .sider {
   background: #f9f8f4 !important;
-  overflow: auto;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
   height: calc(100vh - 64px) !important;
   padding: 0 16px;
+
+  :global(.qwenpaw-layout-sider-children) {
+    display: flex;
+    min-height: 0;
+    flex: 1;
+    flex-direction: column;
+    overflow: hidden;
+  }
 
   // Hide scrollbar in browser
   &::-webkit-scrollbar {
@@ -109,7 +119,7 @@
     border-radius: 8px;
     background: transparent;
     color: rgba(0, 0, 0, 0.88);
-    font-size: 14px;
+    font-size: 15px;
     cursor: pointer;
     transition: background 0.2s;
     padding-left: 12px;
@@ -174,13 +184,6 @@
       justify-content: center;
     }
 
-    .collapseToggleContainer {
-      justify-content: center;
-      width: calc(100% + 16px);
-      margin: 0 -8px;
-      padding: 8px 0;
-    }
-
     :global {
       /* Center icon in collapsed menu items */
       .qwenpaw-menu-item,
@@ -221,7 +224,7 @@
     /* Group title (一级菜单分组) */
     .qwenpaw-menu-submenu-title {
       font-family: "PingFang SC", sans-serif !important;
-      font-size: 12px !important;
+      font-size: 13px !important;
       font-weight: 500 !important;
       line-height: 32px !important;
       letter-spacing: normal !important;
@@ -293,9 +296,9 @@
     background: #1e1e1e;
   }
 
-  // Sticky bottom bar background (dark mode)
-  .collapseToggleContainer {
+  .sidebarBottomDock {
     background: #1a1a1a;
+    border-top-color: rgba(255, 255, 255, 0.08);
   }
 
   // Chat button (dark mode)
@@ -401,7 +404,7 @@
 // ─── Quota bar (GO CLAW customer build) ──────────────────────────────────────
 .quotaBar {
   flex-shrink: 0;
-  padding: 8px 16px 4px;
+  padding: 8px 8px 4px;
 }
 
 .quotaBarRow {
@@ -411,7 +414,7 @@
 }
 
 .quotaBarLabel {
-  font-size: 12px;
+  font-size: 13px;
   color: rgba(0, 0, 0, 0.65);
   flex-shrink: 0;
 }
@@ -423,7 +426,7 @@
 }
 
 .quotaBarValue {
-  font-size: 12px;
+  font-size: 13px;
   color: rgba(0, 0, 0, 0.65);
   min-width: 34px;
   text-align: right;
@@ -462,30 +465,91 @@
   margin-top: 4px;
 }
 
-/* Collapse Toggle Button */
-.collapseToggleContainer {
-  flex-shrink: 0;
-  position: sticky;
-  bottom: 0;
-  z-index: 10;
-  width: calc(100% + 32px);
-  margin: 0 -16px;
-  padding: 8px 16px;
+.sidebarScrollRegion {
   display: flex;
-  align-items: center;
-  justify-content: flex-end;
-  gap: 4px;
-  background: #f9f8f4; // match sider background so scrolled content is hidden
+  min-height: 0;
+  flex: 1;
+  flex-direction: column;
+  overflow-y: auto;
+  scrollbar-width: none;
+
+  &::-webkit-scrollbar {
+    display: none;
+  }
 }
 
-.collapseToggle {
+.sidebarBottomDock {
+  flex-shrink: 0;
+  width: calc(100% + 32px);
+  margin: 0 -16px;
+  padding: 6px 8px 8px;
+  border-top: 1px solid rgba(0, 0, 0, 0.06);
+  background: #f9f8f4;
+}
+
+.dockQuota {
+  width: 100%;
+}
+
+.quotaRing {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 40px;
+}
+
+.dockActionRow {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.dockAction {
+  display: inline-flex;
+  height: 40px;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  border: 0;
+  border-radius: 9px;
+  background: transparent;
   color: rgba(0, 0, 0, 0.45);
-  border-radius: 8px;
-  transition: all 0.2s;
+  font: inherit;
+  font-size: 15px;
+  cursor: pointer;
+  transition:
+    background 0.15s ease,
+    color 0.15s ease;
 
   &:hover {
-    background: rgba(0, 0, 0, 0.06) !important;
-    color: #ff7f16 !important;
+    background: rgba(0, 0, 0, 0.06);
+    color: #ff7f16;
+  }
+}
+
+.dockSettingsAction {
+  flex: 1;
+}
+
+.dockCollapseAction {
+  width: 40px;
+  flex: 0 0 40px;
+}
+
+.siderCollapsed {
+  .sidebarBottomDock {
+    width: calc(100% + 16px);
+    margin: 0 -8px;
+  }
+
+  .dockActionRow {
+    flex-direction: column;
+    justify-content: center;
+  }
+
+  .dockSettingsAction {
+    width: 40px;
+    flex: 0 0 40px;
   }
 }
 
@@ -508,7 +572,7 @@
   border-radius: 8px;
   background: rgba(255, 127, 22, 0.08);
   color: #ff7f16;
-  font-size: 14px;
+  font-size: 15px;
   font-weight: 500;
   cursor: pointer;
   transition: background 0.2s;
@@ -536,7 +600,7 @@
   border-radius: 8px;
   background: transparent;
   color: rgba(0, 0, 0, 0.75);
-  font-size: 14px;
+  font-size: 15px;
   cursor: pointer;
   transition:
     background 0.15s,
@@ -564,7 +628,7 @@
 }
 
 .simpleSessionHeader {
-  font-size: 12px;
+  font-size: 13px;
   font-weight: 500;
   color: rgba(26, 23, 22, 0.35);
   padding: 4px 12px 6px;
@@ -718,7 +782,7 @@
     &.siderCollapsed {
       padding: 0 6px;
 
-      .collapseToggleContainer {
+      .sidebarBottomDock {
         width: calc(100% + 12px);
         margin: 0 -6px;
       }
@@ -736,11 +800,10 @@
     border-radius: 8px;
   }
 
-  .collapseToggleContainer {
+  .sidebarBottomDock {
     width: calc(100% + 16px);
     margin: 0 -8px;
-    padding: 8px 0;
-    justify-content: center;
+    padding-inline: 4px;
   }
 }
 

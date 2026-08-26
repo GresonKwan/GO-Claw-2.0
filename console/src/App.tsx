@@ -45,6 +45,19 @@ const GlobalStyle = createGlobalStyle`
   margin: 0;
   box-sizing: border-box;
 }
+
+#root,
+#root * {
+  caret-color: transparent;
+}
+
+#root input,
+#root textarea,
+#root [contenteditable]:not([contenteditable="false"]),
+#root .monaco-editor textarea,
+#root .cm-editor [contenteditable]:not([contenteditable="false"]) {
+  caret-color: auto;
+}
 `;
 
 function AuthGuard({ children }: { children: React.ReactNode }) {
@@ -160,6 +173,12 @@ function AppInner() {
             : antdTheme.defaultAlgorithm,
           token: {
             colorPrimary: "#FF7F16",
+            fontSize: 16,
+            fontSizeSM: 14,
+            fontSizeLG: 18,
+            controlHeight: 36,
+            controlHeightSM: 30,
+            borderRadius: 10,
           },
         }}
       >

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { Progress } from "antd";
+import { Progress, Tooltip } from "antd";
 import { useTranslation } from "react-i18next";
 import { getQuota, type QuotaInfo } from "../api/modules/quota";
 import styles from "./index.module.less";
@@ -12,7 +12,7 @@ const LOW_QUOTA_THRESHOLD = 20;
  * Shows only the percentage; absolute amounts live in the tooltip.
  * Renders nothing when quota is unavailable (non-portable / error).
  */
-export function QuotaBar() {
+export function QuotaBar({ collapsed = false }: { collapsed?: boolean }) {
   const { t } = useTranslation();
   const [quota, setQuota] = useState<QuotaInfo | null>(null);
 
@@ -36,6 +36,25 @@ export function QuotaBar() {
 
   const percent = Math.min(100, Math.max(0, Math.round(quota.percent)));
   const low = percent < LOW_QUOTA_THRESHOLD;
+
+  if (collapsed) {
+    return (
+      <Tooltip title={`${t("nav.quota")} ${percent}%`} placement="right">
+        <div
+          className={styles.quotaRing}
+          aria-label={`${t("nav.quota")} ${percent}%`}
+        >
+          <Progress
+            type="circle"
+            percent={percent}
+            size={32}
+            showInfo={false}
+            strokeColor={low ? "#ff4d4f" : "#FF4A18"}
+          />
+        </div>
+      </Tooltip>
+    );
+  }
 
   return (
     <div className={styles.quotaBar}>

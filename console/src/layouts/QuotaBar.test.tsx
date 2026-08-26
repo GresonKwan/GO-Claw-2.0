@@ -35,6 +35,16 @@ describe("QuotaBar", () => {
     });
   });
 
+  it("renders a compact ring when the sidebar is collapsed", async () => {
+    getQuota.mockResolvedValue({ granted: 2, remaining: 1, percent: 50 });
+    renderWithProviders(<QuotaBar collapsed />);
+
+    await waitFor(() => {
+      expect(screen.getByRole("progressbar")).toBeInTheDocument();
+    });
+    expect(screen.queryByText("nav.quota")).not.toBeInTheDocument();
+  });
+
   it("renders nothing when quota is unavailable", async () => {
     getQuota.mockResolvedValue(null);
     renderWithProviders(<QuotaBar />);
