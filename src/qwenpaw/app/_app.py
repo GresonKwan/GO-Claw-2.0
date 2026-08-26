@@ -49,6 +49,7 @@ from .migration import (
 )
 from .go_claw_presets import ensure_go_claw_presets
 from .go_claw_credentials import import_go_claw_batch_credentials
+from .go_claw_product import ensure_go_claw_model_tiers
 from .go_claw_provision import provision_go_claw_credentials
 from .routers import create_agent_scoped_router
 from .routers import router as api_router
@@ -158,6 +159,7 @@ async def lifespan(  # pylint: disable=too-many-statements,too-many-branches
     # pick it up within the same startup. Never blocks startup.
     await provision_go_claw_credentials()
     await import_go_claw_batch_credentials(provider_manager)
+    ensure_go_claw_model_tiers(provider_manager)
     schedule_update_checks()
     local_model_manager = LocalModelManager.get_instance()
 
