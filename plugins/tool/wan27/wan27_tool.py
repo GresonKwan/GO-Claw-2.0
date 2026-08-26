@@ -11,7 +11,7 @@ import threading
 import time
 from http import HTTPStatus
 from pathlib import Path
-from typing import List, Optional
+from typing import List
 
 import httpx
 from agentscope.message import DataBlock, TextBlock, URLSource
@@ -69,8 +69,18 @@ def _model_candidates(primary: str, fallbacks: tuple) -> list:
     return out
 
 
-_VALID_RESOLUTIONS = {"720P", "1080P"}
-_VALID_RATIOS = {"16:9", "9:16", "1:1", "4:3", "3:4"}
+_VALID_RESOLUTIONS = {"480P", "720P", "1080P"}
+_VALID_RATIOS = {
+    "16:9",
+    "9:16",
+    "1:1",
+    "4:3",
+    "3:4",
+    "4:5",
+    "5:4",
+    "9:21",
+    "21:9",
+}
 
 _IMAGE_MIME_TYPES = {
     ".png": "image/png",
@@ -275,7 +285,7 @@ async def _run_video_task_openai(
                         "returned no result_url",
                     )
                 return result_url
-            if status == "FAILED":
+            if status in {"FAILED", "FAILURE"}:
                 raise RuntimeError(
                     f"Video generation failed: "
                     f"{data.get('fail_reason') or 'unknown reason'}",
@@ -327,8 +337,6 @@ async def generate_video_from_text(
     resolution: str = "720P",
     ratio: str = "16:9",
     duration: int = 5,
-    negative_prompt: str = "",
-    audio_url: str = "",
     prompt_extend: bool = True,
 ) -> ToolChunk:
     """Generate a video from a text prompt.
@@ -345,12 +353,7 @@ async def generate_video_from_text(
             Aspect ratio. "16:9", "9:16", "1:1", "4:3", "3:4".
             Default: "16:9".
         duration (int, optional):
-            Video duration in seconds, range [2, 15]. Default: 5.
-        negative_prompt (str, optional):
-            Describe what to exclude from the video.
-        audio_url (str, optional):
-            Public HTTP/HTTPS URL of background audio (wav/mp3).
-            If not provided, model auto-generates audio.
+            Video duration in seconds, range [3, 15]. Default: 5.
         prompt_extend (bool, optional):
             Enable prompt auto-optimization. Default: True.
 
@@ -398,7 +401,7 @@ async def generate_video_from_text(
                 ],
             )
 
-        if not 2 <= duration <= 15:
+        if not 3 <= duration <= 15:
             return ToolChunk(
                 state=ToolResultState.ERROR,
                 content=[
@@ -406,7 +409,7 @@ async def generate_video_from_text(
                         type="text",
                         text=(
                             f"Error: Invalid duration '{duration}'. "
-                            f"Must be between 2 and 15 seconds."
+                            f"Must be between 3 and 15 seconds."
                         ),
                     ),
                 ],
@@ -426,17 +429,18 @@ async def generate_video_from_text(
         for candidate in candidates:
             try:
                 if mode == "openai":
-                    # OpenAI-compatible relay (e.g. NewAPI): vendor parameters
-                    # ride inside the metadata object.
+                    # New API v1.0.0-rc.24's Ali task adaptor unmarshals
+                    # ``metadata`` into the native DashScope request root.
+                    # Keep the public /v1/video/generations contract while
+                    # nesting provider fields under input/parameters.
                     metadata = {
-                        "resolution": resolution,
-                        "ratio": ratio,
-                        "prompt_extend": prompt_extend,
+                        "parameters": {
+                            "resolution": resolution,
+                            "ratio": ratio,
+                            "duration": duration,
+                            "prompt_extend": prompt_extend,
+                        },
                     }
-                    if negative_prompt:
-                        metadata["negative_prompt"] = negative_prompt
-                    if audio_url:
-                        metadata["audio_url"] = audio_url
                     payload = {
                         "model": candidate,
                         "prompt": prompt,
@@ -456,11 +460,6 @@ async def generate_video_from_text(
                         "duration": duration,
                         "prompt_extend": prompt_extend,
                     }
-                    if negative_prompt:
-                        kwargs["negative_prompt"] = negative_prompt
-                    if audio_url:
-                        kwargs["audio_url"] = audio_url
-
                     rsp = await asyncio.to_thread(
                         _call_video_synthesis,
                         api_key=api_key,
@@ -564,20 +563,11 @@ async def generate_video_from_text(
 async def generate_video_from_image(
     prompt: str,
     first_frame_url: str,
-    last_frame_url: str = "",
-    driving_audio_url: str = "",
-    first_clip_url: str = "",
     resolution: str = "720P",
     duration: int = 5,
     prompt_extend: bool = True,
 ) -> ToolChunk:
-    """Generate a video from images.
-
-    Supports four modes based on the combination of optional inputs:
-    - First-frame: provide only first_frame_url (+ optional audio)
-    - First-last-frame: provide first_frame_url + last_frame_url
-    - Audio-driven: provide first_frame_url + driving_audio_url
-    - Video-continuation: provide first_clip_url (ignores first_frame_url)
+    """Generate a video from one first-frame image.
 
     Args:
         prompt (str):
@@ -586,20 +576,10 @@ async def generate_video_from_image(
             URL or local file path of the first frame image.
             Supports HTTP/HTTPS URLs and local image files
             (.png/.jpg/.jpeg/.webp).
-        last_frame_url (str, optional):
-            URL or local file path of the last frame image.
-            When provided, creates a first-to-last-frame video.
-        driving_audio_url (str, optional):
-            Public HTTP/HTTPS URL of a driving audio file (wav/mp3,
-            2-30 seconds). Local audio files are not supported.
-        first_clip_url (str, optional):
-            Public HTTP/HTTPS URL of a video clip to continue.
-            When provided, generates a continuation of the clip.
-            Local video files are not supported.
         resolution (str, optional):
             Video resolution. "720P" or "1080P". Default: "720P".
         duration (int, optional):
-            Video duration in seconds, range [2, 15]. Default: 5.
+            Video duration in seconds, range [3, 15]. Default: 5.
         prompt_extend (bool, optional):
             Enable prompt auto-optimization. Default: True.
 
@@ -632,7 +612,7 @@ async def generate_video_from_image(
                 ],
             )
 
-        if not 2 <= duration <= 15:
+        if not 3 <= duration <= 15:
             return ToolChunk(
                 state=ToolResultState.ERROR,
                 content=[
@@ -640,122 +620,26 @@ async def generate_video_from_image(
                         type="text",
                         text=(
                             f"Error: Invalid duration '{duration}'. "
-                            f"Must be between 2 and 15 seconds."
+                            f"Must be between 3 and 15 seconds."
                         ),
                     ),
                 ],
             )
 
-        # Build media array based on input combination
-        media: List[dict] = []
-
-        if first_clip_url:
-            # Video continuation mode
-            if not first_clip_url.startswith(
-                ("http://", "https://"),
-            ):
-                return ToolChunk(
-                    state=ToolResultState.ERROR,
-                    content=[
-                        TextBlock(
-                            type="text",
-                            text=(
-                                "Error: first_clip_url must be a public "
-                                "HTTP/HTTPS URL. Local video files are "
-                                "not supported."
-                            ),
-                        ),
-                    ],
-                )
-            media.append(
-                {"type": "first_clip", "url": first_clip_url},
+        try:
+            resolved_first = _resolve_image_url(first_frame_url)
+        except (FileNotFoundError, ValueError) as e:
+            return ToolChunk(
+                state=ToolResultState.ERROR,
+                content=[
+                    TextBlock(
+                        type="text",
+                        text=f"Error: first_frame_url - {str(e)}",
+                    ),
+                ],
             )
-        else:
-            if not first_frame_url:
-                return ToolChunk(
-                    state=ToolResultState.ERROR,
-                    content=[
-                        TextBlock(
-                            type="text",
-                            text=(
-                                "Error: first_frame_url is required "
-                                "(unless using video-continuation mode "
-                                "with first_clip_url)."
-                            ),
-                        ),
-                    ],
-                )
-
-            try:
-                resolved_first = _resolve_image_url(first_frame_url)
-            except (FileNotFoundError, ValueError) as e:
-                return ToolChunk(
-                    state=ToolResultState.ERROR,
-                    content=[
-                        TextBlock(
-                            type="text",
-                            text=f"Error: first_frame_url - {str(e)}",
-                        ),
-                    ],
-                )
-
-            media.append(
-                {"type": "first_frame", "url": resolved_first},
-            )
-
-            if last_frame_url:
-                try:
-                    resolved_last = _resolve_image_url(
-                        last_frame_url,
-                    )
-                except (FileNotFoundError, ValueError) as e:
-                    return ToolChunk(
-                        state=ToolResultState.ERROR,
-                        content=[
-                            TextBlock(
-                                type="text",
-                                text=f"Error: last_frame_url - {str(e)}",
-                            ),
-                        ],
-                    )
-                media.append(
-                    {"type": "last_frame", "url": resolved_last},
-                )
-            elif driving_audio_url:
-                if not driving_audio_url.startswith(
-                    ("http://", "https://"),
-                ):
-                    return ToolChunk(
-                        state=ToolResultState.ERROR,
-                        content=[
-                            TextBlock(
-                                type="text",
-                                text=(
-                                    "Error: driving_audio_url must be a "
-                                    "public HTTP/HTTPS URL. Local audio "
-                                    "files are not supported."
-                                ),
-                            ),
-                        ],
-                    )
-                media.append(
-                    {
-                        "type": "driving_audio",
-                        "url": driving_audio_url,
-                    },
-                )
-
-        mode_desc = (
-            "video-continuation"
-            if first_clip_url
-            else (
-                "first-last-frame"
-                if last_frame_url
-                else "audio-driven"
-                if driving_audio_url
-                else "first-frame"
-            )
-        )
+        media = [{"type": "first_frame", "url": resolved_first}]
+        mode_desc = "first-frame"
 
         logger.info(
             f"Generating image-to-video: api_mode={mode}, "
@@ -771,23 +655,20 @@ async def generate_video_from_image(
         for candidate in candidates:
             try:
                 if mode == "openai":
-                    # OpenAI-compatible relay (e.g. NewAPI): the first frame is
-                    # sent as the top-level ``image`` field, extra media ride
-                    # inside the metadata object.
+                    # The top-level image preserves New API's public contract;
+                    # input.media supplies the native Ali/Token Plan contract.
                     metadata = {
-                        "resolution": resolution,
-                        "prompt_extend": prompt_extend,
+                        "input": {"media": media},
+                        "parameters": {
+                            "resolution": resolution,
+                            "duration": duration,
+                            "prompt_extend": prompt_extend,
+                        },
                     }
                     image_field = ""
                     for item in media:
                         if item["type"] == "first_frame" and not image_field:
                             image_field = item["url"]
-                        elif item["type"] == "last_frame":
-                            metadata["last_frame"] = item["url"]
-                        elif item["type"] == "driving_audio":
-                            metadata["audio_url"] = item["url"]
-                        elif item["type"] == "first_clip":
-                            metadata["first_clip"] = item["url"]
                     payload = {
                         "model": candidate,
                         "prompt": prompt,
@@ -911,8 +792,6 @@ async def generate_video_from_image(
 async def generate_video_from_reference(
     prompt: str,
     reference_images: List[str],
-    reference_videos: Optional[List[str]] = None,
-    first_frame_url: str = "",
     resolution: str = "720P",
     ratio: str = "16:9",
     duration: int = 5,
@@ -920,44 +799,30 @@ async def generate_video_from_reference(
 ) -> ToolChunk:
     """Generate a video with character/object references.
 
-    Uses reference images and/or videos to maintain character
-    consistency in the generated video. In the prompt, reference
-    images as "图1", "图2", etc. and reference videos as "视频1",
-    "视频2", etc. (or "Image 1", "Video 1" in English prompts).
+    Uses one to nine reference images to maintain character or object
+    consistency. Refer to them as "[Image 1]", "[Image 2]", etc. in
+    the same order as ``reference_images``.
 
     Args:
         prompt (str):
-            Text description of the video. Use "图1", "图2" to
-            refer to reference images, "视频1", "视频2" to refer
-            to reference videos (in order of the lists provided).
-            Example: "图1在图2的房间里玩耍，视频1走进来"
+            Text description of the video. Use "[Image 1]",
+            "[Image 2]", etc. for unambiguous reference binding.
         reference_images (List[str]):
-            List of reference image URLs or local file paths
-            (.png/.jpg/.jpeg/.webp). Minimum 1 image.
-            These become 图1, 图2, ... in the prompt.
-        reference_videos (List[str], optional):
-            List of reference video public HTTP/HTTPS URLs.
-            Local video files are not supported.
-            These become 视频1, 视频2, ... in the prompt.
-        first_frame_url (str, optional):
-            URL or local file path of an additional first-frame
-            image to control the opening scene.
+            One to nine reference image URLs or local file paths
+            (.png/.jpg/.jpeg/.webp).
         resolution (str, optional):
             Video resolution. "720P" or "1080P". Default: "720P".
         ratio (str, optional):
             Aspect ratio. "16:9", "9:16", "1:1", "4:3", "3:4".
             Default: "16:9".
         duration (int, optional):
-            Video duration in seconds, range [2, 15]. Default: 5.
+            Video duration in seconds, range [3, 15]. Default: 5.
         prompt_extend (bool, optional):
             Enable prompt auto-optimization. Default: True.
 
     Returns:
         ToolChunk: Contains local video path and metadata.
     """
-    if reference_videos is None:
-        reference_videos = []
-
     video_lease = None
     try:
         tool_config = get_tool_config("generate_video_from_reference") or {}
@@ -978,6 +843,20 @@ async def generate_video_from_reference(
                         text=(
                             "Error: reference_images is required. "
                             "Please provide at least one reference image."
+                        ),
+                    ),
+                ],
+            )
+
+        if len(reference_images) > 9:
+            return ToolChunk(
+                state=ToolResultState.ERROR,
+                content=[
+                    TextBlock(
+                        type="text",
+                        text=(
+                            "Error: reference_images supports at most "
+                            "9 images."
                         ),
                     ),
                 ],
@@ -1013,7 +892,7 @@ async def generate_video_from_reference(
                 ],
             )
 
-        if not 2 <= duration <= 15:
+        if not 3 <= duration <= 15:
             return ToolChunk(
                 state=ToolResultState.ERROR,
                 content=[
@@ -1021,14 +900,13 @@ async def generate_video_from_reference(
                         type="text",
                         text=(
                             f"Error: Invalid duration '{duration}'. "
-                            f"Must be between 2 and 15 seconds."
+                            f"Must be between 3 and 15 seconds."
                         ),
                     ),
                 ],
             )
 
-        # Build media array: reference_images first, then videos,
-        # then optional first_frame
+        # Reference media order is the prompt's [Image N] binding order.
         media: List[dict] = []
 
         for img_path in reference_images:
@@ -1051,47 +929,10 @@ async def generate_video_from_reference(
                 {"type": "reference_image", "url": resolved},
             )
 
-        for vid_url in reference_videos:
-            if not vid_url.startswith(("http://", "https://")):
-                return ToolChunk(
-                    state=ToolResultState.ERROR,
-                    content=[
-                        TextBlock(
-                            type="text",
-                            text=(
-                                f"Error: reference_videos entry '{vid_url}' "
-                                f"must be a public HTTP/HTTPS URL. Local "
-                                f"video files are not supported."
-                            ),
-                        ),
-                    ],
-                )
-            media.append(
-                {"type": "reference_video", "url": vid_url},
-            )
-
-        if first_frame_url:
-            try:
-                resolved_ff = _resolve_image_url(first_frame_url)
-            except (FileNotFoundError, ValueError) as e:
-                return ToolChunk(
-                    state=ToolResultState.ERROR,
-                    content=[
-                        TextBlock(
-                            type="text",
-                            text=f"Error: first_frame_url - {str(e)}",
-                        ),
-                    ],
-                )
-            media.append(
-                {"type": "first_frame", "url": resolved_ff},
-            )
-
         logger.info(
             f"Generating reference-to-video: "
             f"api_mode={mode}, model={model}, "
             f"reference_images={len(reference_images)}, "
-            f"reference_videos={len(reference_videos)}, "
             f"resolution={resolution}, ratio={ratio}, "
             f"duration={duration}s",
         )
@@ -1104,35 +945,22 @@ async def generate_video_from_reference(
         for candidate in candidates:
             try:
                 if mode == "openai":
-                    # OpenAI-compatible relay (e.g. NewAPI): the first ref
-                    # image goes to the top-level ``image`` field, remaining
-                    # references ride inside ``metadata.images`` / ``videos``.
+                    # Preserve New API's top-level image while carrying the
+                    # complete native media list through the Ali adaptor.
                     ref_images = [
                         item["url"]
                         for item in media
                         if item["type"] == "reference_image"
                     ]
-                    ref_videos = [
-                        item["url"]
-                        for item in media
-                        if item["type"] == "reference_video"
-                    ]
-                    first_frames = [
-                        item["url"]
-                        for item in media
-                        if item["type"] == "first_frame"
-                    ]
                     metadata = {
-                        "resolution": resolution,
-                        "ratio": ratio,
-                        "prompt_extend": prompt_extend,
+                        "input": {"media": media},
+                        "parameters": {
+                            "resolution": resolution,
+                            "ratio": ratio,
+                            "duration": duration,
+                            "prompt_extend": prompt_extend,
+                        },
                     }
-                    if len(ref_images) > 1:
-                        metadata["images"] = ref_images[1:]
-                    if ref_videos:
-                        metadata["videos"] = ref_videos
-                    if first_frames:
-                        metadata["first_frame"] = first_frames[0]
                     payload = {
                         "model": candidate,
                         "prompt": prompt,
@@ -1223,8 +1051,7 @@ async def generate_video_from_reference(
                     type="text",
                     text=(
                         f"Video generated successfully\n"
-                        f"Reference images: {len(reference_images)}, "
-                        f"Reference videos: {len(reference_videos)}\n"
+                        f"Reference images: {len(reference_images)}\n"
                         f"Prompt: {prompt}\n"
                         f"Resolution: {resolution}, Ratio: {ratio}, "
                         f"Duration: {duration}s\n"

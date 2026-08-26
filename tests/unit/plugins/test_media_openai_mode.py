@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import importlib.util
+import inspect
 from pathlib import Path
 from types import ModuleType, SimpleNamespace
 
@@ -49,6 +50,38 @@ def _load_tool_module(relative_path: str, module_name: str) -> ModuleType:
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     return module
+
+
+def test_video_tool_signatures_only_expose_supported_token_plan_inputs() -> None:
+    module = _load_tool_module(
+        "plugins/tool/wan27/wan27_tool.py",
+        "wan27_supported_signatures",
+    )
+
+    assert list(inspect.signature(module.generate_video_from_text).parameters) == [
+        "prompt",
+        "resolution",
+        "ratio",
+        "duration",
+        "prompt_extend",
+    ]
+    assert list(inspect.signature(module.generate_video_from_image).parameters) == [
+        "prompt",
+        "first_frame_url",
+        "resolution",
+        "duration",
+        "prompt_extend",
+    ]
+    assert list(
+        inspect.signature(module.generate_video_from_reference).parameters,
+    ) == [
+        "prompt",
+        "reference_images",
+        "resolution",
+        "ratio",
+        "duration",
+        "prompt_extend",
+    ]
 
 
 class _Provider:
@@ -426,10 +459,7 @@ async def test_text_to_video_openai_mode_create_poll_success(
         calls,
     )
 
-    result = await module.generate_video_from_text(
-        "a red panda dancing",
-        negative_prompt="blur",
-    )
+    result = await module.generate_video_from_text("a red panda dancing")
 
     assert result.state is ToolResultState.SUCCESS
 
@@ -439,7 +469,14 @@ async def test_text_to_video_openai_mode_create_poll_success(
     assert payload["model"] == "happyhorse-1.1-t2v"
     assert payload["prompt"] == "a red panda dancing"
     assert payload["duration"] == 5
-    assert payload["metadata"]["negative_prompt"] == "blur"
+    assert payload["metadata"] == {
+        "parameters": {
+            "resolution": "720P",
+            "ratio": "16:9",
+            "duration": 5,
+            "prompt_extend": True,
+        },
+    }
     assert headers == {"Authorization": "Bearer relay-key"}
 
     assert calls[1][0] == "GET"
@@ -478,14 +515,27 @@ async def test_image_to_video_openai_mode_includes_image_field(
     result = await module.generate_video_from_image(
         "animate the logo",
         "https://cdn.example/first.png",
-        last_frame_url="https://cdn.example/last.png",
     )
 
     assert result.state is ToolResultState.SUCCESS
     _method, _url, payload, _headers = calls[0]
     assert payload["model"] == "happyhorse-1.1-i2v"
     assert payload["image"] == "https://cdn.example/first.png"
-    assert payload["metadata"]["last_frame"] == "https://cdn.example/last.png"
+    assert payload["metadata"] == {
+        "input": {
+            "media": [
+                {
+                    "type": "first_frame",
+                    "url": "https://cdn.example/first.png",
+                },
+            ],
+        },
+        "parameters": {
+            "resolution": "720P",
+            "duration": 5,
+            "prompt_extend": True,
+        },
+    }
 
 
 @pytest.mark.asyncio
@@ -524,10 +574,30 @@ async def test_reference_to_video_openai_mode_splits_reference_images(
     _method, _url, payload, _headers = calls[0]
     assert payload["model"] == "happyhorse-1.1-r2v"
     assert payload["image"] == "https://cdn.example/ref1.png"
-    assert payload["metadata"]["images"] == [
-        "https://cdn.example/ref2.png",
-        "https://cdn.example/ref3.png",
-    ]
+    assert payload["metadata"] == {
+        "input": {
+            "media": [
+                {
+                    "type": "reference_image",
+                    "url": "https://cdn.example/ref1.png",
+                },
+                {
+                    "type": "reference_image",
+                    "url": "https://cdn.example/ref2.png",
+                },
+                {
+                    "type": "reference_image",
+                    "url": "https://cdn.example/ref3.png",
+                },
+            ],
+        },
+        "parameters": {
+            "resolution": "720P",
+            "ratio": "16:9",
+            "duration": 5,
+            "prompt_extend": True,
+        },
+    }
 
 
 @pytest.mark.asyncio
@@ -557,6 +627,36 @@ async def test_video_openai_mode_failed_status_returns_friendly_error(
 
     assert result.state is ToolResultState.ERROR
     assert "content moderated" in result.content[0].text
+
+
+@pytest.mark.asyncio
+async def test_video_openai_mode_failure_status_returns_friendly_error(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """New API maps failed Ali tasks to the ``FAILURE`` state."""
+    script = [
+        _FakeResponse(payload={"task_id": "task_5", "status": "queued"}),
+        _FakeResponse(
+            payload={
+                "data": {
+                    "status": "FAILURE",
+                    "fail_reason": "input.media is required",
+                },
+            },
+        ),
+    ]
+    calls: list[tuple] = []
+    module = _prepare_video_module(
+        monkeypatch,
+        "wan27_openai_failure",
+        script,
+        calls,
+    )
+
+    result = await module.generate_video_from_text("a red panda")
+
+    assert result.state is ToolResultState.ERROR
+    assert "input.media is required" in result.content[0].text
 
 
 # ---------------------------------------------------------------------------
