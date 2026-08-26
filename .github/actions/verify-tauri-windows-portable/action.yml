@@ -22,7 +22,7 @@ runs:
       shell: pwsh
       run: . scripts/verify/launch_tauri_windows_portable.ps1
 
-    - name: Verify portable browser UI
+    - name: Verify portable Auto WebView UI
       shell: pwsh
       env:
         QWENPAW_DASHSCOPE_API_KEY: ${{ inputs.dashscope-api-key }}
@@ -31,7 +31,8 @@ runs:
         python scripts/verify/desktop_verify.py `
           --base-url $env:BASE_URL `
           --ui-mode tauri-windows `
-          --headed
+          --headed `
+          --cdp-url $env:CDP_URL
         if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
     - name: Gracefully stop portable archive
@@ -49,3 +50,99 @@ runs:
           Start-Sleep -Seconds 2
         }
         throw "Portable shell/backend did not exit gracefully after UI verification"
+
+    - name: Verify forced blank WebView browser fallback
+      shell: pwsh
+      env:
+        CI: "true"
+        GO_CLAW_E2E_FORCE_CONSOLE_BLANK: "1"
+      run: |
+        $ErrorActionPreference = "Stop"
+        $portFile = Join-Path $env:PORTABLE_ROOT "data\desktop_port"
+        $browserUrlFile = Join-Path $env:RUNNER_TEMP "go-claw-browser-fallback-url.txt"
+        $env:GO_CLAW_E2E_BROWSER_URL_FILE = $browserUrlFile
+        Remove-Item -LiteralPath $portFile -Force -ErrorAction SilentlyContinue
+        Remove-Item -LiteralPath $browserUrlFile -Force -ErrorAction SilentlyContinue
+        Get-Process -Name "msedge", "chrome", "firefox" -ErrorAction SilentlyContinue |
+          Stop-Process -Force -ErrorAction SilentlyContinue
+
+        try {
+          Start-Process -FilePath $env:PORTABLE_EXE
+          $port = $null
+          $backendDeadline = (Get-Date).AddSeconds(120)
+          while ((Get-Date) -lt $backendDeadline) {
+            if (Test-Path -LiteralPath $portFile) {
+              $candidate = (Get-Content -LiteralPath $portFile -Raw).Trim()
+              if ($candidate -match '^\d+$') {
+                try {
+                  $health = Invoke-WebRequest `
+                    -Uri "http://127.0.0.1:$candidate/api/version" `
+                    -UseBasicParsing -TimeoutSec 3 -ErrorAction Stop
+                  if ($health.StatusCode -eq 200) {
+                    $port = [int]$candidate
+                    break
+                  }
+                } catch {}
+              }
+            }
+            Start-Sleep -Milliseconds 500
+          }
+          if (-not $port) { throw "Forced-blank backend did not become ready" }
+
+          $expectedUrl = "http://127.0.0.1:$port/console?portable=1"
+          $fallbackDeadline = (Get-Date).AddSeconds(40)
+          $browser = $null
+          while ((Get-Date) -lt $fallbackDeadline) {
+            $shellWindows = @(Get-Process -Name "GO-CLAW-Portable", "qwenpaw-desktop" `
+              -ErrorAction SilentlyContinue | Where-Object { $_.MainWindowHandle -ne 0 })
+            $browserCandidates = @(Get-Process -Name "msedge", "chrome", "firefox" `
+              -ErrorAction SilentlyContinue | Where-Object { $_.MainWindowHandle -ne 0 })
+            $capturedUrl = if (Test-Path -LiteralPath $browserUrlFile) {
+              (Get-Content -LiteralPath $browserUrlFile -Raw).Trim()
+            } else { "" }
+            if ($shellWindows.Count -eq 0 -and $browserCandidates.Count -gt 0 -and
+                $capturedUrl -eq $expectedUrl) {
+              $browser = $browserCandidates[0]
+              break
+            }
+            Start-Sleep -Milliseconds 500
+          }
+          if (-not $browser) {
+            throw "Browser fallback did not open exact URL within 40s: $expectedUrl"
+          }
+
+          $backend = Get-Process -Name "qwenpaw-backend" -ErrorAction Stop
+          $secondLaunch = Start-Process -FilePath $env:PORTABLE_EXE -PassThru
+          if (-not $secondLaunch.WaitForExit(15000)) {
+            throw "Fallback single-instance launch did not exit"
+          }
+          Start-Sleep -Seconds 2
+          $backendAfter = Get-Process -Name "qwenpaw-backend" -ErrorAction Stop
+          if ($backendAfter.Id -ne $backend.Id) {
+            throw "Fallback second launch replaced the backend process"
+          }
+          $visibleShell = @(Get-Process -Name "GO-CLAW-Portable", "qwenpaw-desktop" `
+            -ErrorAction SilentlyContinue | Where-Object { $_.MainWindowHandle -ne 0 })
+          if ($visibleShell.Count -gt 0) {
+            throw "Forced-blank Tauri window became visible during fallback"
+          }
+
+          Add-Type -AssemblyName System.Windows.Forms
+          Add-Type -AssemblyName System.Drawing
+          $screenshotDir = Join-Path $env:RUNNER_TEMP "verify-screenshots"
+          New-Item -ItemType Directory -Force -Path $screenshotDir | Out-Null
+          $bounds = [System.Windows.Forms.Screen]::PrimaryScreen.Bounds
+          $bitmap = New-Object System.Drawing.Bitmap $bounds.Width, $bounds.Height
+          $graphics = [System.Drawing.Graphics]::FromImage($bitmap)
+          $graphics.CopyFromScreen($bounds.Location, [System.Drawing.Point]::Empty, $bounds.Size)
+          $screenshot = Join-Path $screenshotDir "desktop-browser-fallback.png"
+          $bitmap.Save($screenshot, [System.Drawing.Imaging.ImageFormat]::Png)
+          $graphics.Dispose()
+          $bitmap.Dispose()
+          Write-Host "PASS browser fallback exact URL: $expectedUrl"
+          Write-Host "Captured $screenshot"
+        } finally {
+          $control = Start-Process -FilePath $env:PORTABLE_EXE `
+            -ArgumentList "--portable-quit" -PassThru -ErrorAction SilentlyContinue
+          if ($control) { $control.WaitForExit(10000) | Out-Null }
+        }

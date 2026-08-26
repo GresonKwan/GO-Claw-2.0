@@ -307,7 +307,9 @@ pub(crate) fn backend_startup_error(state: tauri::State<'_, BackendState>) -> Op
 /// Stops the current sidecar, starts a fresh one, and returns its API port.
 #[tauri::command]
 pub(crate) async fn restart_backend(app: tauri::AppHandle) -> Result<(), String> {
+    crate::client::ensure_client_retry_allowed(&app)?;
     stop_and_wait(&app).await?;
+    crate::client::begin_client_retry(&app)?;
     start(&app);
 
     let state = app.state::<BackendState>();

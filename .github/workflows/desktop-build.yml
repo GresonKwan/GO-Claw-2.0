@@ -269,6 +269,18 @@ jobs:
           if-no-files-found: ignore
           retention-days: 7
 
+      - name: Require desktop readiness evidence (Tauri Windows)
+        if: always()
+        shell: pwsh
+        run: |
+          $evidence = Join-Path $env:RUNNER_TEMP "verify-screenshots"
+          foreach ($name in @("desktop-content-ready.png", "desktop-browser-fallback.png")) {
+            $path = Join-Path $evidence $name
+            if (-not (Test-Path -LiteralPath $path)) {
+              throw "Required desktop readiness evidence missing: $path"
+            }
+          }
+
       - name: Upload verify screenshots (Tauri Windows)
         if: always()
         uses: actions/upload-artifact@v4

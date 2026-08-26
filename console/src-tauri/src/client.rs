@@ -127,9 +127,36 @@ fn browser_console_url(port: u16, portable: bool) -> String {
     }
 }
 
+fn should_force_console_blank(ci: Option<&str>, blank: Option<&str>) -> bool {
+    ci.is_some_and(|value| value.eq_ignore_ascii_case("true")) && blank == Some("1")
+}
+
+fn force_console_blank_from_env() -> bool {
+    let ci = std::env::var("CI").ok();
+    let blank = std::env::var("GO_CLAW_E2E_FORCE_CONSOLE_BLANK").ok();
+    should_force_console_blank(ci.as_deref(), blank.as_deref())
+}
+
+fn webview_console_url(port: u16, force_blank: bool) -> String {
+    let base = format!("http://127.0.0.1:{port}/console");
+    if force_blank {
+        format!("{base}?goClawE2eBlank=1")
+    } else {
+        base
+    }
+}
+
 pub(crate) fn open_browser(app: &tauri::AppHandle, port: u16) -> Result<(), String> {
     let portable = app.state::<PortableRuntime>().state().is_some();
-    external_link::open_system_url(app, &browser_console_url(port, portable))
+    let url = browser_console_url(port, portable);
+    if force_console_blank_from_env() {
+        if let Ok(path) = std::env::var("GO_CLAW_E2E_BROWSER_URL_FILE") {
+            if let Err(error) = std::fs::write(&path, &url) {
+                log::warn!("[desktop-client] cannot write browser URL probe {path}: {error}");
+            }
+        }
+    }
+    external_link::open_system_url(app, &url)
 }
 
 async fn backend_version_is_ready(port: u16) -> bool {
@@ -304,6 +331,58 @@ pub(crate) fn begin_client_launch(app: &tauri::AppHandle) -> Result<(), String> 
     Ok(())
 }
 
+/// Allocate a fresh launch for the already-rendered bootstrap after the user
+/// chooses Retry. The bootstrap paint was proven by the previous launch, so a
+/// new native launch can re-enter `bootstrapReady` without rebuilding WebView2.
+pub(crate) fn ensure_client_retry_allowed(app: &tauri::AppHandle) -> Result<(), String> {
+    let current = app.state::<ClientState>().snapshot();
+    if !matches!(
+        current.phase,
+        ClientPhase::BootstrapCreating | ClientPhase::BootstrapReady | ClientPhase::FatalStartup
+    ) {
+        return Err("backend retry is only available from the startup screen".to_string());
+    }
+    Ok(())
+}
+
+pub(crate) fn begin_client_retry(app: &tauri::AppHandle) -> Result<(), String> {
+    ensure_client_retry_allowed(app)?;
+
+    let portable = app.state::<PortableRuntime>().state().cloned();
+    let strategy = launch_strategy(portable.as_ref().map(|state| state.client_mode));
+    let launch_id = {
+        let client_state = app.state::<ClientState>();
+        let mut machine = client_state.machine.lock().expect("client state poisoned");
+        let launch_id = machine.begin_launch().launch_id;
+        match strategy {
+            LaunchStrategy::Browser => {
+                machine
+                    .fallback(launch_id, BrowserFallbackReason::ExplicitBrowserMode)
+                    .map_err(|error| error.message)?;
+            }
+            LaunchStrategy::WebviewThenBrowser => {
+                machine
+                    .bootstrap_creating(launch_id)
+                    .and_then(|_| machine.bootstrap_ready(launch_id))
+                    .map_err(|error| error.message)?;
+            }
+        }
+        launch_id
+    };
+
+    if strategy == LaunchStrategy::WebviewThenBrowser {
+        let Some(window) = app.get_webview_window("main") else {
+            enter_browser_fallback(app, launch_id, BrowserFallbackReason::WebviewBuildFailed);
+            return Err("main client window is missing during backend retry".to_string());
+        };
+        window.show().map_err(|error| {
+            enter_browser_fallback(app, launch_id, BrowserFallbackReason::WebviewBuildFailed);
+            error.to_string()
+        })?;
+    }
+    Ok(())
+}
+
 /// Store backend readiness for the current launch. Browser fallback opens only
 /// after a port exists; the WebView path waits for the bootstrap handshake.
 pub(crate) fn backend_ready(app: tauri::AppHandle, port: u16) {
@@ -311,7 +390,13 @@ pub(crate) fn backend_ready(app: tauri::AppHandle, port: u16) {
         let client_state = app.state::<ClientState>();
         let mut machine = client_state.machine.lock().expect("client state poisoned");
         let before = machine.snapshot();
-        let Ok(after) = machine.backend_ready(before.launch_id, port) else {
+        let force_blank = force_console_blank_from_env();
+        let result = if force_blank {
+            machine.backend_ready_at(before.launch_id, port, webview_console_url(port, true))
+        } else {
+            machine.backend_ready(before.launch_id, port)
+        };
+        let Ok(after) = result else {
             return;
         };
         (before, after)
@@ -537,6 +622,31 @@ mod tests {
         assert_eq!(
             browser_console_url(54321, false),
             "http://127.0.0.1:54321/console"
+        );
+    }
+
+    #[test]
+    fn forced_blank_hook_requires_ci_and_exact_opt_in() {
+        assert!(should_force_console_blank(Some("true"), Some("1")));
+        assert!(should_force_console_blank(Some("TRUE"), Some("1")));
+        assert!(!should_force_console_blank(Some("true"), None));
+        assert!(!should_force_console_blank(None, Some("1")));
+        assert!(!should_force_console_blank(Some("true"), Some("true")));
+    }
+
+    #[test]
+    fn forced_blank_hook_only_changes_the_webview_console_url() {
+        assert_eq!(
+            webview_console_url(54321, true),
+            "http://127.0.0.1:54321/console?goClawE2eBlank=1"
+        );
+        assert_eq!(
+            webview_console_url(54321, false),
+            "http://127.0.0.1:54321/console"
+        );
+        assert_eq!(
+            browser_console_url(54321, true),
+            "http://127.0.0.1:54321/console?portable=1"
         );
     }
 

@@ -247,3 +247,30 @@ def test_main_runs_keyless_go_claw_smoke_for_existing_verify_entry(
 
     assert desktop_verify.main() == 0
     assert calls == ["health", "frontend", "employees", "plugins"]
+
+
+def test_cdp_ui_requires_content_marker_before_chat_input() -> None:
+    calls: list[str] = []
+
+    class FakeDriver:
+        def wait_for_console_ready(self) -> None:
+            calls.append("content-ready")
+
+        def wait_for_input(self) -> None:
+            calls.append("input")
+
+    desktop_verify.verify_ui_loaded(
+        FakeDriver(),
+        "http://desktop.local",
+        skip_navigate=True,
+    )
+
+    assert calls == ["content-ready", "input"]
+
+
+def test_windows_ui_rejects_standalone_browser_substitution() -> None:
+    with pytest.raises(
+        desktop_verify.UIDriverInitError,
+        match="standalone Chromium is not accepted",
+    ):
+        desktop_verify.make_driver("tauri-windows", cdp_url="")

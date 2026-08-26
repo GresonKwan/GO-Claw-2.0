@@ -145,6 +145,15 @@ impl ReadinessMachine {
         launch_id: u64,
         port: u16,
     ) -> Result<ClientReadinessSnapshot, ReadinessError> {
+        self.backend_ready_at(launch_id, port, format!("http://127.0.0.1:{port}/console"))
+    }
+
+    pub(crate) fn backend_ready_at(
+        &mut self,
+        launch_id: u64,
+        port: u16,
+        console_url: String,
+    ) -> Result<ClientReadinessSnapshot, ReadinessError> {
         self.require_launch(launch_id)?;
         self.require_phase(&[
             ClientPhase::BootstrapCreating,
@@ -152,7 +161,7 @@ impl ReadinessMachine {
             ClientPhase::BrowserFallback,
         ])?;
         self.snapshot.backend_port = Some(port);
-        self.snapshot.console_url = Some(format!("http://127.0.0.1:{port}/console"));
+        self.snapshot.console_url = Some(console_url);
         if self.snapshot.phase == ClientPhase::BootstrapReady {
             self.snapshot.phase = ClientPhase::BackendReady;
         }
@@ -380,6 +389,22 @@ mod tests {
             fatal.fallback_reason,
             Some(BrowserFallbackReason::BootstrapReadyTimeout)
         );
+    }
+
+    #[test]
+    fn a_retry_allocates_a_fresh_launch_after_fatal_startup() {
+        let mut machine = ReadinessMachine::default();
+        let failed_launch = machine.begin_launch().launch_id;
+        machine.bootstrap_creating(failed_launch).unwrap();
+        machine.backend_failed(failed_launch).unwrap();
+
+        let retry_launch = machine.begin_launch().launch_id;
+        machine.bootstrap_creating(retry_launch).unwrap();
+        let retry = machine.bootstrap_ready(retry_launch).unwrap();
+
+        assert!(retry_launch > failed_launch);
+        assert_eq!(retry.phase, ClientPhase::BootstrapReady);
+        assert!(machine.backend_ready(retry_launch, 54321).is_ok());
     }
 
     #[test]

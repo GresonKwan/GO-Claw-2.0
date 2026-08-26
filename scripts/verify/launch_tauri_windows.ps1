@@ -135,8 +135,7 @@ for ($i = 1; $i -le 30; $i++) {
   } catch { Start-Sleep -Seconds 2 }
 }
 if (-not $cdpReady) {
-  Write-Host "::warning::CDP not available, falling back to standalone browser"
-  $cdpUrl = ""
+  throw "Embedded WebView2 CDP endpoint did not become available"
 }
 
 $baseUrl = "http://127.0.0.1:$port"

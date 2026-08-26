@@ -21,6 +21,13 @@ export default function DesktopConsoleReadyReporter({
 
   useLayoutEffect(() => {
     let cancelled = false;
+    if (
+      new URLSearchParams(window.location.search).get("goClawE2eBlank") === "1"
+    ) {
+      return () => {
+        cancelled = true;
+      };
+    }
     requestAnimationFrame(() => {
       requestAnimationFrame(() => {
         if (cancelled) return;

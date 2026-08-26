@@ -1,6 +1,8 @@
 # Verify the staged ZIP as a user would: extract, launch, relocate, relaunch.
 # Exports BASE_URL and PORTABLE_ROOT for the following Playwright step.
 $ErrorActionPreference = "Stop"
+$cdpPort = 9223
+$env:WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS = "--remote-debugging-port=$cdpPort"
 
 function Wait-PortableReady {
     param(
@@ -205,11 +207,29 @@ try {
     $env:BASE_URL = $baseUrl
     $env:PORTABLE_ROOT = $secondRoot
     $env:PORTABLE_EXE = $secondExe
+    $cdpUrl = "http://127.0.0.1:$cdpPort"
+    $cdpReady = $false
+    for ($i = 1; $i -le 30; $i++) {
+        try {
+            $response = Invoke-WebRequest -Uri "$cdpUrl/json/version" `
+                -UseBasicParsing -TimeoutSec 3 -ErrorAction Stop
+            if ($response.StatusCode -eq 200) {
+                $cdpReady = $true
+                break
+            }
+        } catch { Start-Sleep -Seconds 2 }
+    }
+    if (-not $cdpReady) {
+        throw "Portable embedded WebView2 CDP endpoint did not become available"
+    }
+    $env:CDP_URL = $cdpUrl
     "BASE_URL=$baseUrl" | Out-File $env:GITHUB_ENV -Encoding utf8 -Append
     "PORTABLE_ROOT=$secondRoot" | Out-File $env:GITHUB_ENV -Encoding utf8 -Append
     "PORTABLE_EXE=$secondExe" | Out-File $env:GITHUB_ENV -Encoding utf8 -Append
+    "CDP_URL=$cdpUrl" | Out-File $env:GITHUB_ENV -Encoding utf8 -Append
     Write-Host "Portable relocation verified at $secondRoot"
     Write-Host "BASE_URL=$baseUrl"
+    Write-Host "CDP_URL=$cdpUrl"
 } catch {
     subst "${secondLetter}:" /D 2>$null
     throw

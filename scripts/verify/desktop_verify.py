@@ -408,6 +408,10 @@ class UIDriver(abc.ABC):
     def close(self) -> None:
         """Tear down browser / webdriver resources (best effort)."""
 
+    def wait_for_console_ready(self) -> None:
+        """Require the rendered readiness marker in an embedded console."""
+        raise NotImplementedError
+
 
 class PlaywrightDriver(UIDriver):
     """Headless browser driver backed by Playwright.
@@ -507,6 +511,34 @@ class PlaywrightDriver(UIDriver):
             timeout=self.INPUT_VISIBLE_TIMEOUT_MS,
         )
         self._screenshot("01-page-loaded")
+
+    def wait_for_console_ready(self) -> None:
+        """Select the backend console target and require its content marker."""
+        deadline = time.monotonic() + 60
+        last_urls: list[str] = []
+        while time.monotonic() < deadline:
+            pages = [
+                page
+                for context in self._browser.contexts
+                for page in context.pages
+            ]
+            last_urls = [page.url for page in pages]
+            for page in pages:
+                if "/console" not in page.url:
+                    continue
+                marker = page.locator('[data-go-claw-console-ready="1"]')
+                if marker.count() > 0:
+                    marker.first.wait_for(state="attached", timeout=5000)
+                    self._context = page.context
+                    self._page = page
+                    self._screenshot("desktop-content-ready")
+                    print(f"PASS  embedded console ready at {page.url}")
+                    return
+            time.sleep(0.5)
+        raise RuntimeError(
+            "Embedded WebView console readiness marker did not appear; "
+            f"CDP targets were: {last_urls}",
+        )
 
     # Same 4-channel disabled detection as e2e/pages/chat_page.py:
     #   1. button.disabled property
@@ -827,6 +859,11 @@ def make_driver(
     if ui_mode == "tauri-macos":
         return PlaywrightDriver("webkit", screenshot_dir, headless)
     if ui_mode == "tauri-windows":
+        if not cdp_url:
+            raise UIDriverInitError(
+                "tauri-windows verification requires the embedded WebView2 "
+                "CDP endpoint; standalone Chromium is not accepted",
+            )
         return PlaywrightDriver(
             "chromium",
             screenshot_dir,
@@ -854,7 +891,8 @@ def verify_ui_loaded(
     failures even when LLM credentials are unavailable.
     """
     if skip_navigate:
-        print("--> CDP mode: waiting for SPA on existing page")
+        print("--> CDP mode: requiring rendered embedded console")
+        driver.wait_for_console_ready()
         driver.wait_for_input()
     else:
         print(f"--> opening UI at {base_url}")

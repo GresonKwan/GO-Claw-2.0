@@ -81,4 +81,25 @@ describe("DesktopConsoleReadyReporter", () => {
     expect(screen.getByText("正在验证登录状态")).toBeVisible();
     expect(readinessMocks.clientConsoleReady).not.toHaveBeenCalled();
   });
+
+  it("keeps the readiness marker suppressed for the CI blank hook", async () => {
+    window.history.replaceState(
+      null,
+      "",
+      "/console?desktop=1&launchId=42&goClawE2eBlank=1",
+    );
+
+    render(
+      <DesktopConsoleReadyReporter>
+        <main>强制未就绪</main>
+      </DesktopConsoleReadyReporter>,
+    );
+    await act(async () => frames.shift()?.(1));
+    await act(async () => frames.shift()?.(2));
+
+    expect(readinessMocks.clientConsoleReady).not.toHaveBeenCalled();
+    expect(screen.getByText("强制未就绪").parentElement).not.toHaveAttribute(
+      "data-go-claw-console-ready",
+    );
+  });
 });
