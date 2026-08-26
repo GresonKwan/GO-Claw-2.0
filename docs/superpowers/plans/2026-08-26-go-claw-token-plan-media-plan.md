@@ -4,7 +4,7 @@
 
 **Goal:** 在不改变现有 New API 媒体请求链路的前提下，把图片和视频插件默认模型换成 Token Plan 已配置的四个模型，将客户可见名称改为“图片生成”和“视频生成”，并删除自动换模型。
 
-**Architecture:** 继续使用已在生产配置的 OpenAI 类型渠道 `阿里百炼_TokenPlan_1`。现有 `resolve_media_api()`、`/v1/images/generations`、`/v1/video/generations` 和视频任务轮询逻辑保持不变；本计划只修改内部默认模型、客户可见插件/工具名称、员工工具配置和测试期望。不新增 New API 渠道，不构建自定义 New API 镜像，不修改上游 adapter。
+**Architecture:** 客户端保持 `resolve_media_api()`、`/v1/images/generations`、`/v1/video/generations` 和视频任务轮询逻辑。经用户后续授权，生产 New API 新增独立 Ali 媒体渠道 3；视频插件通过 `metadata.input.media` / `metadata.parameters` 与固定 New API Ali task adaptor 通信。不构建自定义 New API 镜像，不修改上游 adapter。
 
 **Tech Stack:** Python, httpx, QwenPaw Plugin API, New API OpenAI-compatible media endpoints, Pytest.
 
@@ -19,7 +19,7 @@
 - 图片插件已通过 `POST /v1/images/generations` 请求 New API。
 - 图片编辑继续使用现有 `images/generations` JSON `image`/`metadata.images` 逻辑；本轮不改 multipart。
 - 视频插件已通过 `POST /v1/video/generations` 提交，并通过 `GET /v1/video/generations/{task_id}` 轮询。
-- New API 渠道 1 已列出三个文字模型和下表四个媒体模型。
+- New API 渠道 1 承载文字兼容协议，渠道 3 承载下表四个 Token Plan 媒体模型。
 
 | 内部能力 | 唯一默认模型 |
 | --- | --- |
@@ -29,9 +29,9 @@
 | 图生视频 | `happyhorse-1.1-i2v` |
 | 参考图视频 | `happyhorse-1.1-r2v` |
 
-本计划禁止：
+本计划最初禁止未经授权的渠道变更；用户授权后仅实施了上述渠道 3。仍禁止：
 
-- 新增 `阿里百炼_TokenPlan_Media` 或其他媒体渠道；
+- 再新增或扩大未获授权的媒体渠道；
 - 将渠道 1 从 OpenAI 类型改为 Ali 类型；
 - 新增 `deploy/new-api/`、New API Dockerfile 或 HappyHorse adapter patch；
 - 将图片编辑改为 `/v1/images/edits`；
@@ -319,10 +319,8 @@ git commit -m "refactor(media): expose neutral image and video tools"
 
 ## 7. Task 6：New API 核对与真实调用验收
 
-> 2026-08-26 执行状态：**阻断**。模型名单核对通过，但图片和视频真实调用均在现有
-> OpenAI 类型 Token Plan 渠道返回 HTTP 400 `url error`。旧媒体模型实际由独立
-> `type=17` 阿里渠道承载；官方 Token Plan 媒体合同也是 `/api/v1/services/aigc/...`
-> 原生接口。继续运维变更前必须取得用户明确授权。
+> 2026-08-26 执行状态：**已通过**。用户已明确授权尝试新增渠道；生产现已有独立
+> `type=17` Token Plan 媒体渠道，无 New API 私有补丁。五项真实媒体调用全部通过。
 
 **Files:**
 
@@ -353,7 +351,7 @@ uv run pytest -q \
 
 Expected: PASS.
 
-- [ ] **Step 3: 使用现有低额度 New API key 做五次人工验收**
+- [x] **Step 3: 使用现有低额度 New API key 做五次人工验收**
 
 在一个测试客户副本中各调用一次图片生成、图片编辑、文生视频、图生视频和参考图视频。验收只记录时间、
 工具名、成功/失败和 New API 中已选渠道；不记录 API key 或完整请求体。
@@ -363,12 +361,13 @@ Expected: PASS.
 如果任何一项失败，停止本任务并保留脱敏响应。失败不授权修改 New API、新增渠道、更换 endpoint 或加入模型回退；
 先单独诊断，根据确切失败字段向用户报告最小修正建议。
 
-- [ ] **Step 4a: 获得用户对最小运维修复的明确授权**
+- [x] **Step 4a: 获得用户对最小运维修复的明确授权**
 
-推荐先复用同一 Token Plan key，新建仅包含四个媒体模型的 `type=17` 媒体渠道，保留现有文字渠道不动。
-若固定 New API 版本仍无法识别新模型，再单独评估最小识别补丁。未经授权不得实施任何一种方案。
+已复用同一 Token Plan key，通过 New API 管理 API 新建仅包含四个媒体模型的
+`type=17` 渠道 3，现有文字渠道和历史媒体渠道未修改。固定 New API 版本在插件传入
+`metadata.input.media` / `metadata.parameters` 后可正确转发，因此不需要服务端补丁。
 
-- [ ] **Step 5: 记录结果并提交**
+- [x] **Step 5: 记录结果并提交**
 
 ```bash
 git add docs/GO-CLAW-项目事实与发布基线.zh.md docs/GO-CLAW-变更台账.zh.md
@@ -379,8 +378,8 @@ git commit -m "docs(media): record Token Plan media verification"
 
 本分计划只在以下条件全部满足时完成：
 
-1. 现有 New API 渠道、镜像、路径和请求体未被改动。
+1. 现有 New API 渠道和镜像未被改动；经授权新增了一个最小媒体渠道。
 2. 插件客户可见名称为“图片生成”和“视频生成”。
 3. 对话模型只收到五个中性工具名和不含厂商/模型的描述。
 4. 内部默认模型是上表四个 Token Plan 模型，没有自动换模型。
-5. 相关单测全部通过，五个真实媒体调用通过现有 New API 渠道完成。
+5. 相关单测全部通过，五个真实媒体调用通过 New API 渠道 3 完成。

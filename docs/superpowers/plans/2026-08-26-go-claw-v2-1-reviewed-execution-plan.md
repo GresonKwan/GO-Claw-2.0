@@ -4,7 +4,7 @@
 
 **Goal:** 以最小必要改动完成 Tauri 启动可靠性、客户界面收敛、三档文字模型、Token Plan 媒体模型替换、更新签名和单一 Full ZIP，执行一次正式 Main Build。
 
-**Architecture:** 保留已经工作的本地低额度 API key 交付、New API OpenAI 渠道和媒体请求链路。本轮只修改被用户明确要求的产品行为；不引入激活码、enrollment ticket、新 New API 渠道、自定义 New API 镜像、协议重写或新的额度层。
+**Architecture:** 保留本地低额度 API key 交付和 New API 公开媒体 endpoint。首次真实调用证明文字渠道不能承载 Token Plan 原生媒体后，用户另行明确授权新增了一个最小 Ali 媒体渠道。不引入激活码、enrollment ticket、自定义 New API 镜像、新客户端 endpoint 或新的额度层。
 
 **Tech Stack:** Python, FastAPI, React/TypeScript, Tauri/Rust, Pytest, Vitest, GitHub Actions, NSIS, New API.
 
@@ -19,7 +19,7 @@
 
 - enrollment ticket、激活码、schema 2 provisioning、ticket DB 和客户 ZIP sealing；
 - 为本轮额外设计独立额度、请求预算或 `GO_CLAW_CI_TEST_API_KEY`；
-- 新建 Ali 类型媒体渠道 `阿里百炼_TokenPlan_Media`；
+- 未经现场证据和用户授权新建渠道（本轮已有一次受控例外：渠道 3）；
 - New API 私有 Dockerfile、HappyHorse adapter patch 和上游 fork；
 - 把现有图片编辑换成 `/v1/images/edits` 或把视频换成 `/v1/videos`；
 - 客户端媒体直连百炼，以及任何模型自动回退；
@@ -55,10 +55,10 @@ P1、P2、P3 可在不同文件上开发，但必须在 P4 前合并并运行共
 - Modify: `docs/superpowers/plans/2026-08-26-go-claw-release-signing-plan.md`
 - Modify: `docs/GO-CLAW-变更台账.zh.md`
 
-- [ ] 删除所有将 ticket/provisioning v2 写成 v2.1 发布前置条件的段落。
-- [ ] 删除所有将新 Ali 媒体渠道、New API patch、`/v1/images/edits` 或 `/v1/videos` 写成目标合同的段落。
-- [ ] 记录用户已接受“低额度 API key 存放在客户本地完整 ZIP”的交付取舍。
-- [ ] 记录“媒体只换默认模型和客户可见名称，不改已工作协议”。
+- [x] 删除所有将 ticket/provisioning v2 写成 v2.1 发布前置条件的段落。
+- [x] 取消 New API patch、`/v1/images/edits` 和 `/v1/videos` 新合同；后续按用户单独授权仅新增最小 `type=17` 媒体渠道。
+- [x] 记录用户已接受“低额度 API key 存放在客户本地完整 ZIP”的交付取舍。
+- [x] 记录“媒体保持 New API 公开 endpoint，视频供应商参数使用已验证的 metadata 嵌套合同”。
 - [ ] 运行冲突扫描：
 
 ```bash
@@ -112,13 +112,13 @@ Expected: 只允许“已删除/禁止/历史实现”语境中的命中。
 
 这一阶段的代码范围只有：
 
-- [ ] 图片默认模型替换为 `qwen-image-3.0-pro`。
-- [ ] 三个视频默认模型替换为三个 `happyhorse-1.1-*` 目标模型。
-- [ ] 删除媒体模型不可用时的候选模型回退。
-- [ ] 插件客户可见名称改为“图片生成”和“视频生成”；工具名和提示词中性化。
-- [ ] 现有 `resolve_media_api`、图片 URL/body、视频 URL/body/轮询解析不变。
-- [ ] New API 渠道 1 不做配置变更，只读确认四个模型仍可用。
-- [ ] 使用现有低额度 key 运行五个真实调用；不新建测试 key 或 CI 额度机制。
+- [x] 图片默认模型替换为 `qwen-image-3.0-pro`。
+- [x] 三个视频默认模型替换为三个 `happyhorse-1.1-*` 目标模型。
+- [x] 删除媒体模型不可用时的候选模型回退。
+- [x] 插件客户可见名称改为“图片生成”和“视频生成”；工具名和提示词中性化。
+- [x] 保持 `resolve_media_api` 和公开 URL；视频 body 按固定 New API Ali adaptor 合同嵌套 `metadata.input.media` / `metadata.parameters`。
+- [x] 渠道 1、2 不做配置变更；经后续明确授权新增渠道 3。
+- [x] 使用现有低额度 key 运行五个真实调用；结果全部通过。
 
 ## 7. P4：本地凭据、签名和单一 Full ZIP
 
@@ -129,7 +129,7 @@ Expected: 只允许“已删除/禁止/历史实现”语境中的命中。
 `GO_CLAW_DASHSCOPE_API_KEY` 作为低额度 New API key，同时写入 `llm.apiKey` 和
 `dashscope.apiKey`；不新增 secret。这里保留的是 Secret 名称，不是假定其现有值必然正确：Main Build
 前必须用该值请求 `https://goclaw.host:8443/v1/models`，确认七个必需模型全部可见。若失败，唯一允许的
-凭据修正是把这个 Secret 的值替换为可用的低额度 New API key，不得因此新增渠道或改写客户端协议。
+凭据修正是把这个 Secret 的值替换为可用的低额度 New API key，不得因此改写客户端协议或再扩大已批准的渠道 3 范围。
 
 `.github/workflows/desktop-build.yml` 生成的内容固定为：
 
@@ -280,7 +280,7 @@ gh workflow run desktop-build.yml --ref main -f ref=main -f windows_only=true -f
 3. 人为令后端失败：显示 fatal UI/原生错误，不打开不可访问的浏览器。
 4. 首次启动自动导入 Full ZIP 中的本地凭据；不出现激活、ticket 或 provisioning 交互。
 5. 客户界面无“代码/模型/数字员工统计/文件/语言选择”入口，无非输入框闪烁 caret，字号图标和左下固定区符合设计。
-6. 五个媒体工具各调用一次；界面/提示词不显示厂商和模型名，New API 记录命中现有 Token Plan 渠道 1。
+6. 五个媒体工具各调用一次；界面/提示词不显示厂商和模型名，New API 记录命中 Token Plan 媒体渠道 3。
 7. 从 staging 下载一次更新，完成验签、安装、自动重启和回滚；客户本地凭据未被更新包覆盖。
 
 全部通过后才切换 `/srv/go-claw-updates/updates` 并发布 GitHub Release。Full ZIP 是首次交付和恢复产物；后续普通版本只发在线更新资产。

@@ -91,8 +91,9 @@ v2.1 保留上表已工作路径、请求体和响应解析，只替换插件内
 | 图生视频 | `happyhorse-1.1-i2v` |
 | 参考图视频 | `happyhorse-1.1-r2v` |
 
-生产 New API 渠道 1 `阿里百炼_TokenPlan_1` 已是 OpenAI 类型并列出上述媒体模型。
-v2.1 不新建媒体渠道，不修改 New API 镜像或 adapter，不修改媒体 endpoint，不自动回退旧模型或百炼直连。
+生产 New API 渠道 1 `阿里百炼_TokenPlan_1` 继续承载文字兼容协议。经用户后续明确授权，
+2026-08-26 新增了仅包含上述四个媒体模型的渠道 3 `阿里百炼_TokenPlan_媒体`。
+v2.1 不修改 New API 镜像，不部署私有 adapter patch，不修改媒体公开 endpoint，不自动回退旧模型或历史百炼直连渠道。
 
 ## 5. 安全与运维边界
 

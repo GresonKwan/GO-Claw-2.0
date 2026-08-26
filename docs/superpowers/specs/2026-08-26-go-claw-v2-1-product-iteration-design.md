@@ -340,23 +340,21 @@ GO CLAW media plugin
 
 ## 10. New API 运维配置
 
-生产 New API 当前只完成了模型可见性配置：
+生产 New API 的媒体路由已于 2026-08-26 完成：
 
 - Token Plan 渠道凭证有效；
 - 增加 `qwen-image-3.0-pro`；
 - 增加 `happyhorse-1.1-t2v`；
 - 增加 `happyhorse-1.1-i2v`；
 - 增加 `happyhorse-1.1-r2v`；
-- 将这些模型列在现有 OpenAI 类型 Token Plan 渠道 1。
+- 渠道 1 继续承载文字兼容协议；
+- 经用户明确授权，新增只含四个媒体模型的 `type=17` 渠道 3；
+- 渠道 3 复用 Token Plan 凭据，不修改渠道 1、2，不增加自动回退。
 
-2026-08-26 真实调用已确认：渠道 1 的 `compatible-mode` 只能承载文字兼容协议，图片和视频
-均返回 HTTP 400 `url error`；旧媒体模型之所以可用，是因为它们实际路由到独立的
-`type=17` 阿里渠道。阿里云官方 Token Plan 媒体 API 也明确使用 `/api/v1/services/aigc/...`
-原生路径。因此不得再把“模型已列入渠道”写成“媒体已经可用”。
-
-在用户明确批准运维变更之前，Main Build 保持阻断。最小修复候选是复用同一 Token Plan key
-增加一个只含四个媒体模型的 `type=17` 渠道；只有该固定版本仍不识别新模型时，才进入最小适配补丁，
-不得顺势扩展新的客户端协议、凭据或回退机制。完成后必须重新运行五项真实媒体调用。
+当前固定 New API `v1.0.0-rc.24` 的 Ali task adaptor 可从 New API 公开请求中读取
+`metadata.input.media` 和 `metadata.parameters`，并组装 Token Plan 原生请求。插件仍使用
+`/v1/images/generations` 和 `/v1/video/generations`，没有新增客户端协议，也没有部署 New API
+私有补丁。图片生成、图片编辑和三类视频的真实调用全部通过，媒体门禁已解除。
 
 实施阶段需要可用的服务器 SSH 或 New API 管理权限。任何真实密钥不得写入仓库、设计文档、命令输出、测试快照或 CI 普通日志。
 
