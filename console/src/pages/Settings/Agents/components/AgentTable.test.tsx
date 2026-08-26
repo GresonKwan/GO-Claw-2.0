@@ -16,6 +16,7 @@ const agent = (id: string, pinned: boolean): AgentSummary => ({
   enabled: true,
   pinned,
   startup_status: "running",
+  model_tier: "balanced",
 });
 
 describe("AgentTable", () => {
@@ -60,5 +61,23 @@ describe("AgentTable", () => {
     const defaultCopy = screen.getByTitle("agent.copyDefaultTooltip");
     expect(defaultCopy).toBeEnabled();
     expect(screen.getByTitle("agent.copyTooltip")).toBeEnabled();
+  });
+
+  it("renders only the public tier label and dedicated icon", () => {
+    renderWithProviders(
+      <AgentTable
+        agents={[agent("employee", false)]}
+        loading={false}
+        reordering={false}
+        onEdit={vi.fn()}
+        onCopy={vi.fn()}
+        onDelete={vi.fn()}
+        onToggle={vi.fn()}
+        onPin={vi.fn()}
+        onReorder={vi.fn()}
+      />,
+    );
+    expect(screen.getByText("均衡")).toBeInTheDocument();
+    expect(screen.getByRole("img", { name: "均衡" })).toBeInTheDocument();
   });
 });

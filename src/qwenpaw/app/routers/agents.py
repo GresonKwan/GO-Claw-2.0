@@ -35,6 +35,12 @@ from ...agents.skill_system import SkillPoolService, get_workspace_skills_dir
 from ..agent_startup import AgentStartupStatus
 from ..multi_agent_manager import MultiAgentManager
 from ...constant import WORKING_DIR
+from ..go_claw_product import (
+    DEFAULT_MODEL_TIER,
+    read_routing_state,
+    resolve_model_tier,
+    tier_id_for_model,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -51,7 +57,7 @@ class AgentSummary(BaseModel):
     enabled: bool
     pinned: bool
     startup_status: AgentStartupStatus
-    active_model: ModelSlotConfig | None = None
+    model_tier: str = DEFAULT_MODEL_TIER
 
 
 class AgentListResponse(BaseModel):
@@ -80,7 +86,6 @@ class CreateAgentRequest(BaseModel):
     workspace_dir: str | None = None
     language: str | None = None
     skill_names: list[str] | None = None
-    active_model: ModelSlotConfig | None = None
 
     @field_validator("id", mode="before")
     @classmethod
@@ -103,6 +108,30 @@ class CreateAgentRequest(BaseModel):
             stripped = value.strip()
             return stripped if stripped else None
         return value
+
+
+class CustomerAgentProfileConfig(BaseModel):
+    """Customer-editable employee fields with tier-only model metadata."""
+
+    id: str
+    name: str
+    description: str = ""
+    workspace_dir: str = ""
+    approval_level: str = "AUTO"
+    model_tier: str = DEFAULT_MODEL_TIER
+
+
+def _customer_profile(agent_config: AgentProfileConfig) -> CustomerAgentProfileConfig:
+    return CustomerAgentProfileConfig(
+        id=agent_config.id,
+        name=agent_config.name,
+        description=agent_config.description,
+        workspace_dir=agent_config.workspace_dir,
+        approval_level=agent_config.approval_level,
+        model_tier=tier_id_for_model(
+            getattr(agent_config.active_model, "model", None),
+        ),
+    )
 
 
 class CopyAgentRequest(BaseModel):
@@ -248,8 +277,6 @@ async def list_agents(request: Request = None) -> AgentListResponse:
                 else:
                     description = profile_desc
 
-            active_model = agent_config.active_model
-
             agents.append(
                 AgentSummary(
                     id=agent_id,
@@ -259,7 +286,9 @@ async def list_agents(request: Request = None) -> AgentListResponse:
                     enabled=enabled,
                     pinned=pinned,
                     startup_status=startup_status,
-                    active_model=active_model,
+                    model_tier=tier_id_for_model(
+                        getattr(agent_config.active_model, "model", None),
+                    ),
                 ),
             )
         except Exception:  # noqa: E722
@@ -356,15 +385,17 @@ async def set_agent_pinned(
 
 @router.get(
     "/{agentId}",
-    response_model=AgentProfileConfig,
+    response_model=CustomerAgentProfileConfig,
     summary="Get agent details",
     description="Get complete configuration for a specific agent",
 )
-async def get_agent(agentId: str = PathParam(...)) -> AgentProfileConfig:
+async def get_agent(
+    agentId: str = PathParam(...),
+) -> CustomerAgentProfileConfig:
     """Get agent configuration."""
     try:
         agent_config = load_agent_config(agentId)
-        return agent_config
+        return _customer_profile(agent_config)
     except (ValueError, AppBaseException) as e:
         raise HTTPException(status_code=404, detail=str(e)) from e
     except Exception as e:
@@ -420,6 +451,13 @@ async def create_agent(
     else:
         new_id = _generate_unique_id(existing_ids)
 
+    routing = read_routing_state()
+    if routing is None:
+        raise HTTPException(
+            status_code=503,
+            detail="GO CLAW model routing is not configured",
+        )
+
     workspace_dir = Path(
         request.workspace_dir or f"{WORKING_DIR}/workspaces/{new_id}",
     ).expanduser()
@@ -436,16 +474,11 @@ async def create_agent(
         request.language or config.agents.language or "en",
     )
 
-    active_model = request.active_model
-    if not active_model or not active_model.provider_id:
-        try:
-            from ...providers import ProviderManager
-
-            global_model = ProviderManager.get_instance().get_active_model()
-            if global_model and global_model.provider_id:
-                active_model = global_model
-        except Exception:
-            pass
+    default_tier = resolve_model_tier(DEFAULT_MODEL_TIER)
+    active_model = ModelSlotConfig(
+        provider_id=routing.provider_id,
+        model=default_tier.model_id,
+    )
 
     agent_config = AgentProfileConfig(
         id=new_id,
@@ -633,15 +666,15 @@ async def copy_agent(
 
 @router.put(
     "/{agentId}",
-    response_model=AgentProfileConfig,
+    response_model=CustomerAgentProfileConfig,
     summary="Update agent",
     description="Update agent configuration and trigger reload",
 )
 async def update_agent(
     agentId: str = PathParam(...),
-    agent_config: AgentProfileConfig = Body(...),
+    agent_config: CustomerAgentProfileConfig = Body(...),
     request: Request = None,
-) -> AgentProfileConfig:
+) -> CustomerAgentProfileConfig:
     """Update agent configuration."""
     config = load_config()
 
@@ -653,7 +686,10 @@ async def update_agent(
 
     existing_config = load_agent_config(agentId)
 
-    update_data = agent_config.model_dump(exclude_unset=True)
+    update_data = agent_config.model_dump(
+        exclude_unset=True,
+        exclude={"model_tier"},
+    )
     for key, value in update_data.items():
         if key != "id":
             setattr(existing_config, key, value)
@@ -662,7 +698,7 @@ async def update_agent(
     save_agent_config(agentId, existing_config)
     schedule_agent_reload(request, agentId)
 
-    return agent_config
+    return _customer_profile(existing_config)
 
 
 @router.post(

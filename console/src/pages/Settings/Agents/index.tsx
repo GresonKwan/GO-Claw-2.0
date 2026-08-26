@@ -4,6 +4,7 @@ import { useAppMessage } from "../../../hooks/useAppMessage";
 import { PlusOutlined } from "@ant-design/icons";
 import { useTranslation } from "react-i18next";
 import { agentsApi } from "../../../api/modules/agents";
+import { goClawProductApi } from "../../../api/modules/goClawProduct";
 import { invalidateSkillCache, skillApi } from "../../../api/modules/skill";
 import type { AgentSummary, CopyAgentRequest } from "../../../api/types/agents";
 import { useAgentStore } from "../../../stores/agentStore";
@@ -41,8 +42,7 @@ export default function AgentsPage() {
     form.resetFields();
     form.setFieldsValue({
       workspace_dir: "",
-      active_model_provider: undefined,
-      active_model_model: undefined,
+      model_tier: "economy",
     });
     setSelectedSkills([]);
     installedSkillsRef.current = [];
@@ -58,8 +58,6 @@ export default function AgentsPage() {
       setEditingAgent(agent);
       form.setFieldsValue({
         ...config,
-        active_model_provider: config.active_model?.provider_id || undefined,
-        active_model_model: config.active_model?.model || undefined,
       });
       setModalVisible(true);
     } catch (error) {
@@ -143,15 +141,8 @@ export default function AgentsPage() {
           ? workspaceRaw.trim() || undefined
           : workspaceRaw;
 
-      const providerId = values.active_model_provider;
-      const modelId = values.active_model_model;
-      const active_model =
-        providerId && modelId
-          ? { provider_id: providerId, model: modelId }
-          : null;
-
-      const { active_model_provider, active_model_model, ...rest } = values;
-      const payload = { ...rest, workspace_dir, active_model };
+      const { model_tier = "economy", ...rest } = values;
+      const payload = { ...rest, workspace_dir };
 
       if (editingAgent) {
         const previousInstalledSkills = installedSkillsRef.current;
@@ -166,6 +157,13 @@ export default function AgentsPage() {
           });
         }
         await agentsApi.updateAgent(editingAgent.id, payload);
+        if (model_tier !== (editingAgent.model_tier ?? "economy")) {
+          await goClawProductApi.setModelTier({
+            schemaVersion: 1,
+            agentId: editingAgent.id,
+            tier: model_tier,
+          });
+        }
         installedSkillsRef.current = [
           ...previousInstalledSkills,
           ...newSkills.filter(
@@ -180,6 +178,13 @@ export default function AgentsPage() {
           language: i18n.language,
           skill_names: selectedSkills,
         });
+        if (model_tier !== "economy") {
+          await goClawProductApi.setModelTier({
+            schemaVersion: 1,
+            agentId: result.id,
+            tier: model_tier,
+          });
+        }
         message.success(`${t("agent.createSuccess")} (ID: ${result.id})`);
       }
 

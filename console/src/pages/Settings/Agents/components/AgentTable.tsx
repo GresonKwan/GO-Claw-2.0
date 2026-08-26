@@ -24,7 +24,10 @@ import type { AgentSummary } from "../../../../api/types/agents";
 import { useTheme } from "../../../../contexts/ThemeContext";
 import { getAgentDisplayName } from "../../../../utils/agentDisplayName";
 import { SortableAgentRow, DragHandle } from "./SortableAgentRow";
-import { providerIcon } from "../../Models/components/providerIcon";
+import {
+  getModelTierPresentation,
+  MODEL_TIER_ICONS,
+} from "@/components/modelTierIcons";
 import { AgentStatusIndicator } from "@/components/AgentStatusIndicator";
 import styles from "../index.module.less";
 
@@ -139,25 +142,19 @@ export function AgentTable({
     },
     {
       title: t("agent.modelColumn"),
-      key: "active_model",
+      key: "model_tier",
       width: 260,
       ellipsis: true,
       render: (_value: unknown, record: AgentSummary) => {
-        if (!record.active_model) {
-          return (
-            <span style={{ opacity: 0.45 }}>{t("agent.modelPlaceholder")}</span>
-          );
-        }
+        const tier = getModelTierPresentation(record.model_tier);
         return (
           <Space size={6}>
             <img
-              src={providerIcon(record.active_model.provider_id)}
-              alt=""
-              style={{ width: 16, height: 16 }}
+              src={MODEL_TIER_ICONS[tier.icon]}
+              alt={tier.label}
+              style={{ width: 20, height: 20 }}
             />
-            <Tooltip title={record.active_model.model}>
-              <span>{record.active_model.model}</span>
-            </Tooltip>
+            <span>{tier.label}</span>
           </Space>
         );
       },

@@ -1,6 +1,6 @@
 // Multi-agent management types
 
-import type { ModelSlotConfig } from "./provider";
+import type { ModelTierId } from "./goClawProduct";
 
 export type AgentStartupStatus =
   | "disabled"
@@ -17,7 +17,7 @@ export interface AgentSummary {
   enabled: boolean;
   pinned?: boolean;
   startup_status?: AgentStartupStatus;
-  active_model?: ModelSlotConfig | null;
+  model_tier?: ModelTierId;
 }
 
 export interface AgentListResponse {
@@ -35,15 +35,7 @@ export interface AgentProfileConfig {
   description?: string;
   workspace_dir?: string;
   approval_level?: string;
-  active_model?: ModelSlotConfig | null;
-  channels?: unknown;
-  mcp?: unknown;
-  heartbeat?: unknown;
-  running?: unknown;
-  llm_routing?: unknown;
-  system_prompt_files?: string[];
-  tools?: unknown;
-  security?: unknown;
+  model_tier?: ModelTierId;
 }
 
 export interface CreateAgentRequest {
@@ -53,7 +45,6 @@ export interface CreateAgentRequest {
   workspace_dir?: string;
   language?: string;
   skill_names?: string[];
-  active_model?: ModelSlotConfig | null;
 }
 
 export interface CopyAgentRequest {

@@ -29,6 +29,7 @@ from qwenpaw.app.routers.agents import (
     copy_agent,
     router as agents_router,
 )
+from qwenpaw.app.go_claw_product import ProductRoutingState
 from qwenpaw.config.config import (
     AgentProfileConfig,
     AgentProfileRef,
@@ -163,6 +164,10 @@ def test_get_agent_returns_config(client):
         name="Bot",
         description="",
         workspace_dir="/tmp/ws/bot",
+        active_model=ModelSlotConfig(
+            provider_id="private-relay",
+            model="private-model",
+        ),
     )
 
     with patch(
@@ -172,7 +177,46 @@ def test_get_agent_returns_config(client):
         response = client.get("/api/agents/bot")
 
     assert response.status_code == 200
-    assert response.json()["id"] == "bot"
+    body = response.json()
+    assert body["id"] == "bot"
+    assert body["model_tier"] == "economy"
+    serialized = str(body)
+    assert "active_model" not in serialized
+    assert "provider_id" not in serialized
+    assert "private-relay" not in serialized
+    assert "private-model" not in serialized
+
+
+def test_list_agents_never_exposes_private_model_fields(client, fake_config):
+    cfg = AgentProfileConfig(
+        id="bot",
+        name="Bot",
+        workspace_dir="/tmp/ws/bot",
+        active_model=ModelSlotConfig(
+            provider_id="private-relay",
+            model="private-model",
+        ),
+    )
+
+    with (
+        patch(
+            "qwenpaw.app.routers.agents.load_config",
+            return_value=fake_config,
+        ),
+        patch(
+            "qwenpaw.app.routers.agents.load_agent_config",
+            return_value=cfg,
+        ),
+    ):
+        response = client.get("/api/agents")
+
+    assert response.status_code == 200
+    serialized = str(response.json())
+    assert "model_tier" in serialized
+    assert "active_model" not in serialized
+    assert "provider_id" not in serialized
+    assert "private-relay" not in serialized
+    assert "private-model" not in serialized
 
 
 def test_get_agent_returns_404_for_missing(client):
@@ -197,6 +241,105 @@ def test_get_agent_returns_404_for_app_base_exception(client):
         response = client.get("/api/agents/ghost")
 
     assert response.status_code == 404
+
+
+def test_create_agent_privately_persists_default_economy_tier(
+    client,
+    fake_config,
+    tmp_path,
+):
+    fake_config.agents.language = "en"
+    saved = {}
+
+    with (
+        patch(
+            "qwenpaw.app.routers.agents.load_config",
+            return_value=fake_config,
+        ),
+        patch(
+            "qwenpaw.app.routers.agents.read_routing_state",
+            return_value=ProductRoutingState(
+                provider_id="private-relay",
+                updated_at="2026-08-26T00:00:00Z",
+            ),
+        ),
+        patch(
+            "qwenpaw.app.routers.agents._generate_unique_id",
+            return_value="newbot",
+        ),
+        patch("qwenpaw.app.routers.agents.save_config"),
+        patch(
+            "qwenpaw.app.routers.agents.save_agent_config",
+            side_effect=lambda agent_id, config: saved.update(
+                {"id": agent_id, "config": config},
+            ),
+        ),
+        patch("qwenpaw.app.routers.agents._initialize_agent_workspace"),
+    ):
+        response = client.post(
+            "/api/agents",
+            json={"name": "New", "workspace_dir": str(tmp_path / "newbot")},
+        )
+
+    assert response.status_code == 201
+    assert saved["id"] == "newbot"
+    assert saved["config"].active_model.provider_id == "private-relay"
+    assert (
+        saved["config"].active_model.model
+        == "deepseek-v4-flash-0731"
+    )
+    serialized = str(response.json())
+    assert "active_model" not in serialized
+    assert "private-relay" not in serialized
+
+
+def test_update_agent_preserves_private_model_and_returns_public_tier(
+    client,
+    fake_config,
+):
+    existing = AgentProfileConfig(
+        id="bot",
+        name="Before",
+        workspace_dir="/tmp/ws/bot",
+        active_model=ModelSlotConfig(
+            provider_id="private-relay",
+            model="qwen3.7-plus",
+        ),
+    )
+    saved = {}
+
+    with (
+        patch(
+            "qwenpaw.app.routers.agents.load_config",
+            return_value=fake_config,
+        ),
+        patch(
+            "qwenpaw.app.routers.agents.load_agent_config",
+            return_value=existing,
+        ),
+        patch(
+            "qwenpaw.app.routers.agents.save_agent_config",
+            side_effect=lambda agent_id, config: saved.update(
+                {"id": agent_id, "config": config},
+            ),
+        ),
+        patch("qwenpaw.app.routers.agents.schedule_agent_reload"),
+    ):
+        response = client.put(
+            "/api/agents/bot",
+            json={
+                "id": "bot",
+                "name": "After",
+                "workspace_dir": "/tmp/ws/bot",
+                "model_tier": "performance",
+            },
+        )
+
+    assert response.status_code == 200
+    assert response.json()["name"] == "After"
+    assert response.json()["model_tier"] == "balanced"
+    assert saved["config"].active_model.provider_id == "private-relay"
+    assert saved["config"].active_model.model == "qwen3.7-plus"
 
 
 # ---------------------------------------------------------------------------

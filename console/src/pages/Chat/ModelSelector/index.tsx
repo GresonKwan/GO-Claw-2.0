@@ -1,689 +1,151 @@
-import { useState, useEffect, useCallback, useRef, useMemo } from "react";
-import { Dropdown, Spin, Tooltip, Modal } from "antd";
-import { useAppMessage } from "../../../hooks/useAppMessage";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   CheckOutlined,
-  LoadingOutlined,
-  SearchOutlined,
-  CloseCircleFilled,
   DownOutlined,
-  UpOutlined,
+  LoadingOutlined,
 } from "@ant-design/icons";
-import { AlertTriangle } from "lucide-react";
-import { useLocation, useNavigate } from "react-router-dom";
-import { useTranslation } from "react-i18next";
-import { providerApi } from "../../../api/modules/provider";
-import type { ProviderInfo, ActiveModelsInfo } from "../../../api/types";
-import { useAgentStore } from "../../../stores/agentStore";
-import { confirmFreeModelSwitch } from "@/utils/freeModelSwitchWarning";
-import { ProviderIcon } from "../../Settings/Models/components/ProviderIconComponent";
+import { Dropdown } from "antd";
+import { goClawProductApi } from "@/api/modules/goClawProduct";
+import type {
+  ModelTierId,
+  ModelTierResponse,
+  PublicModelTier,
+} from "@/api/types/goClawProduct";
+import { MODEL_TIER_ICONS } from "@/components/modelTierIcons";
+import { useAppMessage } from "@/hooks/useAppMessage";
+import { useAgentStore } from "@/stores/agentStore";
 import { useTurnUsageStore } from "../turnUsageStore";
-import { OAuthConfirmModal } from "./OAuthConfirmModal";
 import styles from "./index.module.less";
 
-// GO CLAW 客户版：只展示中转渠道实际可用的模型（与渠道在挂模型
-// 保持一致；白名单外的目录项调用必然 503，直接隐藏）。
-export const GO_CLAW_ALLOWED_MODEL_IDS = new Set([
-  "deepseek-v4-pro",
-  "deepseek-v4-flash",
-  "qwen3.7-max",
-  "qwen3.7-plus",
-  "glm-5.2",
-  "qwen3.6-flash",
-  "qwen3.8-max",
-]);
-
-/** Sync Chat context ring with the active model's effective window. */
-function publishActiveMaxInputLength(
-  effectiveMaxInputLength: number | null | undefined,
-): void {
-  const maxInputLength =
-    typeof effectiveMaxInputLength === "number"
-      ? effectiveMaxInputLength
-      : null;
-  useTurnUsageStore.getState().setActiveMaxInputLength(maxInputLength);
-  if (typeof maxInputLength === "number" && maxInputLength > 0) {
+function publishActiveMaxInputLength(value: number): void {
+  useTurnUsageStore.getState().setActiveMaxInputLength(value);
+  if (value > 0) {
     window.dispatchEvent(
       new CustomEvent("model-switched", {
-        detail: { maxInputLength },
+        detail: { maxInputLength: value },
       }),
     );
   }
 }
 
-interface EligibleProvider {
-  id: string;
-  name: string;
-  base_url?: string;
-  models: ProviderInfo["models"];
-  is_free_tier?: boolean;
-  is_custom?: boolean;
-  is_local?: boolean;
-  supports_oauth?: boolean;
-  oauth_connected?: boolean;
-  has_api_key?: boolean;
-  require_api_key?: boolean;
+function TierIcon({ tier }: { tier: PublicModelTier }) {
+  return (
+    <img
+      className={styles.tierIcon}
+      src={MODEL_TIER_ICONS[tier.icon]}
+      alt={tier.label}
+    />
+  );
 }
 
 export default function ModelSelector() {
-  const { t } = useTranslation();
-  const [providers, setProviders] = useState<ProviderInfo[]>([]);
-  const [activeModels, setActiveModels] = useState<ActiveModelsInfo | null>(
-    null,
-  );
-  const [loading, setLoading] = useState(false);
-  const [saving, setSaving] = useState(false);
-  const [open, setOpen] = useState(false);
-  const [searchQuery, setSearchQuery] = useState("");
-  const [collapsedProviders, setCollapsedProviders] = useState<Set<string>>(
-    () => {
-      try {
-        const raw = localStorage.getItem("qwenpaw_model_selector_collapsed");
-        return raw ? new Set(JSON.parse(raw) as string[]) : new Set();
-      } catch {
-        return new Set();
-      }
-    },
-  );
-  const savingRef = useRef(false);
-  const searchInputRef = useRef<HTMLInputElement>(null);
-  const location = useLocation();
-  const navigate = useNavigate();
   const { selectedAgent } = useAgentStore();
   const { message } = useAppMessage();
+  const [data, setData] = useState<ModelTierResponse | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [open, setOpen] = useState(false);
+  const requestSequence = useRef(0);
 
-  const [expandedModels, setExpandedModels] = useState<Record<string, number>>(
-    {},
-  );
-
-  // Mobile viewport detection for dropdown placement
-  const [isMobile, setIsMobile] = useState(() => window.innerWidth <= 768);
-  useEffect(() => {
-    const media = window.matchMedia("(max-width: 768px)");
-    const handler = (e: MediaQueryListEvent | MediaQueryList) => {
-      setIsMobile(e.matches);
-    };
-    handler(media);
-    media.addEventListener("change", handler);
-    return () => media.removeEventListener("change", handler);
-  }, []);
-
-  // OAuth modal state
-  const [oauthModal, setOauthModal] = useState<{
-    open: boolean;
-    providerId: string;
-    providerName: string;
-    pendingModelId: string;
-  }>({ open: false, providerId: "", providerName: "", pendingModelId: "" });
-
-  // Navigate-to-config confirmation state
-  const [configNavModal, setConfigNavModal] = useState<{
-    open: boolean;
-    providerId: string;
-    providerName: string;
-  }>({ open: false, providerId: "", providerName: "" });
-
-  const fetchData = useCallback(async () => {
+  const load = useCallback(async () => {
+    const sequence = ++requestSequence.current;
     setLoading(true);
     try {
-      const [provData, activeData] = await Promise.all([
-        providerApi.listProviders(),
-        providerApi.getActiveModels({
-          scope: "effective",
-          agent_id: selectedAgent,
-        }),
-      ]);
-      if (Array.isArray(provData)) setProviders(provData);
-      if (activeData) {
-        setActiveModels(activeData);
-        publishActiveMaxInputLength(activeData.effective_max_input_length);
-      }
-    } catch (err) {
-      console.error("ModelSelector: failed to load data", err);
+      const next = await goClawProductApi.getModelTier(selectedAgent);
+      if (sequence !== requestSequence.current) return;
+      setData(next);
+      publishActiveMaxInputLength(next.effectiveMaxInputLength);
+    } catch (error) {
+      if (sequence !== requestSequence.current) return;
+      console.error("Failed to load employee model tier", error);
+      setData(null);
     } finally {
-      setLoading(false);
+      if (sequence === requestSequence.current) setLoading(false);
     }
   }, [selectedAgent]);
 
   useEffect(() => {
-    fetchData();
-  }, [fetchData]);
-
-  // Re-sync active model whenever the route switches back to /chat
-  const prevPathRef = useRef(location.pathname);
-  useEffect(() => {
-    const prev = prevPathRef.current;
-    const curr = location.pathname;
-    prevPathRef.current = curr;
-    const comingToChat = curr.startsWith("/chat") && !prev.startsWith("/chat");
-    if (comingToChat) {
-      providerApi
-        .getActiveModels({
-          scope: "effective",
-          agent_id: selectedAgent,
-        })
-        .then((activeData) => {
-          if (activeData) {
-            setActiveModels(activeData);
-            publishActiveMaxInputLength(activeData.effective_max_input_length);
-          }
-        })
-        .catch(() => {});
-    }
-  }, [location.pathname, selectedAgent]);
-
-  // Eligible providers: configured + has models, OR is_free_tier
-  const eligibleProviders: EligibleProvider[] = providers
-    .filter((p) => {
-      const hasModels =
-        (p.models?.length ?? 0) + (p.extra_models?.length ?? 0) > 0;
-      // Free tier: always show (OAuth or needs-key)
-      if (p.is_free_tier) return true;
-      if (!hasModels) return false;
-      if (p.require_api_key === false) return !!p.base_url;
-      if (p.is_custom) return !!p.base_url;
-      if (p.require_api_key ?? true) return !!p.api_key;
-      return true;
-    })
-    .map((p) => ({
-      id: p.id,
-      name: p.name,
-      base_url: p.base_url,
-      models: [...(p.models ?? []), ...(p.extra_models ?? [])],
-      is_free_tier: p.is_free_tier,
-      is_custom: p.is_custom,
-      is_local: p.is_local,
-      supports_oauth: p.supports_oauth,
-      oauth_connected: p.oauth_connected,
-      has_api_key: !!p.api_key,
-      require_api_key: p.require_api_key,
-    }));
-
-  // GO CLAW 客户版：跨 provider 按模型 id 去重（保留先出现的条目，
-  // 避免 DashScope/DeepSeek 两组目录与 extra_models 造成重复选项）。
-  // H2: 已配置（有 key 或免 key）的 provider 优先，避免未配置目录
-  // provider 抢占同名模型 id 导致可用模型被去重隐藏。
-  const sortedProviders = [...eligibleProviders].sort((a, b) => {
-    const aConfigured = a.has_api_key || a.require_api_key === false ? 0 : 1;
-    const bConfigured = b.has_api_key || b.require_api_key === false ? 0 : 1;
-    return aConfigured - bConfigured;
-  });
-  const seenModelIds = new Set<string>();
-  const dedupedProviders = sortedProviders
-    .map((p) => ({
-      ...p,
-      models: p.models.filter((m) => {
-        if (seenModelIds.has(m.id)) return false;
-        seenModelIds.add(m.id);
-        return true;
-      }),
-    }))
-    .filter((p) => p.is_free_tier || p.models.length > 0);
-
-  const curatedProviders = dedupedProviders
-    .map((p) => ({
-      ...p,
-      models: p.models.filter((m) => GO_CLAW_ALLOWED_MODEL_IDS.has(m.id)),
-    }))
-    .filter((p) => p.models.length > 0);
-
-  // H1 兜底：白名单零命中时回退到去重后的全量列表——防止交付模型
-  // 变更（白名单未同步）导致客户无模型可选。
-  const uniqueProviders =
-    curatedProviders.length > 0 ? curatedProviders : dedupedProviders;
-
-  // GO CLAW 客户版：只保留 PRO 付费模型列表（FREE 页签已隐藏）
-  const proProviders = useMemo(() => {
-    const proMap = new Map<string, EligibleProvider>();
-    for (const p of uniqueProviders) {
-      const proModels = p.models.filter((m) => !m.is_free);
-      // PRO: show paid models when API key is configured, provider
-      // doesn't require a key, or provider is user-created / local
-      if (
-        proModels.length > 0 &&
-        (p.has_api_key ||
-          p.require_api_key === false ||
-          p.is_custom ||
-          p.is_local)
-      ) {
-        proMap.set(p.id, { ...p, models: proModels });
-      }
-    }
-    return [...proMap.values()];
-  }, [uniqueProviders]);
-
-  // Filter by search query
-  const trimmedSearch = searchQuery.trim();
-  const filterProviders = (list: EligibleProvider[]) => {
-    if (!trimmedSearch) return list;
-    const query = trimmedSearch.toLowerCase();
-    return list
-      .map((p) => ({
-        ...p,
-        models: p.models.filter(
-          (m) =>
-            (m.name || m.id).toLowerCase().includes(query) ||
-            p.name.toLowerCase().includes(query),
-        ),
-      }))
-      .filter(
-        (p) => p.models.length > 0 || p.name.toLowerCase().includes(query),
-      );
-  };
-
-  const filteredPro = filterProviders(proProviders);
-
-  // Focus search input when dropdown opens; clear query when closes
-  useEffect(() => {
-    if (open) {
-      setTimeout(() => searchInputRef.current?.focus(), 50);
-    } else {
-      setSearchQuery("");
-    }
-  }, [open]);
-
-  const activeProviderId = activeModels?.active_llm?.provider_id;
-  const activeModelId = activeModels?.active_llm?.model;
-
-  // Display label for trigger button
-  const activeModelName = (() => {
-    if (!activeProviderId || !activeModelId)
-      return t("modelSelector.selectModel");
-    for (const p of eligibleProviders) {
-      if (p.id === activeProviderId) {
-        const m = p.models.find((m) => m.id === activeModelId);
-        if (m) return m.name || m.id;
-      }
-    }
-    return activeModelId;
-  })();
-
-  const showActiveProviderIcon = Boolean(activeProviderId);
-
-  // Marquee the trigger name on very narrow screens when it overflows.
-  const triggerNameRef = useRef<HTMLSpanElement | null>(null);
-  const triggerNameMeasureRef = useRef<HTMLSpanElement | null>(null);
-  const [shouldMarquee, setShouldMarquee] = useState(false);
-
-  useEffect(() => {
-    const check = () => {
-      const w = typeof window !== "undefined" ? window.innerWidth : 0;
-      if (w > 480) {
-        setShouldMarquee(false);
-        return;
-      }
-      const containerWidth =
-        triggerNameRef.current?.getBoundingClientRect().width ?? 0;
-      const textWidth =
-        triggerNameMeasureRef.current?.getBoundingClientRect().width ?? 0;
-      // Small tolerance to avoid borderline jitter.
-      setShouldMarquee(textWidth > containerWidth + 2);
+    void load();
+    return () => {
+      requestSequence.current += 1;
     };
+  }, [load]);
 
-    check();
-    window.addEventListener("resize", check);
-    return () => window.removeEventListener("resize", check);
-  }, [activeModelName]);
-
-  const handleOpenChange = useCallback(
-    async (next: boolean) => {
-      setOpen(next);
-      if (next) {
-        try {
-          const activeData = await providerApi.getActiveModels({
-            scope: "effective",
-            agent_id: selectedAgent,
-          });
-          if (activeData) setActiveModels(activeData);
-        } catch {
-          // ignore
-        }
-      }
-    },
-    [selectedAgent],
-  );
-
-  const handleSelect = async (providerId: string, modelId: string) => {
-    if (savingRef.current) return;
-    if (providerId === activeProviderId && modelId === activeModelId) {
+  const selectTier = async (tier: ModelTierId) => {
+    if (!data || saving || tier === data.selectedTier) {
       setOpen(false);
       return;
     }
-
-    const targetProvider = eligibleProviders.find(
-      (provider) => provider.id === providerId,
-    );
-    const targetModel = targetProvider?.models.find(
-      (model) => model.id === modelId,
-    );
-
-    // Check if OAuth is needed
-    if (
-      targetProvider?.supports_oauth &&
-      !targetProvider.has_api_key &&
-      !targetProvider.oauth_connected
-    ) {
-      setOpen(false);
-      setOauthModal({
-        open: true,
-        providerId,
-        providerName: targetProvider.name,
-        pendingModelId: modelId,
-      });
-      return;
-    }
-
-    setOpen(false);
-
-    if (targetProvider && targetModel) {
-      const confirmed = await confirmFreeModelSwitch({
-        provider: targetProvider,
-        model: targetModel,
-        t,
-      });
-      if (!confirmed) return;
-    }
-
-    savingRef.current = true;
     setSaving(true);
     try {
-      const updated = await providerApi.setActiveLlm({
-        provider_id: providerId,
-        model: modelId,
-        scope: "agent",
-        agent_id: selectedAgent,
+      const updated = await goClawProductApi.setModelTier({
+        schemaVersion: 1,
+        agentId: selectedAgent,
+        tier,
       });
-      setActiveModels(
-        updated?.active_llm
-          ? updated
-          : {
-              ...updated,
-              active_llm: { provider_id: providerId, model: modelId },
-            },
-      );
-      publishActiveMaxInputLength(updated?.effective_max_input_length);
-    } catch (err) {
-      const msg =
-        err instanceof Error ? err.message : t("modelSelector.switchFailed");
-      message.error(msg);
+      setData(updated);
+      publishActiveMaxInputLength(updated.effectiveMaxInputLength);
+      setOpen(false);
+    } catch (error) {
+      console.error("Failed to save employee model tier", error);
+      message.error("模型档位保存失败，请重试");
     } finally {
       setSaving(false);
-      savingRef.current = false;
     }
   };
 
-  const handleOAuthSuccess = async () => {
-    setOauthModal((prev) => ({ ...prev, open: false }));
-    await fetchData();
-    if (oauthModal.providerId && oauthModal.pendingModelId) {
-      savingRef.current = true;
-      setSaving(true);
-      try {
-        const updated = await providerApi.setActiveLlm({
-          provider_id: oauthModal.providerId,
-          model: oauthModal.pendingModelId,
-          scope: "agent",
-          agent_id: selectedAgent,
-        });
-        setActiveModels(
-          updated?.active_llm
-            ? updated
-            : {
-                ...updated,
-                active_llm: {
-                  provider_id: oauthModal.providerId,
-                  model: oauthModal.pendingModelId,
-                },
-              },
+  const selected = data?.tiers.find((tier) => tier.id === data.selectedTier);
+  const panel = (
+    <div className={styles.panel} role="menu" aria-label="模型档位">
+      <div className={styles.panelTitle}>选择模型档位</div>
+      {data?.tiers.map((tier) => {
+        const active = tier.id === data.selectedTier;
+        return (
+          <button
+            key={tier.id}
+            type="button"
+            role="menuitem"
+            className={`${styles.tierOption} ${active ? styles.active : ""}`}
+            disabled={saving}
+            onClick={() => void selectTier(tier.id)}
+          >
+            <TierIcon tier={tier} />
+            <span className={styles.tierCopy}>
+              <span className={styles.tierName}>{tier.label}</span>
+              <span className={styles.tierDescription}>{tier.description}</span>
+              {tier.warning && (
+                <span className={styles.tierWarning}>{tier.warning}</span>
+              )}
+            </span>
+            {active && <CheckOutlined className={styles.check} />}
+          </button>
         );
-        publishActiveMaxInputLength(updated?.effective_max_input_length);
-      } catch (err) {
-        const msg =
-          err instanceof Error ? err.message : t("modelSelector.switchFailed");
-        message.error(msg);
-      } finally {
-        setSaving(false);
-        savingRef.current = false;
-      }
-    }
-  };
-
-  const toggleProviderCollapse = (providerId: string) => {
-    setCollapsedProviders((prev) => {
-      const next = new Set(prev);
-      if (next.has(providerId)) {
-        next.delete(providerId);
-      } else {
-        next.add(providerId);
-      }
-      localStorage.setItem(
-        "qwenpaw_model_selector_collapsed",
-        JSON.stringify([...next]),
-      );
-      return next;
-    });
-  };
-
-  const renderProviderModels = (provider: EligibleProvider) => {
-    const needsOAuth =
-      provider.supports_oauth &&
-      !provider.has_api_key &&
-      !provider.oauth_connected;
-    const isCollapsed = collapsedProviders.has(provider.id);
-    const visibleCount = expandedModels[provider.id] ?? 5;
-    const visibleModels = provider.models.slice(0, visibleCount);
-    const remaining = provider.models.length - visibleCount;
-    const hasMore = remaining > 0;
-
-    return (
-      <div key={provider.id} className={styles.providerGroup}>
-        <div
-          className={styles.providerHeader}
-          onClick={() => toggleProviderCollapse(provider.id)}
-        >
-          <ProviderIcon providerId={provider.id} size={16} />
-          <span className={styles.providerHeaderName}>{provider.name}</span>
-          {needsOAuth && (
-            <AlertTriangle size={12} className={styles.oauthWarningIcon} />
-          )}
-          <span className={styles.collapseIcon}>
-            {isCollapsed ? <DownOutlined /> : <UpOutlined />}
-          </span>
-        </div>
-        {!isCollapsed && (
-          <>
-            {visibleModels.map((model) => {
-              const isActive =
-                provider.id === activeProviderId && model.id === activeModelId;
-              return (
-                <div
-                  key={model.id}
-                  className={[
-                    styles.modelItem,
-                    isActive ? styles.modelItemActive : "",
-                  ].join(" ")}
-                  onClick={() => handleSelect(provider.id, model.id)}
-                >
-                  <span className={styles.modelName}>
-                    {model.name || model.id}
-                  </span>
-                  <div className={styles.modelTags}>
-                    {needsOAuth && (
-                      <AlertTriangle
-                        size={12}
-                        className={styles.oauthWarningIcon}
-                      />
-                    )}
-                    {model.is_free && !needsOAuth && (
-                      <span className={styles.freeTag}>
-                        {t("modelSelector.free")}
-                      </span>
-                    )}
-                    {(model.supports_image || model.supports_multimodal) && (
-                      <span className={styles.visionTag}>
-                        {t("modelSelector.vision")}
-                      </span>
-                    )}
-                    {isActive && <CheckOutlined className={styles.checkIcon} />}
-                  </div>
-                </div>
-              );
-            })}
-            {hasMore && (
-              <div
-                className={styles.viewMore}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  setExpandedModels((prev) => ({
-                    ...prev,
-                    [provider.id]: visibleCount + 10,
-                  }));
-                }}
-              >
-                {t("modelSelector.viewMore", {
-                  count: Math.min(10, remaining),
-                })}
-              </div>
-            )}
-          </>
-        )}
-      </div>
-    );
-  };
-
-  const renderProTab = () => {
-    if (loading) {
-      return (
-        <div className={styles.spinWrapper}>
-          <Spin size="small" />
-        </div>
-      );
-    }
-
-    if (filteredPro.length === 0) {
-      return (
-        <div className={styles.emptyTip}>
-          {trimmedSearch
-            ? t("modelSelector.noModelsFound")
-            : t("modelSelector.noConfiguredModels")}
-        </div>
-      );
-    }
-
-    return (
-      <>
-        <div className={styles.proBanner}>
-          <span>{t("modelSelector.proBannerText")}</span>
-        </div>
-        {filteredPro.map(renderProviderModels)}
-      </>
-    );
-  };
-
-  const dropdownContent = (
-    <div className={styles.panel}>
-      <div className={styles.searchWrapper}>
-        <SearchOutlined className={styles.searchIcon} />
-        <input
-          ref={searchInputRef}
-          className={styles.searchInput}
-          placeholder={t("modelSelector.searchModels")}
-          value={searchQuery}
-          onChange={(e) => setSearchQuery(e.target.value)}
-        />
-        {searchQuery && (
-          <CloseCircleFilled
-            className={styles.searchClear}
-            onClick={(e) => {
-              e.stopPropagation();
-              setSearchQuery("");
-              searchInputRef.current?.focus();
-            }}
-          />
-        )}
-      </div>
-
-      <div className={styles.listContainer}>
-        {/* GO CLAW 客户版：只展示 PRO 列表，隐藏 FREE 页签 */}
-        {renderProTab()}
-      </div>
+      })}
     </div>
   );
 
   return (
-    <>
-      <Dropdown
-        open={open}
-        onOpenChange={handleOpenChange}
-        popupRender={() => (
-          <div style={{ transform: "translateY(0)" }}>{dropdownContent}</div>
+    <Dropdown
+      open={open}
+      onOpenChange={(next) => !saving && setOpen(next)}
+      trigger={["click"]}
+      popupRender={() => panel}
+      placement="bottomLeft"
+    >
+      <button
+        type="button"
+        className={styles.trigger}
+        disabled={loading || !selected}
+        aria-label={selected?.label ?? "加载模型档位"}
+      >
+        {loading || !selected ? (
+          <LoadingOutlined />
+        ) : (
+          <TierIcon tier={selected} />
         )}
-        trigger={["click"]}
-        placement={isMobile ? "bottomCenter" : "bottomLeft"}
-      >
-        <Tooltip title={t("chat.modelSelectTooltip")} mouseEnterDelay={0.5}>
-          <div
-            className={[styles.trigger, open ? styles.triggerActive : ""].join(
-              " ",
-            )}
-          >
-            {saving && (
-              <LoadingOutlined style={{ fontSize: 11, color: "#FF7F16" }} />
-            )}
-            {showActiveProviderIcon && activeProviderId && (
-              <ProviderIcon providerId={activeProviderId} size={16} />
-            )}
-            <span className={styles.triggerName} ref={triggerNameRef}>
-              {shouldMarquee ? (
-                <span className={styles.marquee}>{activeModelName}</span>
-              ) : (
-                activeModelName
-              )}
-            </span>
-            {/* Hidden span used to measure intrinsic text width. Placed
-                outside .triggerName so it does not duplicate text for
-                screen readers or testing-library queries. */}
-            <span
-              ref={triggerNameMeasureRef}
-              aria-hidden="true"
-              style={{
-                position: "absolute",
-                visibility: "hidden",
-                whiteSpace: "nowrap",
-                pointerEvents: "none",
-              }}
-            >
-              {activeModelName}
-            </span>
-          </div>
-        </Tooltip>
-      </Dropdown>
-
-      <Modal
-        open={configNavModal.open}
-        title={t("modelSelector.configureApiKeyTitle")}
-        onCancel={() => setConfigNavModal((prev) => ({ ...prev, open: false }))}
-        onOk={() => {
-          setConfigNavModal((prev) => ({ ...prev, open: false }));
-          navigate(`/models?provider=${configNavModal.providerId}`);
-        }}
-        okText={t("modelSelector.goToConfigure")}
-        cancelText={t("common.cancel")}
-      >
-        <p>
-          {t("modelSelector.configureApiKeyConfirm", {
-            provider: configNavModal.providerName,
-          })}
-        </p>
-      </Modal>
-
-      <OAuthConfirmModal
-        open={oauthModal.open}
-        providerId={oauthModal.providerId}
-        providerName={oauthModal.providerName}
-        onSuccess={handleOAuthSuccess}
-        onCancel={() => setOauthModal((prev) => ({ ...prev, open: false }))}
-      />
-    </>
+        <span>{selected?.label ?? "加载中"}</span>
+        <DownOutlined className={styles.chevron} />
+      </button>
+    </Dropdown>
   );
 }
