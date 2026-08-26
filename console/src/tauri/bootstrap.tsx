@@ -3,6 +3,7 @@ import "../i18n";
 import { ThemeProvider } from "../contexts/ThemeContext";
 import BackendReadyGate from "./BackendReadyGate";
 import CloseWindowPrompt from "./CloseWindowPrompt";
+import { reportBootstrapReadyAfterPaint } from "./clientReadiness";
 
 // Native drag-drop interception is disabled on the window, so OS file
 // drags arrive as HTML5 drag events. Block the default "navigate to
@@ -17,3 +18,7 @@ createRoot(document.getElementById("root")!).render(
     <BackendReadyGate>{null}</BackendReadyGate>
   </ThemeProvider>,
 );
+
+void reportBootstrapReadyAfterPaint().catch((error: unknown) => {
+  console.error("Failed to report desktop bootstrap readiness", error);
+});

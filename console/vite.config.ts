@@ -92,8 +92,6 @@ export default defineConfig(({ mode }) => {
         "**/testConnectionMessage.test.ts",
         // ChatPage test causes worker crash - pre-existing issue, needs more mock setup
         "**/pages/Chat/ChatPage.test.tsx",
-        // Tauri modules require @tauri-apps/api which only exists in desktop builds
-        "**/src/tauri/**",
       ],
       coverage: {
         provider: "v8",

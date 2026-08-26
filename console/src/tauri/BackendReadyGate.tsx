@@ -1,10 +1,23 @@
-import { type ReactNode, useEffect } from "react";
+import { type ReactNode, useEffect, useRef, useState } from "react";
 import BackendLoadingPage from "./BackendLoadingPage";
 import useBackendReadyPolling from "./useBackendReadyPolling";
-import { withCacheBuster, withDesktopMarker } from "./backendRuntime";
+import {
+  buildDesktopConsoleUrl,
+  clientConsoleNavigating,
+} from "./clientReadiness";
 
 interface Props {
   children: ReactNode;
+}
+
+export async function navigateToReadyConsole(
+  readyUrl: string,
+  launchId: number,
+  replace: (url: string) => void,
+  now = Date.now(),
+): Promise<void> {
+  await clientConsoleNavigating(launchId);
+  replace(buildDesktopConsoleUrl(readyUrl, launchId, now));
 }
 
 export default function BackendReadyGate({ children }: Props) {
@@ -15,14 +28,32 @@ export default function BackendReadyGate({ children }: Props) {
     totalSec,
     errorMessage,
     readyUrl,
+    launchId,
     retry,
   } = useBackendReadyPolling();
+  const [navigationError, setNavigationError] = useState("");
+  const navigationKeyRef = useRef("");
 
   useEffect(() => {
-    if (shouldGate && status === "ready" && readyUrl) {
-      window.location.replace(withCacheBuster(withDesktopMarker(readyUrl)));
+    if (status === "checking") {
+      setNavigationError("");
     }
-  }, [readyUrl, shouldGate, status]);
+  }, [status]);
+
+  useEffect(() => {
+    if (!shouldGate || status !== "ready" || !readyUrl || launchId === null) {
+      return;
+    }
+    const navigationKey = `${launchId}:${readyUrl}`;
+    if (navigationKeyRef.current === navigationKey) return;
+    navigationKeyRef.current = navigationKey;
+    void navigateToReadyConsole(readyUrl, launchId, (url) =>
+      window.location.replace(url),
+    ).catch((error: unknown) => {
+      const message = error instanceof Error ? error.message : String(error);
+      setNavigationError(message || "Unable to activate the desktop console");
+    });
+  }, [launchId, readyUrl, shouldGate, status]);
 
   // Browser mode, or Tauri after it has navigated to the backend-hosted console.
   if (!shouldGate) {
@@ -31,10 +62,10 @@ export default function BackendReadyGate({ children }: Props) {
 
   return (
     <BackendLoadingPage
-      status={status}
+      status={navigationError ? "error" : status}
       elapsed={elapsed}
       totalSec={totalSec}
-      errorMessage={errorMessage}
+      errorMessage={navigationError || errorMessage}
       onRetry={retry}
     />
   );
