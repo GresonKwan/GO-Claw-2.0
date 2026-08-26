@@ -355,6 +355,8 @@ jobs:
           if ($signature.SignerCertificate.Subject -notlike "*Microsoft Corporation*") {
             throw "WebView2 signer is not Microsoft Corporation"
           }
+          "WEBVIEW2_AUTHENTICODE_SUBJECT=$($signature.SignerCertificate.Subject)" | Out-File `
+            -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
           $digest = (Get-FileHash -LiteralPath $installer -Algorithm SHA256).Hash.ToLowerInvariant()
           Write-Host "Validated Microsoft WebView2 runtime SHA-256: $digest"
 
@@ -379,6 +381,26 @@ jobs:
           if (-not (Test-Path -LiteralPath "dist/GO-CLAW-Windows-x64-Full.zip")) {
             throw "Canonical GO CLAW Full ZIP was not produced"
           }
+
+      - name: Verify signed Windows release contract
+        shell: pwsh
+        run: |
+          $installers = @(Get-ChildItem dist -File -Filter "QwenPaw-Tauri-*-Windows-setup.exe")
+          $updates = @(Get-ChildItem dist -File -Filter "GO-CLAW-Update-*-setup.exe")
+          if ($installers.Count -ne 1 -or $updates.Count -ne 1) {
+            throw "Expected exactly one installer and one update package"
+          }
+          python scripts/verify/windows_release_contract.py `
+            --full-zip "dist/GO-CLAW-Windows-x64-Full.zip" `
+            --installer $installers[0].FullName `
+            --installer-signature "$($installers[0].FullName).sig" `
+            --update $updates[0].FullName `
+            --update-signature "$($updates[0].FullName).sig" `
+            --latest-json "dist/latest.json" `
+            --pubkey-config "console/src-tauri/tauri.conf.json" `
+            --update-payload "dist/payload" `
+            --webview2-authenticode-subject $env:WEBVIEW2_AUTHENTICODE_SUBJECT
+          if ($LASTEXITCODE -ne 0) { throw "Windows release contract verification failed" }
 
       - name: Upload single GO CLAW Full ZIP
         uses: actions/upload-artifact@v4
