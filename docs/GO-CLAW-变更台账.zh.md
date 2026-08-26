@@ -144,6 +144,7 @@
 | 媒体插件改为中性工具名并固定 Token Plan 目标模型；移除工具级 key/endpoint/model 和自动模型回退；保留现有 New API 请求体 | 收敛客户界面和模型选择，不改变客户端协议 | `cf6b0597`, `e2490713` | 媒体/迁移/客户合同相关测试 223 例 | 同上 |
 | 真实媒体调用推翻“只增加模型名即可”的现场假设：新模型挂在 OpenAI 文字渠道会返回 400 `url error`，旧插件实际由独立 `type=17` 阿里渠道承载 | 防止把 `/v1/models` 可见性误判为媒体协议可用 | `9546eebb` | 服务器 SQLite 只读核对；New API 与上游各一次图片调用；New API 一次视频调用；阿里云 Token Plan 官方媒体接口文档 | `docs/GO-CLAW-项目事实与发布基线.zh.md` |
 | 经用户授权新增 Token Plan `type=17` 媒体渠道 3；在不修改 New API 镜像的前提下，插件通过 `metadata.input.media` / `metadata.parameters` 适配固定 Ali task adaptor | 保持客户端 New API 公开 endpoint 不变，让五项媒体能力全部进入 Token Plan | `753a8646` | 数据库备份完整性 `ok`；图片生成/编辑、文生/图生/参考图生视频五项真实调用成功；相关单测 146 例 | `docs/GO-CLAW-项目事实与发布基线.zh.md`、媒体分计划 |
+| 签名规则 fail-closed、规范 Full ZIP assembler、真实字节验签和唯一公开发布路径 | 确保 Main Build 产出一个可冷启动完整包，且机密 Full ZIP 不进入公开 Release | `85b5c062`, `5677a17c`, `e02e9f67`, `7172a224`, `fdfed0db` | assembler/签名/发布策略单测，Actionlint | release signing plan |
 
 ## 运营侧变更（非代码，无 commit）
 
@@ -152,6 +153,8 @@
 | 08-20 | New API 渠道 #1 上游 TokenPlan 周配额耗尽（08-24 04:07 UTC 重置）；`deepseek-v4-flash` 模型名与渠道 `deepseek-v4-flash-0731` 不匹配 | 供应商侧，待续费/补模型名 |
 | 08-21 | 4 个存量 `go-claw-auto` 令牌 DB 直改 `unlimited_quota=1`；管理员 access token 过期导致 provisioning 502，已同步 `.env` 并重启服务；仓库转 public 用免费 Actions 额度 | 现场修复 |
 | 08-26 | 备份 `one-api.db` 后通过 New API 管理 API 新增渠道 3 `阿里百炼_TokenPlan_媒体`；备份位于 `/opt/new-api/data/backups/one-api-before-token-plan-media-20260826T145110Z.db` | 将 Token Plan 原生媒体请求与文字 compatible-mode 分离，现有渠道未修改 |
+| 08-26 | 创建七模型限定、非无限额度的交付令牌 ID 29，并不经本地输出直接更新 GitHub Secret `GO_CLAW_DASHSCOPE_API_KEY`；备份为 `/opt/new-api/data/backups/one-api-before-main-delivery-token-20260826T153608Z.db` | 为 Main Full ZIP 使用用户已接受的本地低额度 API key，不引入激活系统 |
+| 08-26 | 在 8443 Nginx server 增加 `/updates/` 静态 location，配置备份为 `newapi-8443.conf.before-updates-20260826`，`nginx -t`/reload 通过；生产软链尚未切换 | 为后续原子发布更新资产建立独立静态入口 |
 | 08-25 | deepseek-v4-flash 不可用三层修复：渠道 #1 models 名单补名 + `abilities` 表补路由行 + `options.ModelRatio` 补定价 0.25 + `model_mapping` 映射到 deepseek-v4-flash-0731（上游只认带日期型号）；实测 chat completion 200 | 模型选择器调用必 503 |
 | 08-25 | provisioning 服务器 `CHAT_MODEL_ID` 由 qwen3.7-plus 改为 `deepseek-v4-flash` 并重启；服务端 quota 语义更新已部署 | 交付模型与白名单对齐 / 充值语义 |
 

@@ -166,9 +166,9 @@ Expected: 只允许“已删除/禁止/历史实现”语境中的命中。
 文件级步骤来源：
 `docs/superpowers/plans/2026-08-26-go-claw-release-signing-plan.md`。
 
-- [ ] 不生成新密钥，使用已经签名往返验证通过的现有私钥。
-- [ ] `tauri.conf.json` 公钥、GitHub Variable `TAURI_UPDATER_PUBKEY` 和入包 `update-pubkey.txt` 三处相等。
-- [ ] `sync_tauri_version.mjs` 将 GitHub Variable 当作相等性断言，不再用它覆盖仓库公钥。
+- [x] 不生成新密钥，使用已经签名往返验证通过的现有私钥。
+- [x] `tauri.conf.json` 公钥、GitHub Variable `TAURI_UPDATER_PUBKEY` 和入包 `update-pubkey.txt` 三处相等。
+- [x] `sync_tauri_version.mjs` 将 GitHub Variable 当作相等性断言，不再用它覆盖仓库公钥。
 - [ ] 安装器和更新包必须有 `.sig`，并由项目 `verify_minisign` 路径验证。
 
 ### 7.3 Full ZIP 合同
@@ -240,7 +240,7 @@ location ^~ /updates/ {
 ```
 
 - [ ] 先将新版上传到 `releases/<version>` 并在服务器验 SHA-256/签名。
-- [ ] `nginx -t` 通过后 reload。
+- [x] `nginx -t` 通过后 reload；静态 location 已生效，未发布时返回 404。
 - [ ] 用临时 symlink 和同文件系统 rename 原子替换 `updates`。
 - [ ] `https://goclaw.host:8443/updates/latest.json` 必须返回 200 和 JSON，不得再返回 New API HTML。
 
@@ -260,7 +260,7 @@ location ^~ /updates/ {
 ### 9.2 唯一 run
 
 ```bash
-gh workflow run desktop-build.yml --ref main -f ref=main -f windows_only=true -f unsigned_test=false
+gh workflow run desktop-build.yml --ref main -f ref=main -f windows_only=true
 ```
 
 记录 run ID 并等待完成。失败后可以 rerun failed jobs，或修复后启动一个新候选；不并行启动两个正式候选。

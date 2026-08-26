@@ -154,9 +154,9 @@ Nginx 的已验证配置文件是：
 结论：本轮不生成新密钥、不改变公钥、不执行轮换。任何计划中出现的
 `~/.config/go-claw/keys/updater-2026-08.key` 都是已否决路径。
 
-仍未完成的 CI 缺口：`scripts/pack-tauri/sync_tauri_version.mjs:88-115` 当前会让
-`TAURI_UPDATER_PUBKEY` 覆盖仓库公钥，而不是只做相等性断言。正式 Main build 前必须按 release
-plan Task 2 改为 fail-closed equality；密钥本身已验证不等于该 CI 规则已经实现。
+CI 现已将 `TAURI_UPDATER_PUBKEY` 作为与仓库公钥的 fail-closed 相等性断言，
+不再覆盖跟踪值。正式 Windows 构建缺少私钥、口令或公钥任一项时直接失败；
+安装器和更新包在上传前均由项目 `verify_minisign` 对真实字节复验。
 
 ## 7. GitHub 与 CI 现状
 
@@ -177,10 +177,17 @@ GitHub Variable `TAURI_UPDATER_PUBKEY` 已存在并与仓库公钥一致。
 保留的是 Secret 名称；其值必须通过 `https://goclaw.host:8443/v1/models` 七模型预检。若现值不是
 可用的低额度 New API key，只替换该 Secret 的值。本轮不新建 `GO_CLAW_CI_TEST_API_KEY` 或其他测试额度机制。
 
+2026-08-26 已在 New API 创建专用交付令牌 ID 29（名称
+`go-claw-main-v2.1-full`）：非无限额度，只允许本轮七个产品模型。创建前数据库备份为
+`/opt/new-api/data/backups/one-api-before-main-delivery-token-20260826T153608Z.db`，完整性为 `ok`。
+令牌值已直接写入现有 GitHub Secret `GO_CLAW_DASHSCOPE_API_KEY`，未输出到日志；
+实测 `/v1/models` 七模型全部可见。
+
 ### 7.2 产物与发布现状
 
 - 最近一次已检查的 Main Build run `32885959718` 成功，但产物是多个分离 artifact；
-- 当前没有一个已验证的 `GO-CLAW-Windows-x64-Full.zip`；
+- CI 已实现规范 Full ZIP assembler 和真实字节发布校验，但尚未执行本轮新 Main Build，
+  因此当前仍没有一个本轮已验收的 `GO-CLAW-Windows-x64-Full.zip`；
 - GitHub fork 当前没有 Releases；
 - 因此“已经有完整 CI ZIP”目前答案是没有；必须在本轮代码和运维门禁完成后重新执行
   一次签名 Main Build。
@@ -190,16 +197,16 @@ GitHub Actions 下载 artifact 时会额外使用平台包装层；客户文件�
 
 ## 8. 在线更新镜像现状
 
-当前两个检查结果都不满足更新协议：
+2026-08-26 已在 `/etc/nginx/conf.d/newapi-8443.conf` 的 8443 server 中、通配
+`location /` 之前增加 `location ^~ /updates/`，静态根为 `/srv/go-claw-updates`。
+原配置备份为 `/etc/nginx/conf.d/newapi-8443.conf.before-updates-20260826`；
+`nginx -t` 和 reload 均成功。目前只创建了 `/srv/go-claw-updates/releases`，未创建生产
+`updates` 软链，因此公网 `https://goclaw.host:8443/updates/latest.json` 命中该静态
+location 并返回预期 404，不再由 New API 返回应用页面。
 
-- `https://goclaw.host:8443/updates/latest.json` 返回 New API 的 HTML 页面；
-- `https://goclaw.host/updates/latest.json` 返回 404；
-- Nginx 还没有 `/updates/` 静态 location。
-
-由于代码和 Tauri 配置的主镜像 endpoint 是 `https://goclaw.host:8443/updates/latest.json`，
-必须在 `/etc/nginx/conf.d/newapi-8443.conf` 的 8443 server 中、通配 `location /` 之前增加静态
-`/updates/`。完成真实 `latest.json`、签名和安装文件的原子发布后，才允许把
-`goclaw.host` 标记为更新镜像可用。GitHub Release 是回退源，不替代国内镜像验收。
+必须等本轮 Main Build 产出真实 `latest.json`、签名和安装文件，在
+`releases/<version>` 验 SHA-256/签名后，才能原子切换 `updates` 软链。GitHub Release
+是回退源，不替代国内镜像验收。
 
 ## 9. 发布不可变条件
 

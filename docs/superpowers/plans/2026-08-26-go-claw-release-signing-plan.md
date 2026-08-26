@@ -19,7 +19,7 @@
 - Exact code baseline: `ce18d02f`, 2026-08-26. Symbol anchors are normative after line shifts.
 - Implement desktop readiness, customer/model tiers, and media routing plans before running the Main build in Task 9.
 - The locally-custodied key has signed a temporary file that the tracked public key verified through `go_claw_updates.py::verify_minisign`; both local/backup public files and GitHub Variable match. No rotation or generation is authorized in this iteration. CI still proves the unreadable Secret by verifying its real output signature.
-- A workflow invoked by `release.yml`, a signed manual Main build, or a Main branch build may not emit unsigned installer/update assets. Unsigned output is allowed only for an explicitly selected diagnostic `workflow_dispatch` input and is never publishable.
+- `desktop-build.yml` may not emit unsigned installer/update assets. This iteration does not add a second unsigned diagnostic branch.
 - Never print or commit a signing private key/password, API key, provision HMAC secret, enrollment ticket, or complete credential JSON. The only authorized API-key archive is `GO-CLAW-Windows-x64-Full.zip`, produced from the existing masked GitHub Secret for customer delivery; update assets and public Release assets remain credential-free.
 - Before every task commit, run `git add` for each path listed under that task and no unrelated path; every commit command below assumes that explicit staging has succeeded.
 
@@ -69,21 +69,9 @@ These values must be byte-equivalent after trimming ASCII whitespace:
 
 ## 3. Signed-build mode contract
 
-Add `unsigned_test` boolean input to `.github/workflows/desktop-build.yml:21-32`, default `false`, available only on manual dispatch.
-
-`SIGNED_BUILD` is true when either:
-
-- event is `workflow_call`; or
-- event is `workflow_dispatch` and `unsigned_test != true`.
-
-At the first Windows job step, signed mode requires non-empty `TAURI_SIGNING_PRIVATE_KEY`, `TAURI_SIGNING_PRIVATE_KEY_PASSWORD`, and `TAURI_UPDATER_PUBKEY`. It verifies public-key equality before installing build dependencies. Missing/mismatched inputs terminate the job.
-
-Unsigned diagnostic mode:
-
-- artifact names include `UNSIGNED-DIAGNOSTIC`;
-- no `latest.json` is generated;
-- `desktop-publish.yml` rejects those artifact names;
-- it cannot run from `release.yml` because workflow-call mode is always signed.
+The Windows job is always signed. Its first packaging gate requires non-empty
+`TAURI_SIGNING_PRIVATE_KEY`, `TAURI_SIGNING_PRIVATE_KEY_PASSWORD`, and
+`TAURI_UPDATER_PUBKEY`. Public-key mismatch and any missing value terminate the job.
 
 Remove all current warning-and-continue branches at `.github/workflows/desktop-build.yml:188-202,314-326`. Signed mode must require both installer `.sig` and updater `.sig`.
 
@@ -223,7 +211,7 @@ Publishing is unique: `.github/workflows/release.yml:205-210,322-329` builds the
 - Modify: `scripts/pack-tauri/sync_tauri_version.mjs:50-123`
 - Create: `scripts/pack-tauri/sync_tauri_version.test.mjs`
 
-- [ ] Write tests for exact-match success, missing variable failure in signed mode, mismatch failure, tracked-key copy, endpoint behavior, and explicit unsigned diagnostic behavior.
+- [x] Write tests for exact-match success, missing variable failure, mismatch failure, tracked-key copy and endpoint behavior.
 - [ ] Run `node --test scripts/pack-tauri/sync_tauri_version.test.mjs`; expect current override behavior to fail assertions.
 - [ ] Implement `GO_CLAW_SIGNED_BUILD=1` handling and equality checks. Never log the full key; log its SHA-256 fingerprint.
 - [ ] Re-run; expect pass.
@@ -237,7 +225,7 @@ Publishing is unique: `.github/workflows/release.yml:205-210,322-329` builds the
 - Modify: `tests/unit/scripts/test_stage_windows_portable.py`
 
 - [ ] Add failing tests for strict release key requirement, exact key bytes, required structurally valid `credentials.json`, rejected `provision.json`/HMAC/ticket, and no signing private-key material in stage.
-- [ ] Add a `require_updater_key: bool` argument; release/full builds pass true. Preserve false only for unit fixtures/unsigned diagnostics.
+- [x] Release/full staging reads the tracked updater key and fails closed when its source config/key is absent.
 - [ ] Re-run `uv run pytest -q tests/unit/scripts/test_stage_windows_portable.py`; expect pass.
 - [ ] Commit: `git commit -m "fix(packaging): enforce updater key in portable stage"`.
 
@@ -277,7 +265,7 @@ Publishing is unique: `.github/workflows/release.yml:205-210,322-329` builds the
 - Modify: `.github/workflows/desktop-build.yml:13-361`
 - Modify: `scripts/pack-tauri/build_win_pyinstaller.ps1:214-243`
 
-- [ ] Add `unsigned_test`, calculate signed mode, and validate all signing settings before build.
+- [x] Validate every signing setting before build and provide no unsigned branch.
 - [ ] Materialize the existing schema-1 `credentials.json` from `GO_CLAW_DASHSCOPE_API_KEY` exactly as specified by the master plan. Do not materialize `provision.json`, HMAC, enrollment ticket, or any new test key.
 - [ ] Keep installed and portable readiness verification; both must pass before packaging.
 - [ ] Download WebView2 from the exact official redirect, validate Authenticode subject/status, and calculate hash.
@@ -319,7 +307,7 @@ Publishing is unique: `.github/workflows/release.yml:205-210,322-329` builds the
 - [ ] Start exactly one signed Windows Main build:
 
 ```bash
-gh workflow run desktop-build.yml --ref main -f ref=main -f windows_only=true -f unsigned_test=false
+gh workflow run desktop-build.yml --ref main -f ref=main -f windows_only=true
 ```
 
 - [ ] Record run ID and wait for completion. A rerun of failed jobs is acceptable; do not start a parallel second release candidate.
