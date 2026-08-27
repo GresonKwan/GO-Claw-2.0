@@ -184,6 +184,7 @@ fn webview_console_url(port: u16, force_blank: bool) -> String {
 pub(crate) fn open_browser(app: &tauri::AppHandle, port: u16) -> Result<(), String> {
     let portable = app.state::<PortableRuntime>().state().is_some();
     let url = browser_console_url(port, portable);
+    external_link::open_system_url(app, &url)?;
     if force_console_blank_from_env() {
         if let Ok(path) = std::env::var("GO_CLAW_E2E_BROWSER_URL_FILE") {
             if let Err(error) = std::fs::write(&path, &url) {
@@ -191,7 +192,7 @@ pub(crate) fn open_browser(app: &tauri::AppHandle, port: u16) -> Result<(), Stri
             }
         }
     }
-    external_link::open_system_url(app, &url)
+    Ok(())
 }
 
 async fn backend_version_is_ready(port: u16) -> bool {

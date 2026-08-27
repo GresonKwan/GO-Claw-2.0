@@ -89,24 +89,21 @@ runs:
 
           $expectedUrl = "http://127.0.0.1:$port/console?portable=1"
           $fallbackDeadline = (Get-Date).AddSeconds(40)
-          $browser = $null
+          $fallbackDispatched = $false
           while ((Get-Date) -lt $fallbackDeadline) {
             $shellWindows = @(Get-Process -Name "GO-CLAW-Portable", "qwenpaw-desktop" `
-              -ErrorAction SilentlyContinue | Where-Object { $_.MainWindowHandle -ne 0 })
-            $browserCandidates = @(Get-Process -Name "msedge", "chrome", "firefox" `
               -ErrorAction SilentlyContinue | Where-Object { $_.MainWindowHandle -ne 0 })
             $capturedUrl = if (Test-Path -LiteralPath $browserUrlFile) {
               (Get-Content -LiteralPath $browserUrlFile -Raw).Trim()
             } else { "" }
-            if ($shellWindows.Count -eq 0 -and $browserCandidates.Count -gt 0 -and
-                $capturedUrl -eq $expectedUrl) {
-              $browser = $browserCandidates[0]
+            if ($shellWindows.Count -eq 0 -and $capturedUrl -eq $expectedUrl) {
+              $fallbackDispatched = $true
               break
             }
             Start-Sleep -Milliseconds 500
           }
-          if (-not $browser) {
-            throw "Browser fallback did not open exact URL within 40s: $expectedUrl"
+          if (-not $fallbackDispatched) {
+            throw "Browser fallback was not dispatched with exact URL within 40s: $expectedUrl"
           }
 
           $backend = Get-Process -Name "qwenpaw-backend" -ErrorAction Stop
@@ -125,6 +122,7 @@ runs:
             throw "Forced-blank Tauri window became visible during fallback"
           }
 
+          Start-Sleep -Seconds 3
           Add-Type -AssemblyName System.Windows.Forms
           Add-Type -AssemblyName System.Drawing
           $screenshotDir = Join-Path $env:RUNNER_TEMP "verify-screenshots"

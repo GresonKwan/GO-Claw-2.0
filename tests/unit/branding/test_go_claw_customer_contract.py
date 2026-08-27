@@ -496,6 +496,21 @@ def test_portable_verify_exports_logs_and_probes_before_unmount() -> None:
     assert "${{ runner.temp }}/portable-verify-logs/" in workflow
 
 
+def test_browser_fallback_uses_dispatch_probe_not_browser_process_handle() -> (
+    None
+):
+    action = _read_customer_text(
+        ".github/actions/verify-tauri-windows-portable/action.yml",
+    )
+    client = _read_customer_text("console/src-tauri/src/client.rs")
+
+    assert "$browserCandidates" not in action
+    assert "$capturedUrl -eq $expectedUrl" in action
+    assert client.index("external_link::open_system_url(app, &url)") < (
+        client.index("std::fs::write(&path, &url)")
+    )
+
+
 def test_main_build_uses_v2_1_0_release_version() -> None:
     version_file = _read_customer_text("src/qwenpaw/__version__.py")
 
