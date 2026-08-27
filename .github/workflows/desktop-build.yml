@@ -206,8 +206,7 @@ jobs:
         with:
           name: portable-verify-logs-tauri-windows-${{ steps.version.outputs.version }}
           path: |
-            ${{ env.PORTABLE_ROOT }}/logs/
-            ${{ env.PORTABLE_ROOT }}/data/desktop.log
+            ${{ runner.temp }}/portable-verify-logs/
           if-no-files-found: ignore
           retention-days: 7
 

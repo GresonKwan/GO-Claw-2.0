@@ -1,23 +1,67 @@
 # Verify the staged ZIP as a user would: extract, launch, relocate, relaunch.
-# Exports BASE_URL and PORTABLE_ROOT for the following Playwright step.
+# Exports BASE_URL and PORTABLE_ROOT for the following API contract step.
 $ErrorActionPreference = "Stop"
 
-function Wait-CdpReady {
+function Wait-DesktopReady {
     param(
-        [Parameter(Mandatory = $true)][int]$Port,
-        [int]$TimeoutSeconds = 60
+        [Parameter(Mandatory = $true)][string]$Path,
+        [Parameter(Mandatory = $true)][int]$ExpectedPort,
+        [int]$TimeoutSeconds = 120
     )
-    $url = "http://127.0.0.1:$Port"
+    $expectedUrl = "http://127.0.0.1:$ExpectedPort/console"
     $deadline = (Get-Date).AddSeconds($TimeoutSeconds)
     while ((Get-Date) -lt $deadline) {
-        try {
-            $response = Invoke-WebRequest -Uri "$url/json/version" `
-                -UseBasicParsing -TimeoutSec 3 -ErrorAction Stop
-            if ($response.StatusCode -eq 200) { return $url }
-        } catch {}
-        Start-Sleep -Seconds 2
+        if (Test-Path -LiteralPath $Path) {
+            try {
+                $probe = Get-Content -LiteralPath $Path -Raw | ConvertFrom-Json
+                if ($probe.schemaVersion -eq 1 -and
+                    $probe.phase -eq "desktopActive" -and
+                    [int]$probe.backendPort -eq $ExpectedPort -and
+                    $probe.consoleUrl -eq $expectedUrl) {
+                    Write-Host "Native desktop readiness confirmed: $expectedUrl"
+                    return
+                }
+            } catch {}
+        }
+        Start-Sleep -Milliseconds 500
     }
-    throw "Portable embedded WebView2 CDP endpoint did not become available on port $Port"
+    throw "Portable React content did not report native desktop readiness: $Path"
+}
+
+function Save-DesktopScreenshot {
+    param([Parameter(Mandatory = $true)][string]$Name)
+    Add-Type -AssemblyName System.Windows.Forms
+    Add-Type -AssemblyName System.Drawing
+    $screenshotDir = Join-Path $env:RUNNER_TEMP "verify-screenshots"
+    New-Item -ItemType Directory -Force -Path $screenshotDir | Out-Null
+    $bounds = [System.Windows.Forms.Screen]::PrimaryScreen.Bounds
+    $bitmap = New-Object System.Drawing.Bitmap $bounds.Width, $bounds.Height
+    $graphics = [System.Drawing.Graphics]::FromImage($bitmap)
+    try {
+        $graphics.CopyFromScreen($bounds.Location, [System.Drawing.Point]::Empty, $bounds.Size)
+        $screenshot = Join-Path $screenshotDir $Name
+        $bitmap.Save($screenshot, [System.Drawing.Imaging.ImageFormat]::Png)
+        Write-Host "Captured $screenshot"
+    } finally {
+        $graphics.Dispose()
+        $bitmap.Dispose()
+    }
+}
+
+function Export-PortableLogs {
+    param([Parameter(Mandatory = $true)][string]$Root)
+    $destination = Join-Path $env:RUNNER_TEMP "portable-verify-logs"
+    New-Item -ItemType Directory -Force -Path $destination | Out-Null
+    $sourceLogs = Join-Path $Root "logs"
+    if (Test-Path -LiteralPath $sourceLogs) {
+        Copy-Item -LiteralPath $sourceLogs -Destination $destination -Recurse -Force `
+            -ErrorAction SilentlyContinue
+    }
+    $desktopLog = Join-Path $Root "data\desktop.log"
+    if (Test-Path -LiteralPath $desktopLog) {
+        Copy-Item -LiteralPath $desktopLog -Destination $destination -Force `
+            -ErrorAction SilentlyContinue
+    }
 }
 
 function Wait-NewWebView2ProcessesExit {
@@ -162,14 +206,13 @@ subst "${firstLetter}:" $firstBacking
 try {
     $firstRoot = "${firstLetter}:\"
     $firstExe = Join-Path $firstRoot "GO-CLAW-Portable.exe"
-    $firstCdpPort = 9223
-    $env:WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS = "--remote-debugging-port=$firstCdpPort"
-    $env:PORTABLE_ROOT = $firstRoot
-    "PORTABLE_ROOT=$firstRoot" | Out-File $env:GITHUB_ENV -Encoding utf8 -Append
+    $firstReadyFile = Join-Path $env:RUNNER_TEMP "go-claw-portable-first-ready.json"
+    Remove-Item -LiteralPath $firstReadyFile -Force -ErrorAction SilentlyContinue
+    $env:CI = "true"
+    $env:GO_CLAW_E2E_DESKTOP_READY_FILE = $firstReadyFile
     Start-Process -FilePath $firstExe
     $firstPort = Wait-PortableReady $firstRoot
-    $firstCdpUrl = Wait-CdpReady -Port $firstCdpPort
-    Write-Host "First portable WebView CDP ready at $firstCdpUrl"
+    Wait-DesktopReady -Path $firstReadyFile -ExpectedPort $firstPort
     $firstBackend = Get-BackendProcess
 
     # Second double-click must be forwarded to the first shell.
@@ -206,6 +249,7 @@ try {
 
     Copy-Item $firstBacking $secondBacking -Recurse
 } finally {
+    Export-PortableLogs -Root $firstRoot
     subst "${firstLetter}:" /D 2>$null
 }
 Remove-Item $firstBacking -Recurse -Force
@@ -214,10 +258,14 @@ subst "${secondLetter}:" $secondBacking
 try {
     $secondRoot = "${secondLetter}:\"
     $secondExe = Join-Path $secondRoot "GO-CLAW-Portable.exe"
-    $secondCdpPort = 9224
-    $env:WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS = "--remote-debugging-port=$secondCdpPort"
+    $secondReadyFile = Join-Path $env:RUNNER_TEMP "go-claw-portable-second-ready.json"
+    Remove-Item -LiteralPath $secondReadyFile -Force -ErrorAction SilentlyContinue
+    $env:CI = "true"
+    $env:GO_CLAW_E2E_DESKTOP_READY_FILE = $secondReadyFile
     Start-Process -FilePath $secondExe
     $secondPort = Wait-PortableReady $secondRoot
+    Wait-DesktopReady -Path $secondReadyFile -ExpectedPort $secondPort
+    Save-DesktopScreenshot -Name "desktop-content-ready.png"
     Assert-PortableOutputs $secondRoot
 
     $agents = Invoke-RestMethod -Uri "http://127.0.0.1:$secondPort/api/agents" -TimeoutSec 10
@@ -262,13 +310,10 @@ try {
     "BASE_URL=$baseUrl" | Out-File $env:GITHUB_ENV -Encoding utf8 -Append
     "PORTABLE_ROOT=$secondRoot" | Out-File $env:GITHUB_ENV -Encoding utf8 -Append
     "PORTABLE_EXE=$secondExe" | Out-File $env:GITHUB_ENV -Encoding utf8 -Append
-    $cdpUrl = Wait-CdpReady -Port $secondCdpPort
-    $env:CDP_URL = $cdpUrl
-    "CDP_URL=$cdpUrl" | Out-File $env:GITHUB_ENV -Encoding utf8 -Append
     Write-Host "Portable relocation verified at $secondRoot"
     Write-Host "BASE_URL=$baseUrl"
-    Write-Host "CDP_URL=$cdpUrl"
 } catch {
+    Export-PortableLogs -Root $secondRoot
     subst "${secondLetter}:" /D 2>$null
     throw
 }

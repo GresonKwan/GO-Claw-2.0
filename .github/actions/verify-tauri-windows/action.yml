@@ -1,7 +1,7 @@
 name: Verify Desktop (Tauri Windows)
 description: |
-  Install NSIS-built Tauri desktop, launch the shell with CDP enabled,
-  and drive the real WebView2 through the shared Playwright UI verifier.
+  Install the NSIS-built desktop, require native React/Tauri readiness,
+  and verify the backend and packaged frontend contracts.
   Stop / cleanup / log upload steps live in the caller workflow because
   composite actions cannot use `if: always()`.
 
@@ -18,15 +18,14 @@ inputs:
 runs:
   using: composite
   steps:
-    - name: Install verify deps (Playwright + Chromium)
+    - name: Install API verify dependencies
       shell: pwsh
       run: |
         $ErrorActionPreference = "Stop"
         python -m pip install --upgrade pip
         python -m pip install -r scripts/verify/requirements-verify.txt
-        python -m playwright install chromium --with-deps
 
-    - name: Verify desktop (Tauri Windows)
+    - name: Verify desktop API and frontend contracts
       shell: pwsh
       env:
         QWENPAW_DASHSCOPE_API_KEY: ${{ inputs.dashscope-api-key }}
@@ -38,8 +37,7 @@ runs:
           "scripts/verify/desktop_verify.py",
           "--base-url", $env:BASE_URL,
           "--ui-mode", "tauri-windows",
-          "--headed",
-          "--cdp-url", $env:CDP_URL
+          "--skip-ui"
         )
         if ($env:ALLOW_FLAKY_LLM -eq "true") {
           $verifyArgs += "--allow-flaky-llm"

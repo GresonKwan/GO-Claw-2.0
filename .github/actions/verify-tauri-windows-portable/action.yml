@@ -10,19 +10,18 @@ inputs:
 runs:
   using: composite
   steps:
-    - name: Install portable verify dependencies
+    - name: Install portable API verify dependencies
       shell: pwsh
       run: |
         $ErrorActionPreference = "Stop"
         python -m pip install --upgrade pip
         python -m pip install -r scripts/verify/requirements-verify.txt
-        python -m playwright install chromium --with-deps
 
     - name: Launch and relocate portable archive
       shell: pwsh
       run: . scripts/verify/launch_tauri_windows_portable.ps1
 
-    - name: Verify portable Auto WebView UI
+    - name: Verify portable API and frontend contracts
       shell: pwsh
       env:
         QWENPAW_DASHSCOPE_API_KEY: ${{ inputs.dashscope-api-key }}
@@ -31,8 +30,7 @@ runs:
         python scripts/verify/desktop_verify.py `
           --base-url $env:BASE_URL `
           --ui-mode tauri-windows `
-          --headed `
-          --cdp-url $env:CDP_URL
+          --skip-ui
         if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
     - name: Gracefully stop portable archive

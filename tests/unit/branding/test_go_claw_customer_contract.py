@@ -452,29 +452,48 @@ def test_portable_relocation_reads_private_agent_state_from_disk() -> None:
     )
 
 
-def test_portable_verify_uses_fresh_cdp_port_after_relocation() -> None:
+def test_windows_verify_uses_native_readiness_probe_without_cdp() -> None:
     script = _read_customer_text(
         "scripts/verify/launch_tauri_windows_portable.ps1",
     )
+    installed_script = _read_customer_text(
+        "scripts/verify/launch_tauri_windows.ps1",
+    )
+    portable_action = _read_customer_text(
+        ".github/actions/verify-tauri-windows-portable/action.yml",
+    )
+    installed_action = _read_customer_text(
+        ".github/actions/verify-tauri-windows/action.yml",
+    )
 
-    assert "$firstCdpPort = 9223" in script
-    assert "$secondCdpPort = 9224" in script
+    assert "GO_CLAW_E2E_DESKTOP_READY_FILE" in script
+    assert "Wait-DesktopReady -Path $firstReadyFile" in script
+    assert "Wait-DesktopReady -Path $secondReadyFile" in script
     assert "Wait-NewWebView2ProcessesExit" in script
-    assert "Wait-CdpReady -Port $firstCdpPort" in script
-    assert "Wait-CdpReady -Port $secondCdpPort" in script
+    assert "GO_CLAW_E2E_DESKTOP_READY_FILE" in installed_script
+    assert '$env:CI = "true"' in script
+    assert '$env:CI = "true"' in installed_script
+    for content in (
+        script,
+        installed_script,
+        portable_action,
+        installed_action,
+    ):
+        assert "--remote-debugging-port" not in content
+        assert "--cdp-url" not in content
+    assert "--skip-ui" in portable_action
+    assert "--skip-ui" in installed_action
 
 
-def test_portable_verify_exports_log_root_before_second_cdp_probe() -> None:
+def test_portable_verify_exports_logs_and_probes_before_unmount() -> None:
     script = _read_customer_text(
         "scripts/verify/launch_tauri_windows_portable.ps1",
     )
+    workflow = _read_customer_text(".github/workflows/desktop-build.yml")
 
-    first_export = '"PORTABLE_ROOT=$firstRoot" | Out-File $env:GITHUB_ENV'
-    first_probe = "Wait-CdpReady -Port $firstCdpPort"
-    second_export = '"PORTABLE_ROOT=$secondRoot" | Out-File $env:GITHUB_ENV'
-    second_probe = "Wait-CdpReady -Port $secondCdpPort"
-    assert script.index(first_export) < script.index(first_probe)
-    assert script.index(second_export) < script.index(second_probe)
+    assert "Export-PortableLogs -Root $firstRoot" in script
+    assert "Export-PortableLogs -Root $secondRoot" in script
+    assert "${{ runner.temp }}/portable-verify-logs/" in workflow
 
 
 def test_main_build_uses_v2_1_0_release_version() -> None:

@@ -2,6 +2,51 @@
 # Outputs BASE_URL to $env:GITHUB_ENV for subsequent steps.
 $ErrorActionPreference = "Stop"
 
+function Wait-DesktopReady {
+  param(
+    [Parameter(Mandatory = $true)][string]$Path,
+    [Parameter(Mandatory = $true)][int]$ExpectedPort,
+    [int]$TimeoutSeconds = 120
+  )
+  $expectedUrl = "http://127.0.0.1:$ExpectedPort/console"
+  $deadline = (Get-Date).AddSeconds($TimeoutSeconds)
+  while ((Get-Date) -lt $deadline) {
+    if (Test-Path -LiteralPath $Path) {
+      try {
+        $probe = Get-Content -LiteralPath $Path -Raw | ConvertFrom-Json
+        if ($probe.schemaVersion -eq 1 -and
+            $probe.phase -eq "desktopActive" -and
+            [int]$probe.backendPort -eq $ExpectedPort -and
+            $probe.consoleUrl -eq $expectedUrl) {
+          Write-Host "Native desktop readiness confirmed: $expectedUrl"
+          return
+        }
+      } catch {}
+    }
+    Start-Sleep -Milliseconds 500
+  }
+  throw "Installed React content did not report native desktop readiness: $Path"
+}
+
+function Save-DesktopScreenshot {
+  Add-Type -AssemblyName System.Windows.Forms
+  Add-Type -AssemblyName System.Drawing
+  $screenshotDir = Join-Path $env:RUNNER_TEMP "verify-screenshots"
+  New-Item -ItemType Directory -Force -Path $screenshotDir | Out-Null
+  $bounds = [System.Windows.Forms.Screen]::PrimaryScreen.Bounds
+  $bitmap = New-Object System.Drawing.Bitmap $bounds.Width, $bounds.Height
+  $graphics = [System.Drawing.Graphics]::FromImage($bitmap)
+  try {
+    $graphics.CopyFromScreen($bounds.Location, [System.Drawing.Point]::Empty, $bounds.Size)
+    $screenshot = Join-Path $screenshotDir "desktop-content-ready.png"
+    $bitmap.Save($screenshot, [System.Drawing.Imaging.ImageFormat]::Png)
+    Write-Host "Captured $screenshot"
+  } finally {
+    $graphics.Dispose()
+    $bitmap.Dispose()
+  }
+}
+
 # 1. Run NSIS silent install (matches real user installer).
 #    /S = silent, run the installer to completion before continuing.
 $installer = Get-ChildItem dist/QwenPaw-Tauri-*-Windows-setup.exe |
@@ -81,11 +126,11 @@ if ($wv2Files) {
   Write-Host "::warning::WebView2 bootstrapper not found in install dir"
 }
 
-# 3. Launch the full Tauri shell with CDP debugging enabled.
-#    This makes WebView2 expose a Chrome DevTools Protocol port so
-#    Playwright can connect_over_cdp() to the real embedded webview.
-$cdpPort = 9222
-$env:WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS = "--remote-debugging-port=$cdpPort"
+# 3. Launch the full Tauri shell with a CI-only native readiness probe.
+$readyFile = Join-Path $env:RUNNER_TEMP "go-claw-installed-desktop-ready.json"
+Remove-Item -LiteralPath $readyFile -Force -ErrorAction SilentlyContinue
+$env:CI = "true"
+$env:GO_CLAW_E2E_DESKTOP_READY_FILE = $readyFile
 Start-Process -FilePath $tauriExe
 
 # 4. Wait for the sidecar to write the port file and respond.
@@ -120,28 +165,11 @@ if (-not $port) {
 $bootstrapMd = Join-Path $env:USERPROFILE ".qwenpaw\workspaces\default\BOOTSTRAP.md"
 if (Test-Path $bootstrapMd) { Remove-Item -Force $bootstrapMd }
 
-# 6. Wait for CDP endpoint to become available.
-$cdpUrl = "http://127.0.0.1:$cdpPort"
-$cdpReady = $false
-for ($i = 1; $i -le 30; $i++) {
-  try {
-    $r = Invoke-WebRequest -Uri "$cdpUrl/json/version" `
-      -UseBasicParsing -TimeoutSec 3 -ErrorAction Stop
-    if ($r.StatusCode -eq 200) {
-      Write-Host "CDP ready at $cdpUrl"
-      $cdpReady = $true
-      break
-    }
-  } catch { Start-Sleep -Seconds 2 }
-}
-if (-not $cdpReady) {
-  throw "Embedded WebView2 CDP endpoint did not become available"
-}
+# 6. Require the React route to report through real Tauri IPC after paint.
+Wait-DesktopReady -Path $readyFile -ExpectedPort ([int]$port)
+Save-DesktopScreenshot
 
 $baseUrl = "http://127.0.0.1:$port"
 $env:BASE_URL = $baseUrl
-$env:CDP_URL = $cdpUrl
 "BASE_URL=$baseUrl" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
-"CDP_URL=$cdpUrl" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
 Write-Host "BASE_URL=$baseUrl"
-Write-Host "CDP_URL=$cdpUrl"

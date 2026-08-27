@@ -1,6 +1,10 @@
 //! Portable client launch policy after the Python sidecar becomes ready.
 
-use std::{path::PathBuf, sync::Mutex, time::Duration};
+use std::{
+    path::{Path, PathBuf},
+    sync::Mutex,
+    time::Duration,
+};
 
 use serde::Serialize;
 use tauri::{Emitter, Manager};
@@ -16,6 +20,7 @@ use crate::{
 
 const PORTABLE_QUIT_ARG: &str = "--portable-quit";
 const BACKEND_READY_EVENT: &str = "go-claw-client-backend-ready";
+const DESKTOP_READY_PROBE_ENV: &str = "GO_CLAW_E2E_DESKTOP_READY_FILE";
 const BOOTSTRAP_READY_TIMEOUT: Duration = Duration::from_secs(10);
 const CONSOLE_READY_TIMEOUT: Duration = Duration::from_secs(30);
 
@@ -135,6 +140,36 @@ fn force_console_blank_from_env() -> bool {
     let ci = std::env::var("CI").ok();
     let blank = std::env::var("GO_CLAW_E2E_FORCE_CONSOLE_BLANK").ok();
     should_force_console_blank(ci.as_deref(), blank.as_deref())
+}
+
+fn desktop_ready_probe_path(ci: Option<&str>, path: Option<&str>) -> Option<PathBuf> {
+    if !ci.is_some_and(|value| value.eq_ignore_ascii_case("true")) {
+        return None;
+    }
+    path.filter(|value| !value.trim().is_empty())
+        .map(PathBuf::from)
+}
+
+fn write_desktop_ready_probe(
+    path: &Path,
+    snapshot: &ClientReadinessSnapshot,
+) -> Result<(), String> {
+    let payload = serde_json::to_vec_pretty(snapshot).map_err(|error| error.to_string())?;
+    std::fs::write(path, payload).map_err(|error| error.to_string())
+}
+
+fn emit_desktop_ready_probe(snapshot: &ClientReadinessSnapshot) {
+    let ci = std::env::var("CI").ok();
+    let configured = std::env::var(DESKTOP_READY_PROBE_ENV).ok();
+    let Some(path) = desktop_ready_probe_path(ci.as_deref(), configured.as_deref()) else {
+        return;
+    };
+    if let Err(error) = write_desktop_ready_probe(&path, snapshot) {
+        log::warn!(
+            "[desktop-client] cannot write desktop readiness probe {}: {error}",
+            path.display()
+        );
+    }
 }
 
 fn webview_console_url(port: u16, force_blank: bool) -> String {
@@ -538,6 +573,7 @@ pub(crate) fn client_console_ready(
             .desktop_active(launch_id)
             .map_err(serialize_readiness_error)?
     };
+    emit_desktop_ready_probe(&active);
     Ok(active)
 }
 
@@ -648,6 +684,35 @@ mod tests {
             browser_console_url(54321, true),
             "http://127.0.0.1:54321/console?portable=1"
         );
+    }
+
+    #[test]
+    fn desktop_ready_probe_requires_ci_and_a_non_empty_path() {
+        assert_eq!(
+            desktop_ready_probe_path(Some("true"), Some("ready.json")),
+            Some(PathBuf::from("ready.json"))
+        );
+        assert_eq!(desktop_ready_probe_path(None, Some("ready.json")), None);
+        assert_eq!(desktop_ready_probe_path(Some("true"), Some("  ")), None);
+    }
+
+    #[test]
+    fn desktop_ready_probe_serializes_the_native_active_snapshot() {
+        let directory = tempfile::tempdir().unwrap();
+        let path = directory.path().join("desktop-ready.json");
+        let snapshot = ClientReadinessSnapshot {
+            launch_id: 9,
+            phase: ClientPhase::DesktopActive,
+            backend_port: Some(54321),
+            console_url: Some("http://127.0.0.1:54321/console".to_string()),
+            ..ClientReadinessSnapshot::default()
+        };
+
+        write_desktop_ready_probe(&path, &snapshot).unwrap();
+
+        let actual: ClientReadinessSnapshot =
+            serde_json::from_slice(&std::fs::read(path).unwrap()).unwrap();
+        assert_eq!(actual, snapshot);
     }
 
     #[test]
