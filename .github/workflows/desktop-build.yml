@@ -393,6 +393,7 @@ jobs:
           )
 
       - name: Upload single GO CLAW Full ZIP
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: GO-CLAW-Windows-x64-Full-${{ steps.version.outputs.version }}

@@ -239,8 +239,8 @@ def _verify_update_payload(payload: Path) -> None:
     for path in payload.rglob("*"):
         if path.is_symlink():
             raise ValueError("update payload contains a symlink")
-        parts = {part.casefold() for part in path.relative_to(payload).parts}
-        if parts & FORBIDDEN_UPDATE_PARTS:
+        parts = path.relative_to(payload).parts
+        if parts and parts[0].casefold() in FORBIDDEN_UPDATE_PARTS:
             raise ValueError(
                 f"update payload contains forbidden path: {path.name}",
             )

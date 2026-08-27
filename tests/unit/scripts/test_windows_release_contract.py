@@ -160,6 +160,17 @@ def test_verifies_complete_release_contract(tmp_path):
     assert summary["signatureChecks"] == 2
 
 
+def test_allows_runtime_cache_directory_in_update_payload(tmp_path):
+    args = _fixture(tmp_path)
+    runtime_cache = Path(args["update_payload"]) / "binaries/runtime/cache"
+    runtime_cache.mkdir(parents=True)
+    (runtime_cache / "module.bin").write_bytes(b"runtime")
+
+    summary = MODULE.verify_release_contract(**args)
+
+    assert summary["version"] == "2.1.0"
+
+
 @pytest.mark.parametrize("target", ["installer", "update", "full_zip"])
 def test_rejects_tampered_release_bytes(tmp_path, target):
     args = _fixture(tmp_path)
