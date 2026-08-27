@@ -187,10 +187,12 @@ try {
     if (-not $workspaceRebound) {
         throw "Workspace was not rebound to relocated root: $($defaultAgent.workspace_dir)"
     }
-    $agentDetails = Invoke-RestMethod `
-        -Uri "http://127.0.0.1:$secondPort/api/agents/default" -TimeoutSec 10
-    if ($agentDetails.coding_mode.project_dir -ne $externalProject) {
-        throw "External project_dir was incorrectly rebased: $($agentDetails.coding_mode.project_dir)"
+    # The customer agent API intentionally omits private configuration such as
+    # coding_mode. Verify relocation against the copied local profile instead.
+    $relocatedAgentPath = Join-Path $secondRoot "data\workspaces\default\agent.json"
+    $relocatedAgent = Get-Content $relocatedAgentPath -Raw | ConvertFrom-Json
+    if ($relocatedAgent.coding_mode.project_dir -ne $externalProject) {
+        throw "External project_dir was incorrectly rebased: $($relocatedAgent.coding_mode.project_dir)"
     }
 
     if (-not $profileExistedBefore -and (Test-Path $profileData)) {

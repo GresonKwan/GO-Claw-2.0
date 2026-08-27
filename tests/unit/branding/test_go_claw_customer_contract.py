@@ -438,6 +438,26 @@ def test_direct_packaging_consumers_use_current_artifact_tokens() -> None:
     )
 
 
+def test_portable_relocation_reads_private_agent_state_from_disk() -> None:
+    script = _read_customer_text(
+        "scripts/verify/launch_tauri_windows_portable.ps1",
+    )
+
+    assert (
+        'Join-Path $secondRoot "data\\workspaces\\default\\agent.json"'
+        in script
+    )
+    assert (
+        'Uri "http://127.0.0.1:$secondPort/api/agents/default"' not in script
+    )
+
+
+def test_main_build_uses_v2_1_0_release_version() -> None:
+    version_file = _read_customer_text("src/qwenpaw/__version__.py")
+
+    assert '__version__ = "2.1.0"' in version_file
+
+
 def test_zh_locale_does_not_contain_legacy_smart_agent_term() -> None:
     zh_locale_text = _read_customer_text(ZH_LOCALE_PATH)
     offenders = _matching_lines(ZH_LOCALE_PATH, re.compile(r"智能体"))
