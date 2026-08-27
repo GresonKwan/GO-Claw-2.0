@@ -504,6 +504,7 @@ def test_main_build_does_not_gate_on_runner_browser_observation() -> None:
 
     assert "$browserCandidates" not in action
     assert "Verify browser mode fallback dispatch" not in action
+    assert "uses: ./.github/actions/verify-tauri-windows\n" not in workflow
     assert 'foreach ($name in @("desktop-content-ready.png"))' in workflow
     assert "desktop-browser-fallback.png" not in workflow
 

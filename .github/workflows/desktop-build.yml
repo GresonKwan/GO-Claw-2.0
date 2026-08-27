@@ -226,41 +226,6 @@ jobs:
           subst U: /D 2>$null
           exit 0
 
-      - name: Verify desktop (Tauri Windows)
-        timeout-minutes: 10
-        uses: ./.github/actions/verify-tauri-windows
-        with:
-          dashscope-api-key: ${{ secrets.QWENPAW_DASHSCOPE_API_KEY }}
-
-      - name: Stop desktop server (Tauri Windows)
-        if: always()
-        shell: pwsh
-        run: |
-          $ErrorActionPreference = "Continue"
-          # Kill the Tauri shell and its sidecar subprocess by name.
-          Get-Process -Name "qwenpaw-desktop" -ErrorAction SilentlyContinue |
-            Stop-Process -Force -ErrorAction SilentlyContinue
-          Get-Process -Name "qwenpaw-backend" -ErrorAction SilentlyContinue |
-            Stop-Process -Force -ErrorAction SilentlyContinue
-          Start-Sleep -Seconds 2
-          Get-Process -Name "qwenpaw-desktop" -ErrorAction SilentlyContinue |
-            Stop-Process -Force -ErrorAction SilentlyContinue
-          Get-Process -Name "qwenpaw-backend" -ErrorAction SilentlyContinue |
-            Stop-Process -Force -ErrorAction SilentlyContinue
-          exit 0
-
-      - name: Upload desktop verify logs (Tauri Windows)
-        if: failure()
-        uses: actions/upload-artifact@v4
-        with:
-          name: desktop-verify-logs-tauri-windows-${{ steps.version.outputs.version }}
-          path: |
-            ${{ runner.temp }}/qwenpaw-desktop-stdout.log
-            ${{ runner.temp }}/qwenpaw-desktop-stderr.log
-            ~/AppData/Local/com.qwenpaw.desktop/logs/
-          if-no-files-found: ignore
-          retention-days: 7
-
       - name: Require desktop readiness evidence (Tauri Windows)
         if: always()
         shell: pwsh
