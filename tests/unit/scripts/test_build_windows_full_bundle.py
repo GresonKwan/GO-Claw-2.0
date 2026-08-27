@@ -154,6 +154,24 @@ def test_repeated_build_is_byte_stable_with_fixed_epoch(tmp_path, monkeypatch):
     assert first == second
 
 
+def test_allows_runtime_modules_with_security_terms_in_their_names(tmp_path):
+    args = _fixture(tmp_path)
+    runtime_lib = (
+        Path(args["portable_stage"]) / "binaries/python-runtime/python/Lib"
+    )
+    runtime_lib.mkdir(parents=True)
+    (runtime_lib / "hmac.py").write_text("# Python standard library\n")
+
+    output = MODULE.build_full_bundle(**args)
+
+    root = "GO-CLAW-Windows-x64-Full-2.1.0"
+    with zipfile.ZipFile(output) as archive:
+        assert (
+            f"{root}/Portable/binaries/python-runtime/python/Lib/hmac.py"
+            in archive.namelist()
+        )
+
+
 @pytest.mark.parametrize(
     "forbidden",
     [

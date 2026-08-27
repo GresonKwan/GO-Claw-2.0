@@ -76,6 +76,9 @@ def _validate_portable_tree(portable: Path) -> None:
                 f"portable stage contains symlink: {path.relative_to(portable)}",
             )
         relative = path.relative_to(portable).as_posix()
+        relative_parts = path.relative_to(portable).parts
+        if relative_parts and relative_parts[0].casefold() == "binaries":
+            continue
         folded = relative.casefold()
         forbidden = (
             "provision" in folded
