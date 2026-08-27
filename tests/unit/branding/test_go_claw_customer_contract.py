@@ -496,22 +496,16 @@ def test_portable_verify_exports_logs_and_probes_before_unmount() -> None:
     assert "${{ runner.temp }}/portable-verify-logs/" in workflow
 
 
-def test_browser_fallback_uses_dispatch_probe_not_browser_process_handle() -> (
-    None
-):
+def test_main_build_does_not_gate_on_runner_browser_observation() -> None:
     action = _read_customer_text(
         ".github/actions/verify-tauri-windows-portable/action.yml",
     )
-    client = _read_customer_text("console/src-tauri/src/client.rs")
+    workflow = _read_customer_text(".github/workflows/desktop-build.yml")
 
     assert "$browserCandidates" not in action
-    assert '$manifest.clientMode = "browser"' in action
-    assert "GO_CLAW_E2E_FORCE_CONSOLE_BLANK" not in action
-    assert "$capturedUrl -eq $expectedUrl" in action
-    assert "if force_console_blank_from_env() {" not in client
-    assert client.index("external_link::open_system_url(app, &url)") < (
-        client.index("std::fs::write(&path, &url)")
-    )
+    assert "Verify browser mode fallback dispatch" not in action
+    assert 'foreach ($name in @("desktop-content-ready.png"))' in workflow
+    assert "desktop-browser-fallback.png" not in workflow
 
 
 def test_main_build_uses_v2_1_0_release_version() -> None:
