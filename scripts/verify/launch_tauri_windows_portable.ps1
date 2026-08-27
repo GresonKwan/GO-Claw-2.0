@@ -1,8 +1,45 @@
 # Verify the staged ZIP as a user would: extract, launch, relocate, relaunch.
 # Exports BASE_URL and PORTABLE_ROOT for the following Playwright step.
 $ErrorActionPreference = "Stop"
-$cdpPort = 9223
-$env:WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS = "--remote-debugging-port=$cdpPort"
+
+function Wait-CdpReady {
+    param(
+        [Parameter(Mandatory = $true)][int]$Port,
+        [int]$TimeoutSeconds = 60
+    )
+    $url = "http://127.0.0.1:$Port"
+    $deadline = (Get-Date).AddSeconds($TimeoutSeconds)
+    while ((Get-Date) -lt $deadline) {
+        try {
+            $response = Invoke-WebRequest -Uri "$url/json/version" `
+                -UseBasicParsing -TimeoutSec 3 -ErrorAction Stop
+            if ($response.StatusCode -eq 200) { return $url }
+        } catch {}
+        Start-Sleep -Seconds 2
+    }
+    throw "Portable embedded WebView2 CDP endpoint did not become available on port $Port"
+}
+
+function Wait-NewWebView2ProcessesExit {
+    param(
+        [int[]]$BaselinePids = @(),
+        [int]$TimeoutSeconds = 30
+    )
+    $deadline = (Get-Date).AddSeconds($TimeoutSeconds)
+    while ((Get-Date) -lt $deadline) {
+        $remaining = @(Get-Process -Name "msedgewebview2" `
+            -ErrorAction SilentlyContinue | Where-Object {
+                $BaselinePids -notcontains $_.Id
+            })
+        if ($remaining.Count -eq 0) { return }
+        Start-Sleep -Milliseconds 500
+    }
+    $remainingPids = @(Get-Process -Name "msedgewebview2" `
+        -ErrorAction SilentlyContinue | Where-Object {
+            $BaselinePids -notcontains $_.Id
+        } | ForEach-Object { $_.Id })
+    throw "Portable WebView2 processes did not exit after shell shutdown: $($remainingPids -join ',')"
+}
 
 function Wait-PortableReady {
     param(
@@ -102,6 +139,8 @@ $installedLocalData = Join-Path $env:LOCALAPPDATA "io.agentscope.qwenpaw.desktop
 $profileExistedBefore = Test-Path $profileData
 $portableLocalExistedBefore = Test-Path $portableLocalData
 $installedLocalExistedBefore = Test-Path $installedLocalData
+$baselineWebViewPids = @(Get-Process -Name "msedgewebview2" `
+    -ErrorAction SilentlyContinue | ForEach-Object { $_.Id })
 
 $testBase = Join-Path $env:RUNNER_TEMP "qwenpaw-portable-verify"
 if (Test-Path $testBase) { Remove-Item -Recurse -Force $testBase }
@@ -123,8 +162,14 @@ subst "${firstLetter}:" $firstBacking
 try {
     $firstRoot = "${firstLetter}:\"
     $firstExe = Join-Path $firstRoot "GO-CLAW-Portable.exe"
+    $firstCdpPort = 9223
+    $env:WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS = "--remote-debugging-port=$firstCdpPort"
+    $env:PORTABLE_ROOT = $firstRoot
+    "PORTABLE_ROOT=$firstRoot" | Out-File $env:GITHUB_ENV -Encoding utf8 -Append
     Start-Process -FilePath $firstExe
     $firstPort = Wait-PortableReady $firstRoot
+    $firstCdpUrl = Wait-CdpReady -Port $firstCdpPort
+    Write-Host "First portable WebView CDP ready at $firstCdpUrl"
     $firstBackend = Get-BackendProcess
 
     # Second double-click must be forwarded to the first shell.
@@ -144,6 +189,9 @@ try {
     Assert-PortableOutputs $firstRoot
 
     Stop-PortableGracefully $firstExe
+    # Microsoft documents that WebView2 browser processes can outlive the host
+    # briefly. Do not copy its user-data folder until that session has ended.
+    Wait-NewWebView2ProcessesExit -BaselinePids $baselineWebViewPids
 
     # Pin an external project path into agent.json; relocation must preserve it.
     $externalProject = Join-Path $env:RUNNER_TEMP "external-project-keep"
@@ -166,6 +214,8 @@ subst "${secondLetter}:" $secondBacking
 try {
     $secondRoot = "${secondLetter}:\"
     $secondExe = Join-Path $secondRoot "GO-CLAW-Portable.exe"
+    $secondCdpPort = 9224
+    $env:WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS = "--remote-debugging-port=$secondCdpPort"
     Start-Process -FilePath $secondExe
     $secondPort = Wait-PortableReady $secondRoot
     Assert-PortableOutputs $secondRoot
@@ -209,25 +259,11 @@ try {
     $env:BASE_URL = $baseUrl
     $env:PORTABLE_ROOT = $secondRoot
     $env:PORTABLE_EXE = $secondExe
-    $cdpUrl = "http://127.0.0.1:$cdpPort"
-    $cdpReady = $false
-    for ($i = 1; $i -le 30; $i++) {
-        try {
-            $response = Invoke-WebRequest -Uri "$cdpUrl/json/version" `
-                -UseBasicParsing -TimeoutSec 3 -ErrorAction Stop
-            if ($response.StatusCode -eq 200) {
-                $cdpReady = $true
-                break
-            }
-        } catch { Start-Sleep -Seconds 2 }
-    }
-    if (-not $cdpReady) {
-        throw "Portable embedded WebView2 CDP endpoint did not become available"
-    }
-    $env:CDP_URL = $cdpUrl
     "BASE_URL=$baseUrl" | Out-File $env:GITHUB_ENV -Encoding utf8 -Append
     "PORTABLE_ROOT=$secondRoot" | Out-File $env:GITHUB_ENV -Encoding utf8 -Append
     "PORTABLE_EXE=$secondExe" | Out-File $env:GITHUB_ENV -Encoding utf8 -Append
+    $cdpUrl = Wait-CdpReady -Port $secondCdpPort
+    $env:CDP_URL = $cdpUrl
     "CDP_URL=$cdpUrl" | Out-File $env:GITHUB_ENV -Encoding utf8 -Append
     Write-Host "Portable relocation verified at $secondRoot"
     Write-Host "BASE_URL=$baseUrl"

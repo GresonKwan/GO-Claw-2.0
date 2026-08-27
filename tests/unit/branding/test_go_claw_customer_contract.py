@@ -452,6 +452,31 @@ def test_portable_relocation_reads_private_agent_state_from_disk() -> None:
     )
 
 
+def test_portable_verify_uses_fresh_cdp_port_after_relocation() -> None:
+    script = _read_customer_text(
+        "scripts/verify/launch_tauri_windows_portable.ps1",
+    )
+
+    assert "$firstCdpPort = 9223" in script
+    assert "$secondCdpPort = 9224" in script
+    assert "Wait-NewWebView2ProcessesExit" in script
+    assert "Wait-CdpReady -Port $firstCdpPort" in script
+    assert "Wait-CdpReady -Port $secondCdpPort" in script
+
+
+def test_portable_verify_exports_log_root_before_second_cdp_probe() -> None:
+    script = _read_customer_text(
+        "scripts/verify/launch_tauri_windows_portable.ps1",
+    )
+
+    first_export = '"PORTABLE_ROOT=$firstRoot" | Out-File $env:GITHUB_ENV'
+    first_probe = "Wait-CdpReady -Port $firstCdpPort"
+    second_export = '"PORTABLE_ROOT=$secondRoot" | Out-File $env:GITHUB_ENV'
+    second_probe = "Wait-CdpReady -Port $secondCdpPort"
+    assert script.index(first_export) < script.index(first_probe)
+    assert script.index(second_export) < script.index(second_probe)
+
+
 def test_main_build_uses_v2_1_0_release_version() -> None:
     version_file = _read_customer_text("src/qwenpaw/__version__.py")
 
