@@ -34,6 +34,7 @@ def _write_full_zip(path: Path, pubkey_text: str) -> None:
         "START-HERE.zh-CN.txt": b"start",
         "Portable/GO-CLAW-Portable.exe": b"portable",
         "Portable/binaries/node.exe": b"node",
+        "Portable/binaries/python-runtime/python/Lib/hmac.py": b"stdlib",
         "Portable/GO-CLAW-Config/credentials.example.json": b"{}",
         "Portable/GO-CLAW-Config/update-pubkey.txt": (
             pubkey_text + "\n"

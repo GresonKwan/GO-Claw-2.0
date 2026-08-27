@@ -135,6 +135,13 @@ def _verify_full_zip(full_zip: Path, pubkey: str) -> dict[str, object]:
             f"Full ZIP is missing required files: {sorted(missing)}",
         )
     for relative in relative_data:
+        parts = PurePosixPath(relative).parts
+        if (
+            len(parts) >= 2
+            and parts[0].casefold() == "portable"
+            and parts[1].casefold() == "binaries"
+        ):
+            continue
         folded = relative.casefold()
         if (
             "provision" in folded

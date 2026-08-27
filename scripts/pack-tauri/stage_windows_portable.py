@@ -203,6 +203,7 @@ def stage_portable(
         (credentials_dir / "update-pubkey.txt").write_text(
             pubkey + "\n",
             encoding="ascii",
+            newline="\n",
         )
     (stage_dir / "portable.json").write_text(
         json.dumps(
