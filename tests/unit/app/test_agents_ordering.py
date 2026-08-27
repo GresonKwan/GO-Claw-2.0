@@ -250,6 +250,11 @@ async def test_create_agent_appends_new_id_to_order(monkeypatch, tmp_path):
     )
 
     monkeypatch.setattr(agents_router, "load_config", lambda: config)
+    monkeypatch.setattr(
+        agents_router,
+        "read_routing_state",
+        lambda: SimpleNamespace(provider_id="test-private-relay"),
+    )
     monkeypatch.setattr(agents_router, "save_config", lambda updated: None)
     monkeypatch.setattr(
         agents_router,

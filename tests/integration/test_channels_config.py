@@ -13,14 +13,13 @@ def test_agent_scoped_channels_put_get_roundtrip(app_server) -> None:
       readback for the selected channel switch.
 
     Test flow:
-    1. Create a dedicated test agent and read full profile channels payload.
+    1. Create a dedicated test agent and read its scoped channels payload.
     2. PUT /api/agents/{agentId}/config/channels with toggled console enabled.
     3. GET /api/agents/{agentId}/config/channels and assert value changed.
     4. Restore baseline payload and delete test agent.
 
     API endpoints:
     - POST /api/agents
-    - GET /api/agents/{agentId}
     - PUT /api/agents/{agentId}/config/channels
     - GET /api/agents/{agentId}/config/channels
     - DELETE /api/agents/{agentId}
@@ -41,9 +40,9 @@ def test_agent_scoped_channels_put_get_roundtrip(app_server) -> None:
 
     original_channels = None
     try:
-        get_agent = app_server.api_request("GET", f"/api/agents/{agent_id}")
-        assert get_agent.status_code == 200, app_server.logs_tail()
-        original_channels = get_agent.json().get("channels")
+        get_channels = app_server.api_request("GET", channels_endpoint)
+        assert get_channels.status_code == 200, app_server.logs_tail()
+        original_channels = get_channels.json()
         assert isinstance(original_channels, dict), app_server.logs_tail()
         assert "console" in original_channels, app_server.logs_tail()
 
@@ -169,24 +168,17 @@ def test_global_channels_put_get_roundtrip(app_server) -> None:
       the updated value can be observed from list/get APIs.
 
     Test flow:
-    1. GET /api/agents/default and extract ``channels`` as a valid PUT payload.
-    2. GET /api/config/channels and keep current state for later comparison.
+    1. GET /api/config/channels and keep the full current payload.
     3. Flip ``console.enabled`` in the payload and PUT /api/config/channels.
     4. GET /api/config/channels and GET /api/config/channels/console to verify
        the changed value is reflected.
     5. PUT original channels payload back, then verify restoration.
 
     API endpoints:
-    - GET /api/agents/default
     - GET /api/config/channels
     - PUT /api/config/channels
     - GET /api/config/channels/console
     """
-    get_agent = app_server.api_request("GET", "/api/agents/default")
-    assert get_agent.status_code == 200, app_server.logs_tail()
-    original_channels = get_agent.json().get("channels")
-    assert isinstance(original_channels, dict), app_server.logs_tail()
-
     list_before = app_server.api_request("GET", "/api/config/channels")
     assert list_before.status_code == 200, app_server.logs_tail()
     before = list_before.json()
@@ -194,6 +186,7 @@ def test_global_channels_put_get_roundtrip(app_server) -> None:
     assert "console" in before
     assert isinstance(before["console"], dict)
     assert "enabled" in before["console"]
+    original_channels = before
 
     updated_channels = dict(original_channels)
     console_cfg = dict(updated_channels.get("console") or {})

@@ -320,6 +320,21 @@ def app_server(  # pylint: disable=too-many-statements,too-many-branches
     working_dir.mkdir(parents=True, exist_ok=True)
     secret_dir.mkdir(parents=True, exist_ok=True)
     backups_dir.mkdir(parents=True, exist_ok=True)
+    # Employee creation is fail-closed until GO CLAW has selected its private
+    # provider route. Integration tests intentionally carry no API secrets, so
+    # seed only the non-secret routing identity required by that product
+    # contract; individual tests remain isolated from real provider state.
+    (working_dir / ".go-claw-product-routing.json").write_text(
+        json.dumps(
+            {
+                "schemaVersion": 1,
+                "providerId": "integration-private-relay",
+                "updatedAt": "2026-08-26T00:00:00Z",
+            },
+        )
+        + "\n",
+        encoding="utf-8",
+    )
 
     env = os.environ.copy()
     for key in _SENSITIVE_ENV_VARS:

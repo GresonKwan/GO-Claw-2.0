@@ -8,16 +8,14 @@ import pytest
 from qwenpaw.agents.go_claw_presets import PRESET_ORDER
 from tests.integration.helpers import wait_for_agent_startup
 
-_AGENT_PROFILE_TOP_LEVEL_KEYS = (
-    "channels",
-    "mcp",
-    "heartbeat",
-    "running",
-    "llm_routing",
-    "system_prompt_files",
-    "tools",
-    "plan",
-)
+_CUSTOMER_AGENT_PROFILE_KEYS = {
+    "id",
+    "name",
+    "description",
+    "workspace_dir",
+    "approval_level",
+    "model_tier",
+}
 
 
 @pytest.mark.integration
@@ -26,14 +24,15 @@ def test_api_agents_list_create_get_delete(app_server) -> None:
     """Test purpose:
     - Verify the primary Agents management flow works end-to-end: list system
       agents, create one, read details, delete it, and confirm removal.
-    - Verify a newly created agent includes required top-level config groups.
+    - Verify the customer profile exposes only editable employee fields and
+      tier-only model metadata.
 
     Test flow:
     1. GET /api/agents; confirm list contains the GO CLAW preset digital
        employees (default + specialists; the upstream QA agent is not
        bundled in GO CLAW).
     2. POST /api/agents to create a test agent.
-    3. GET /api/agents/{agentId} and validate name plus key config groups.
+    3. GET /api/agents/{agentId} and validate the sanitized customer contract.
     4. DELETE /api/agents/{agentId}.
     5. GET /api/agents/{agentId} again and assert 404.
 
@@ -80,13 +79,8 @@ def test_api_agents_list_create_get_delete(app_server) -> None:
         profile = get_resp.json()
         assert profile["id"] == agent_id
         assert profile["name"] == "Integration smoke agent"
-        missing_keys = [
-            k for k in _AGENT_PROFILE_TOP_LEVEL_KEYS if k not in profile
-        ]
-        assert not missing_keys, (
-            f"agent profile missing top-level keys {missing_keys}; "
-            f"have {sorted(profile.keys())}"
-        )
+        assert set(profile) == _CUSTOMER_AGENT_PROFILE_KEYS
+        assert profile["model_tier"] == "economy"
     finally:
         del_resp = app_server.api_request("DELETE", f"/api/agents/{agent_id}")
         assert del_resp.status_code == 200, app_server.logs_tail()
@@ -100,12 +94,13 @@ def test_api_agents_list_create_get_delete(app_server) -> None:
 @pytest.mark.p0
 def test_api_agents_update_and_readback(app_server) -> None:
     """Test purpose:
-    - Verify full agent updates (PUT) take effect and can be read back via GET.
+    - Verify customer-editable agent updates (PUT) take effect and can be read
+      back via GET without exposing internal configuration.
 
     Test flow:
     1. POST /api/agents to create a test agent.
-    2. GET /api/agents/{agentId} to obtain a complete profile payload.
-    3. Update name/description/system_prompt_files and PUT it back.
+    2. GET /api/agents/{agentId} to obtain the customer profile payload.
+    3. Update name/description/approval_level and PUT it back.
     4. GET /api/agents/{agentId} again and verify updated fields.
     5. DELETE /api/agents/{agentId} for cleanup.
 
@@ -118,7 +113,7 @@ def test_api_agents_update_and_readback(app_server) -> None:
     agent_id = "integ_agents_upd_01"
     updated_name = "Integration smoke agent updated"
     updated_desc = "updated by integration test"
-    updated_prompt_files = ["AGENTS.md", "PROFILE.md", "SOUL.md"]
+    updated_approval_level = "CONFIRM"
 
     create_resp = app_server.api_request(
         "POST",
@@ -139,7 +134,7 @@ def test_api_agents_update_and_readback(app_server) -> None:
 
         profile["name"] = updated_name
         profile["description"] = updated_desc
-        profile["system_prompt_files"] = updated_prompt_files
+        profile["approval_level"] = updated_approval_level
 
         put_resp = app_server.api_request(
             "PUT",
@@ -151,14 +146,16 @@ def test_api_agents_update_and_readback(app_server) -> None:
         assert put_payload["id"] == agent_id
         assert put_payload["name"] == updated_name
         assert put_payload["description"] == updated_desc
-        assert put_payload["system_prompt_files"] == updated_prompt_files
+        assert put_payload["approval_level"] == updated_approval_level
+        assert set(put_payload) == _CUSTOMER_AGENT_PROFILE_KEYS
 
         get_after = app_server.api_request("GET", f"/api/agents/{agent_id}")
         assert get_after.status_code == 200, app_server.logs_tail()
         after_payload = get_after.json()
         assert after_payload["name"] == updated_name
         assert after_payload["description"] == updated_desc
-        assert after_payload["system_prompt_files"] == updated_prompt_files
+        assert after_payload["approval_level"] == updated_approval_level
+        assert set(after_payload) == _CUSTOMER_AGENT_PROFILE_KEYS
     finally:
         app_server.api_request("DELETE", f"/api/agents/{agent_id}")
 

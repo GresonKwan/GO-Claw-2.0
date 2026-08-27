@@ -430,7 +430,8 @@ def test_provider_plugin_actually_serves_llm_call(app_server) -> None:
     3. PUT /api/models/{prov-id}/config to redirect base_url to mock URL,
        set api_key.
     4. POST /api/models/{prov-id}/models to add a "mock-model" entry.
-    5. PUT /api/models/active to set the plugin provider as active.
+    5. PUT /api/models/active to select the plugin provider for the default
+       employee that executes the cron job.
     6. Trigger an agent-type cron run.
     7. Assert mock server's request_count > 0 (LLM was actually called)
        and history status == success.
@@ -493,14 +494,16 @@ def test_provider_plugin_actually_serves_llm_call(app_server) -> None:
         )
         assert add_model_resp.status_code in {200, 201}, app_server.logs_tail()
 
-        # Set active.
+        # Select the provider for the employee that executes the cron. Global
+        # selection must not override an employee-specific model choice.
         active_resp = app_server.api_request(
             "PUT",
             "/api/models/active",
             json={
                 "provider_id": prov_id,
                 "model": "mock-model",
-                "scope": "global",
+                "scope": "agent",
+                "agent_id": "default",
             },
             timeout=PLUGIN_HTTP_TIMEOUT,
         )

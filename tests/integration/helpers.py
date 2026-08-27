@@ -692,6 +692,32 @@ def register_mock_provider(app_server, mock_url: str) -> str:
         },
         timeout=_HTTP_TIMEOUT,
     )
+    # GO CLAW keeps model selection per employee. Keep the integration-only
+    # product route and default employee aligned with the registered mock;
+    # changing only the legacy global model no longer overrides employees.
+    (app_server.working_dir / ".go-claw-product-routing.json").write_text(
+        json.dumps(
+            {
+                "schemaVersion": 1,
+                "providerId": MOCK_LLM_PROVIDER_ID,
+                "updatedAt": "2026-08-26T00:00:00Z",
+            },
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    agent_model = app_server.api_request(
+        "PUT",
+        "/api/models/active",
+        json={
+            "provider_id": MOCK_LLM_PROVIDER_ID,
+            "model": "mock-model",
+            "scope": "agent",
+            "agent_id": "default",
+        },
+        timeout=_HTTP_TIMEOUT,
+    )
+    assert agent_model.status_code == 200, app_server.logs_tail()
     return MOCK_LLM_PROVIDER_ID
 
 
