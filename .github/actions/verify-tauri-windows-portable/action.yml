@@ -49,15 +49,20 @@ runs:
         }
         throw "Portable shell/backend did not exit gracefully after UI verification"
 
-    - name: Verify forced blank WebView browser fallback
+    - name: Verify browser mode fallback dispatch
       shell: pwsh
       env:
         CI: "true"
-        GO_CLAW_E2E_FORCE_CONSOLE_BLANK: "1"
       run: |
         $ErrorActionPreference = "Stop"
         $portFile = Join-Path $env:PORTABLE_ROOT "data\desktop_port"
         $browserUrlFile = Join-Path $env:RUNNER_TEMP "go-claw-browser-fallback-url.txt"
+        $manifestPath = Join-Path $env:PORTABLE_ROOT "portable.json"
+        $manifest = Get-Content -LiteralPath $manifestPath -Raw | ConvertFrom-Json
+        $originalClientMode = $manifest.clientMode
+        $manifest.clientMode = "browser"
+        $manifest | ConvertTo-Json -Depth 10 | Set-Content `
+          -LiteralPath $manifestPath -Encoding utf8
         $env:GO_CLAW_E2E_BROWSER_URL_FILE = $browserUrlFile
         Remove-Item -LiteralPath $portFile -Force -ErrorAction SilentlyContinue
         Remove-Item -LiteralPath $browserUrlFile -Force -ErrorAction SilentlyContinue
@@ -85,14 +90,10 @@ runs:
             }
             Start-Sleep -Milliseconds 500
           }
-          if (-not $port) { throw "Forced-blank backend did not become ready" }
+          if (-not $port) { throw "Browser-mode backend did not become ready" }
 
           $expectedUrl = "http://127.0.0.1:$port/console?portable=1"
-          # The product contract allows a 10s bootstrap watchdog followed by
-          # the 30s console watchdog. Leave Windows cold-start/scheduler margin
-          # around that full sequence; this changes CI patience only, not the
-          # customer-visible fallback thresholds in Rust.
-          $fallbackDeadline = (Get-Date).AddSeconds(70)
+          $fallbackDeadline = (Get-Date).AddSeconds(40)
           $fallbackDispatched = $false
           while ((Get-Date) -lt $fallbackDeadline) {
             $shellWindows = @(Get-Process -Name "GO-CLAW-Portable", "qwenpaw-desktop" `
@@ -107,7 +108,7 @@ runs:
             Start-Sleep -Milliseconds 500
           }
           if (-not $fallbackDispatched) {
-            throw "Browser fallback was not dispatched with exact URL within 70s: $expectedUrl"
+            throw "Browser fallback was not dispatched with exact URL within 40s: $expectedUrl"
           }
 
           $backend = Get-Process -Name "qwenpaw-backend" -ErrorAction Stop
@@ -123,7 +124,7 @@ runs:
           $visibleShell = @(Get-Process -Name "GO-CLAW-Portable", "qwenpaw-desktop" `
             -ErrorAction SilentlyContinue | Where-Object { $_.MainWindowHandle -ne 0 })
           if ($visibleShell.Count -gt 0) {
-            throw "Forced-blank Tauri window became visible during fallback"
+            throw "Browser-mode Tauri window became visible during fallback"
           }
 
           Start-Sleep -Seconds 3
@@ -145,4 +146,7 @@ runs:
           $control = Start-Process -FilePath $env:PORTABLE_EXE `
             -ArgumentList "--portable-quit" -PassThru -ErrorAction SilentlyContinue
           if ($control) { $control.WaitForExit(10000) | Out-Null }
+          $manifest.clientMode = $originalClientMode
+          $manifest | ConvertTo-Json -Depth 10 | Set-Content `
+            -LiteralPath $manifestPath -Encoding utf8
         }

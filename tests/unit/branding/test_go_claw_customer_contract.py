@@ -505,7 +505,10 @@ def test_browser_fallback_uses_dispatch_probe_not_browser_process_handle() -> (
     client = _read_customer_text("console/src-tauri/src/client.rs")
 
     assert "$browserCandidates" not in action
+    assert '$manifest.clientMode = "browser"' in action
+    assert "GO_CLAW_E2E_FORCE_CONSOLE_BLANK" not in action
     assert "$capturedUrl -eq $expectedUrl" in action
+    assert "if force_console_blank_from_env() {" not in client
     assert client.index("external_link::open_system_url(app, &url)") < (
         client.index("std::fs::write(&path, &url)")
     )

@@ -185,7 +185,10 @@ pub(crate) fn open_browser(app: &tauri::AppHandle, port: u16) -> Result<(), Stri
     let portable = app.state::<PortableRuntime>().state().is_some();
     let url = browser_console_url(port, portable);
     external_link::open_system_url(app, &url)?;
-    if force_console_blank_from_env() {
+    if std::env::var("CI")
+        .ok()
+        .is_some_and(|value| value.eq_ignore_ascii_case("true"))
+    {
         if let Ok(path) = std::env::var("GO_CLAW_E2E_BROWSER_URL_FILE") {
             if let Err(error) = std::fs::write(&path, &url) {
                 log::warn!("[desktop-client] cannot write browser URL probe {path}: {error}");
