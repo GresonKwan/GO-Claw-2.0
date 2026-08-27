@@ -88,7 +88,11 @@ runs:
           if (-not $port) { throw "Forced-blank backend did not become ready" }
 
           $expectedUrl = "http://127.0.0.1:$port/console?portable=1"
-          $fallbackDeadline = (Get-Date).AddSeconds(40)
+          # The product contract allows a 10s bootstrap watchdog followed by
+          # the 30s console watchdog. Leave Windows cold-start/scheduler margin
+          # around that full sequence; this changes CI patience only, not the
+          # customer-visible fallback thresholds in Rust.
+          $fallbackDeadline = (Get-Date).AddSeconds(70)
           $fallbackDispatched = $false
           while ((Get-Date) -lt $fallbackDeadline) {
             $shellWindows = @(Get-Process -Name "GO-CLAW-Portable", "qwenpaw-desktop" `
@@ -103,7 +107,7 @@ runs:
             Start-Sleep -Milliseconds 500
           }
           if (-not $fallbackDispatched) {
-            throw "Browser fallback was not dispatched with exact URL within 40s: $expectedUrl"
+            throw "Browser fallback was not dispatched with exact URL within 70s: $expectedUrl"
           }
 
           $backend = Get-Process -Name "qwenpaw-backend" -ErrorAction Stop
