@@ -264,28 +264,23 @@ def verify_go_claw_employees(base_url: str) -> None:
                 f"Employee {expected_id!r} must be enabled and pinned",
             )
 
-    content_endpoint = "/api/agents/content-production"
-    content = _json_payload(
-        _http("GET", f"{base_url}{content_endpoint}"),
-        content_endpoint,
+    tools_endpoint = "/api/agents/content-production/tools"
+    tools = _json_payload(
+        _http("GET", f"{base_url}{tools_endpoint}"),
+        tools_endpoint,
     )
-    if not isinstance(content, dict):
-        raise RuntimeError(f"{content_endpoint} must return an object")
-    tools = content.get("tools")
-    builtin_tools = (
-        tools.get("builtin_tools") if isinstance(tools, dict) else None
-    )
-    if not isinstance(builtin_tools, dict):
-        raise RuntimeError(
-            f"{content_endpoint} missing tools.builtin_tools",
-        )
+    if not isinstance(tools, list):
+        raise RuntimeError(f"{tools_endpoint} must return a list")
+    tools_by_name = {
+        tool.get("name"): tool for tool in tools if isinstance(tool, dict)
+    }
     for tool_name in GO_CLAW_MEDIA_TOOLS:
-        tool = builtin_tools.get(tool_name)
+        tool = tools_by_name.get(tool_name)
         if not isinstance(tool, dict) or tool.get("enabled") is not True:
             raise RuntimeError(
                 f"Content employee media tool {tool_name!r} is not enabled",
             )
-    if _has_nonempty_api_key(builtin_tools):
+    if _has_nonempty_api_key(tools):
         raise RuntimeError(
             "Content employee tool config contains a nonempty api_key",
         )

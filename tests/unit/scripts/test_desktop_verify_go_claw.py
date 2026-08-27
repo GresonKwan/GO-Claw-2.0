@@ -59,17 +59,16 @@ def _responses() -> dict[str, Any]:
         "/api/agents/content-production": {
             "id": "content-production",
             "name": "内容生产",
-            "tools": {
-                "builtin_tools": {
-                    tool_name: {
-                        "name": tool_name,
-                        "enabled": True,
-                        "config": {},
-                    }
-                    for tool_name in MEDIA_TOOLS
-                },
-            },
+            "model_tier": "economy",
         },
+        "/api/agents/content-production/tools": [
+            {
+                "name": tool_name,
+                "enabled": True,
+                "config_values": None,
+            }
+            for tool_name in MEDIA_TOOLS
+        ],
         "/api/plugins": [
             {"id": "qwen-image-tool", "enabled": True, "loaded": True},
             {"id": "wan27-tool", "enabled": True, "loaded": False},
@@ -171,10 +170,8 @@ def test_employees_reject_disabled_or_unpinned_specialist(monkeypatch) -> None:
 
 def test_content_employee_rejects_disabled_media_tool(monkeypatch) -> None:
     responses = _responses()
-    tools = responses["/api/agents/content-production"]["tools"][
-        "builtin_tools"
-    ]
-    tools[MEDIA_TOOLS[0]]["enabled"] = False
+    tools = responses["/api/agents/content-production/tools"]
+    tools[0]["enabled"] = False
     _install_http_mock(monkeypatch, responses)
 
     with pytest.raises(RuntimeError, match=MEDIA_TOOLS[0]):
@@ -183,10 +180,8 @@ def test_content_employee_rejects_disabled_media_tool(monkeypatch) -> None:
 
 def test_content_employee_rejects_nonempty_api_key(monkeypatch) -> None:
     responses = _responses()
-    tools = responses["/api/agents/content-production"]["tools"][
-        "builtin_tools"
-    ]
-    tools[MEDIA_TOOLS[0]]["config"] = {"api_key": "secret"}
+    tools = responses["/api/agents/content-production/tools"]
+    tools[0]["config_values"] = {"api_key": "***"}
     _install_http_mock(monkeypatch, responses)
 
     with pytest.raises(RuntimeError, match="api_key"):
