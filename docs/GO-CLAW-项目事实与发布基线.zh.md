@@ -1,6 +1,6 @@
 # GO CLAW 项目事实与发布基线
 
-> 状态：当前有效。最后现场复核：2026-08-26（Asia/Shanghai）。
+> 状态：当前有效。最后现场复核：2026-08-28（Asia/Shanghai）。
 >
 > 本文只记录“现在是什么”和“发布前必须成立什么”。历史变更见
 > `GO-CLAW-变更台账.zh.md`，操作步骤见各专题文档，尚未实施的内容不得写成现状。
@@ -185,12 +185,17 @@ GitHub Variable `TAURI_UPDATER_PUBKEY` 已存在并与仓库公钥一致。
 
 ### 7.2 产物与发布现状
 
-- 最近一次已检查的 Main Build run `32885959718` 成功，但产物是多个分离 artifact；
-- CI 已实现规范 Full ZIP assembler 和真实字节发布校验，但尚未执行本轮新 Main Build，
-  因此当前仍没有一个本轮已验收的 `GO-CLAW-Windows-x64-Full.zip`；
-- GitHub fork 当前没有 Releases；
-- 因此“已经有完整 CI ZIP”目前答案是没有；必须在本轮代码和运维门禁完成后重新执行
-  一次签名 Main Build。
+- Windows-only Main Build run `33059759882` 已对提交
+  `f6732aa67e012a5f5b03048276ba05df1051ded9` 成功完成；客户 artifact
+  `GO-CLAW-Windows-x64-Full-2.1.0` 内只有一个
+  `GO-CLAW-Windows-x64-Full.zip`。CI 已通过便携 Tauri 内容就绪、离线 WebView2、
+  Full ZIP 结构、SHA-256 和签名合同验证。
+- GitHub Release [`v2.1.0`](https://github.com/GresonKwan/GO-Claw-2.0/releases/tag/v2.1.0)
+  已于 2026-08-28 发布并设为 latest，固定到上述提交。公开 Release 只包含在线更新所需的
+  `GO-CLAW-Update-2.1.0-setup.exe`、`.sig`、`latest.json` 和 `SHA256SUMS.txt`；
+  不包含历史 Tauri Setup，也不包含带客户本地凭据的 Full ZIP。
+- GitHub 记录的四个 Release asset SHA-256 digest 已与服务器原文件逐项比对一致；服务器另以
+  包内公钥完成更新 exe 的 Ed25519 真实验签。
 
 GitHub Actions 下载 artifact 时会额外使用平台包装层；客户文件合同是该 artifact 内只包含
 一个 `GO-CLAW-Windows-x64-Full.zip`。
@@ -200,13 +205,23 @@ GitHub Actions 下载 artifact 时会额外使用平台包装层；客户文件�
 2026-08-26 已在 `/etc/nginx/conf.d/newapi-8443.conf` 的 8443 server 中、通配
 `location /` 之前增加 `location ^~ /updates/`，静态根为 `/srv/go-claw-updates`。
 原配置备份为 `/etc/nginx/conf.d/newapi-8443.conf.before-updates-20260826`；
-`nginx -t` 和 reload 均成功。目前只创建了 `/srv/go-claw-updates/releases`，未创建生产
-`updates` 软链，因此公网 `https://goclaw.host:8443/updates/latest.json` 命中该静态
-location 并返回预期 404，不再由 New API 返回应用页面。
+`nginx -t` 和 reload 均成功。
 
-必须等本轮 Main Build 产出真实 `latest.json`、签名和安装文件，在
-`releases/<version>` 验 SHA-256/签名后，才能原子切换 `updates` 软链。GitHub Release
-是回退源，不替代国内镜像验收。
+2026-08-28 已将经 Actions artifact digest、内部 SHA-256 和 Ed25519 验签的更新资产落到
+`/srv/go-claw-updates/releases/2.1.0`，并以同文件系统 rename 原子建立
+`updates -> releases/2.1.0`。公网
+`https://goclaw.host:8443/updates/latest.json` 当前返回 HTTP 200、
+`application/json`、版本 `2.1.0`；更新 exe 支持 Range，请求 `0-1` 返回 `MZ`，总长度
+`476989105`。
+
+生产镜像的 `latest.json` 下载 URL 固定为同域
+`https://goclaw.host:8443/updates/GO-CLAW-Update-2.1.0-setup.exe`，避免国内客户端再跳转
+GitHub 下载。v2.0.1 的 manifest 拉取没有开启 HTTP redirect，GitHub
+`/releases/latest/download/latest.json` 回退会因 302 失败；在后续客户端修正前，
+`goclaw.host` 主 endpoint 是已安装 v2.0.1 的必要更新入口，不得下线。
+
+尚未完成的是用户在真实 v2.0.1 Windows 客户端执行“检查、下载、验签、更新、重启、
+数据保留”的最终端到端验收；线上资产和检查链已经开放。
 
 ## 9. 发布不可变条件
 

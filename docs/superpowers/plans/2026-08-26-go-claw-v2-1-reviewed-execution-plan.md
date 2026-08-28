@@ -239,10 +239,14 @@ location ^~ /updates/ {
   updates -> releases/<version>
 ```
 
-- [ ] 先将新版上传到 `releases/<version>` 并在服务器验 SHA-256/签名。
+- [x] 先将新版上传到 `releases/<version>` 并在服务器验 SHA-256/签名。
 - [x] `nginx -t` 通过后 reload；静态 location 已生效，未发布时返回 404。
-- [ ] 用临时 symlink 和同文件系统 rename 原子替换 `updates`。
-- [ ] `https://goclaw.host:8443/updates/latest.json` 必须返回 200 和 JSON，不得再返回 New API HTML。
+- [x] 用临时 symlink 和同文件系统 rename 原子替换 `updates`。
+- [x] `https://goclaw.host:8443/updates/latest.json` 必须返回 200 和 JSON，不得再返回 New API HTML。
+
+2026-08-28 现场结果：`updates -> releases/2.1.0`，公网 manifest 为 `2.1.0`；
+更新 exe Range `0-1` 返回 `MZ` 且总长度为 `476989105`。生产 manifest 使用同域更新 URL。
+GitHub Release `v2.1.0` 已发布；真实 v2.0.1 Windows 客户端端到端安装验收由用户执行。
 
 ## 9. P6：唯一签名 Main Build 和验收
 

@@ -155,6 +155,7 @@
 | 08-26 | 备份 `one-api.db` 后通过 New API 管理 API 新增渠道 3 `阿里百炼_TokenPlan_媒体`；备份位于 `/opt/new-api/data/backups/one-api-before-token-plan-media-20260826T145110Z.db` | 将 Token Plan 原生媒体请求与文字 compatible-mode 分离，现有渠道未修改 |
 | 08-26 | 创建七模型限定、非无限额度的交付令牌 ID 29，并不经本地输出直接更新 GitHub Secret `GO_CLAW_DASHSCOPE_API_KEY`；备份为 `/opt/new-api/data/backups/one-api-before-main-delivery-token-20260826T153608Z.db` | 为 Main Full ZIP 使用用户已接受的本地低额度 API key，不引入激活系统 |
 | 08-26 | 在 8443 Nginx server 增加 `/updates/` 静态 location，配置备份为 `newapi-8443.conf.before-updates-20260826`，`nginx -t`/reload 通过；生产软链尚未切换 | 为后续原子发布更新资产建立独立静态入口 |
+| 08-28 | 发布 GitHub Release `v2.1.0`（固定 `f6732aa`，仅四个在线更新资产）；服务器落盘 `/srv/go-claw-updates/releases/2.1.0`，完成 Actions digest、SHA-256、Ed25519 验证后原子切换 `updates -> releases/2.1.0`；公网 manifest 200，更新文件 Range/MZ/长度合同通过 | 开放已安装 v2.0.1 到 v2.1.0 的线上更新检查与下载链；真实 Windows 安装/重启/数据保留验收由用户完成 |
 | 08-25 | deepseek-v4-flash 不可用三层修复：渠道 #1 models 名单补名 + `abilities` 表补路由行 + `options.ModelRatio` 补定价 0.25 + `model_mapping` 映射到 deepseek-v4-flash-0731（上游只认带日期型号）；实测 chat completion 200 | 模型选择器调用必 503 |
 | 08-25 | provisioning 服务器 `CHAT_MODEL_ID` 由 qwen3.7-plus 改为 `deepseek-v4-flash` 并重启；服务端 quota 语义更新已部署 | 交付模型与白名单对齐 / 充值语义 |
 
