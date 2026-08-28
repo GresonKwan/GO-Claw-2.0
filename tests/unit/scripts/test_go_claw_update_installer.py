@@ -17,15 +17,19 @@ def _script() -> str:
     return SCRIPT.read_text(encoding="utf-8")
 
 
-def test_payload_is_staged_before_running_app_is_stopped() -> None:
+def test_payload_is_extracted_directly_after_backup_to_avoid_long_paths() -> None:
     script = _script()
 
-    stage = script.index('Section "StagePayload"')
     stop = script.index('Section "StopRunningApp"')
     backup = script.index('Section "BackupOldVersion"')
+    install = script.index('Section "InstallNewVersion"')
 
-    assert stage < stop < backup
-    assert 'SetOutPath "$INSTDIR\\updates\\staging-${GO_CLAW_VERSION}"' in script
+    assert stop < backup < install
+    assert 'Section "StagePayload"' not in script
+    assert 'staging-${GO_CLAW_VERSION}' not in script
+    install_section = script[install : script.index("SectionEnd", install)]
+    assert 'SetOutPath "$INSTDIR"' in install_section
+    assert 'File /r "payload\\*.*"' in install_section
 
 
 def test_stop_requests_graceful_portable_quit_before_force_kill() -> None:
@@ -53,4 +57,3 @@ def test_failed_install_rolls_back_and_restarts_previous_executable() -> None:
     assert "Call RestoreBackup" in failed
     assert 'Delete "$INSTDIR\\updates\\installing.lock"' in failed
     assert 'Exec \'"$INSTDIR\\GO-CLAW-Portable.exe"\'' in failed
-

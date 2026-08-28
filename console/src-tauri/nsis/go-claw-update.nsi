@@ -5,8 +5,8 @@
 ;   - 静默安装（/S），目标目录由 /D 传入（必须含 portable.json）
 ;   - 白名单替换：仅 GO-CLAW-Portable.exe / binaries / LICENSE / README
 ;   - 绝不触碰 data/secrets/logs/cache/backups/updates/GO-CLAW-Config/portable.json
-;   - 先完整释放到 updates\staging-<新版本>，再停止应用并切换文件
 ;   - 替换前将旧程序文件备份到 updates\backup-<旧版本>\（回滚点）
+;   - 备份完成后直接释放到便携根，避免额外目录导致 Windows MAX_PATH 超限
 ;   - 任一步失败均自动恢复旧程序并重新启动，禁止遗留半更新状态
 ;   - 安装期间写 updates\installing.lock，成功或回滚完成后删除
 ; ============================================================================
@@ -51,21 +51,6 @@ Var RetryCount
     SetErrorLevel 1
     Abort "无法备份 ${path}，已自动恢复旧版本。请关闭仍在运行的 GO CLAW 相关进程后重试。"
   go_claw_backup_done_${id}:
-!macroend
-
-!macro GO_CLAW_INSTALL_STAGED_ITEM path id
-  IfFileExists "$INSTDIR\updates\staging-${GO_CLAW_VERSION}\${path}" 0 go_claw_stage_missing_${id}
-    ClearErrors
-    Rename "$INSTDIR\updates\staging-${GO_CLAW_VERSION}\${path}" "$INSTDIR\${path}"
-    IfErrors 0 go_claw_install_done_${id}
-      StrCpy $FailureStage "install:${path}"
-      SetErrorLevel 1
-      Abort "无法安装 ${path}，已自动恢复旧版本。"
-  go_claw_stage_missing_${id}:
-    StrCpy $FailureStage "staging-missing:${path}"
-    SetErrorLevel 1
-    Abort "更新包缺少 ${path}，已自动恢复旧版本。"
-  go_claw_install_done_${id}:
 !macroend
 
 Function RestoreBackup
@@ -125,21 +110,6 @@ Function .onInit
   FileClose $0
 FunctionEnd
 
-Section "StagePayload"
-  ; 在停止应用、移动任何旧文件之前先完整释放新版本。即使 U 盘空间不足
-  ; 或更新包解压失败，旧程序也仍保持原样并继续运行。
-  StrCpy $FailureStage "staging"
-  RMDir /r "$INSTDIR\updates\staging-${GO_CLAW_VERSION}"
-  CreateDirectory "$INSTDIR\updates\staging-${GO_CLAW_VERSION}"
-  SetOutPath "$INSTDIR\updates\staging-${GO_CLAW_VERSION}"
-  ClearErrors
-  File /r "payload\*.*"
-  IfErrors 0 go_claw_stage_complete
-    SetErrorLevel 1
-    Abort "更新文件释放失败，旧版本未被修改。请检查 U 盘剩余空间后重试。"
-  go_claw_stage_complete:
-SectionEnd
-
 Section "StopRunningApp"
   ; 优先复用便携客户端自身的退出协议，让后端完整执行 shutdown hooks 并
   ; 释放 binaries 下的 exe/dll。最多等待 60 秒，失败才使用 taskkill 兜底。
@@ -169,13 +139,17 @@ Section "BackupOldVersion"
 SectionEnd
 
 Section "InstallNewVersion"
-  StrCpy $FailureStage "install"
-  ; staging 已完整落盘；同一卷内 Rename 可快速切换，缩短应用停机时间。
-  !insertmacro GO_CLAW_INSTALL_STAGED_ITEM "GO-CLAW-Portable.exe" "exe"
-  !insertmacro GO_CLAW_INSTALL_STAGED_ITEM "binaries" "binaries"
-  !insertmacro GO_CLAW_INSTALL_STAGED_ITEM "LICENSE" "license"
-  !insertmacro GO_CLAW_INSTALL_STAGED_ITEM "README-PORTABLE.zh-CN.txt" "readme"
-  RMDir /r "$INSTDIR\updates\staging-${GO_CLAW_VERSION}"
+  ; 直接释放到原根目录，保持与现有可运行路径相同的长度。先前增加
+  ; updates\staging-<版本> 后，torch 的三个深层许可证路径达到 264-267
+  ; 字符并触发 NSIS/Win32 MAX_PATH 写入失败。
+  StrCpy $FailureStage "install-payload"
+  SetOutPath "$INSTDIR"
+  ClearErrors
+  File /r "payload\*.*"
+  IfErrors 0 go_claw_payload_installed
+    SetErrorLevel 1
+    Abort "更新文件释放失败，已自动恢复旧版本。"
+  go_claw_payload_installed:
 
   ; 记录版本与更新历史
   FileOpen $0 "$INSTDIR\updates\version.txt" w
@@ -197,7 +171,6 @@ FunctionEnd
 Function .onInstFailed
   ; 自动回滚已移动的旧程序，保证任何失败都至少能重新启动原版本。
   Call RestoreBackup
-  RMDir /r "$INSTDIR\updates\staging-${GO_CLAW_VERSION}"
   Delete "$INSTDIR\updates\installing.lock"
 
   FileOpen $0 "$INSTDIR\updates\last-update-error.txt" w
