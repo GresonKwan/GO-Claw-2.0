@@ -143,7 +143,7 @@
 | 生产 NSIS + 极小 probe payload 的 Windows 成功/目录锁回滚/自动重启测试加入签名前 CI | 原测试只检查脚本文本，未真实执行 NSIS；明确覆盖更新器继承 backend cwd | `5921dc41`, `50a1460b` | `scripts/verify/test_portable_update.ps1`；Windows run `33369481282` 通过 |
 | 版本升级为 v2.1.1；发布只允许 draft 且禁止覆盖同名资产 | v2.1.0 的 tag 与后来 `--clobber` 覆盖的资产来源不一致 | `5921dc41` | release workflow 合同测试 |
 | staging 启动器先结束旧单实例，再注入 v2.1.1 endpoint 并从绝对路径启动 EXE | 旧托盘实例保留生产 endpoint，导致第二次启动被单实例转发后仍只看到 v2.1.0 | `77f7916e` | `test_portable_staging_launcher.py` + 更新脚本合同共 13 例；仅验证启动合同 |
-| 建立 Windows 新机在线更新事故交接，记录分支/提交/CI/staging/运行时合同、未决假设和失败后最小取证流程 | 完整 staging 包再次实机失败，必须消除聊天上下文依赖并区分 probe 通过与真实更新失败 | （待推送） | 路径/URL/提交/CI/服务器 SHA 只读复核；Markdown 与仓库合同检查 | `docs/GO-CLAW-v2.1.1-Windows在线更新调试交接.zh.md` |
+| 建立 Windows 新机在线更新事故交接，记录分支/提交/CI/staging/运行时合同、未决假设和失败后最小取证流程 | 完整 staging 包再次实机失败，必须消除聊天上下文依赖并区分 probe 通过与真实更新失败 | `e5877f87` | 路径/URL/提交/CI/服务器 SHA 只读复核；Markdown 与仓库合同检查 | `docs/GO-CLAW-v2.1.1-Windows在线更新调试交接.zh.md` |
 
 ## 2026-08-26 · v2.1 四计划现场 review 与事实基线
 
