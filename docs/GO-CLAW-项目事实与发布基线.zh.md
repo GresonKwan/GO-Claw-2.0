@@ -24,12 +24,15 @@
 
 | 项目 | 已验证现状 | 验证方式 |
 | --- | --- | --- |
-| 本地仓库 | `/Volumes/固态2/2026/0811 GO Claw 2.0/upstream/QwenPaw-v2.0.1` | `git rev-parse --show-toplevel` |
+| 当前调试工作树 | `/Volumes/固态2/2026/0811 GO Claw 2.0/upstream/go-claw-v2.1.1` | `git rev-parse --show-toplevel` |
 | GitHub 仓库 | `GresonKwan/GO-Claw-2.0` | `gh repo view` |
 | 产品基线 | QwenPaw v2.0.1，导入提交 `24813b3` | 变更台账和 Git 历史 |
 | 本轮设计提交 | `ce18d02f` | `git show --stat ce18d02f` |
 | 本轮四份原始计划提交 | `3fc3be19` | `git show --stat 3fc3be19` |
 | 在线更新实现提交 | `58b5fbe8` | `git show --stat 58b5fbe8` |
+| v2.1.1 调试分支 | `codex/portable-updater-v2-1-1` | 本地与 `origin` 均为 `77f7916e`（文档提交前） |
+| v2.1.1 事务修复提交 | `5921dc41`、`50a1460b` | `git show --stat`、Windows run `33369481282` |
+| staging 单实例启动器 | `77f7916e` | 13 项脚本合同测试；不代表安装成功 |
 
 后续实施以本轮 review 后的总执行计划为唯一跨模块顺序；四份原始分计划只能作为文件级
 任务明细使用，不得越过总计划中的前置门禁。
@@ -185,11 +188,12 @@ GitHub Variable `TAURI_UPDATER_PUBKEY` 已存在并与仓库公钥一致。
 
 ### 7.2 产物与发布现状
 
-> **事故状态（2026-08-31）**：公开 `v2.1.0` 更新包不能完成 v2.0.1 的
-> 原地更新，不得继续向客户推荐重试。它在下载和双重验签后，会因更新器继承
-> `binaries/qwenpaw-backend` 当前目录而自行锁住 `binaries`，最终在
-> `stage=backup:binaries` 回滚到 v2.0.1。修复必须使用新版本 `v2.1.1`，不得覆盖
-> `v2.1.0` 资产。
+> **事故状态（2026-08-31，仍未解决）**：公开 `v2.1.0` 更新包不能完成 v2.0.1 的
+> 原地更新；第一轮已确认因更新器继承 `binaries/qwenpaw-backend` 当前目录而自行锁住
+> `binaries`，最终在 `stage=backup:binaries` 回滚。`v2.1.1` 已修复该已知原因并通过
+> Windows 小型 probe 事务测试，但用户使用完整 staging 更新包再次实测仍然失败。本次失败
+> 尚未取得安装阶段日志，原因未知；不得宣称 `v2.1.1` 已修复或让客户继续重试。完整接手资料见
+> `GO-CLAW-v2.1.1-Windows在线更新调试交接.zh.md`。
 
 - Windows-only Main Build run `33059759882` 已对提交
   `f6732aa67e012a5f5b03048276ba05df1051ded9` 成功完成；客户 artifact
@@ -208,6 +212,12 @@ GitHub Variable `TAURI_UPDATER_PUBKEY` 已存在并与仓库公钥一致。
 - `desktop-publish.yml` 历史上允许 `--clobber`，导致 `v2.1.0` tag 的 target SHA 与后来
   覆盖的资产构建 SHA 不再一一对应。v2.1.1 起，发布只允许向 draft 上传不存在的资产，
   已发布资产不可变。
+- v2.1.1 Windows-only build run
+  [`33369481282`](https://github.com/GresonKwan/GO-Claw-2.0/actions/runs/33369481282)
+  在提交 `50a1460bb53106f7016c8f73950b13d7ecb1eb18` 上成功；它验证了完整构建和生产 NSIS
+  的小型 probe，不是完整 v2.0.1 → v2.1.1 实机验收。
+- staging 启动器提交 `77f7916e` 会先结束旧单实例，再注入测试 endpoint；它只消除旧
+  v2.0.1 托盘进程继续使用生产 endpoint 的干扰，不修复安装事务。
 
 GitHub Actions 下载 artifact 时会额外使用平台包装层；客户文件合同是该 artifact 内只包含
 一个 `GO-CLAW-Windows-x64-Full.zip`。
@@ -236,6 +246,18 @@ GitHub 下载。v2.0.1 的 manifest 拉取没有开启 HTTP redirect，GitHub
 v2.1.1 必须先在 Windows CI 真实执行生产 NSIS 的成功、回滚和自动重启事务，再用完整
 v2.0.1 对 staging manifest 做一次升级验收；客户不得成为第一位端到端测试者。
 
+2026-08-31 已建立隔离的 staging 路径：
+
+- manifest：`https://goclaw.host:8443/updates-staging/2.1.1/latest.json`；
+- update exe：`477092325` bytes，SHA-256
+  `1e21ec0e485258513252f19128f09d114e1511e5029b21472f2ff5b6e63ef34d`；
+- 测试启动器 ZIP：SHA-256
+  `4afad8861d113c840257f5768e6e4aa24b16c9f354e99b0170ca433bcb7f0500`；
+- 生产软链仍为 `/srv/go-claw-updates/releases/2.1.0-a9ab44b`，未切换。
+
+上述 staging 的完整包再次实机失败，当前只能用于受控调试，不得推广。新 Windows 调试机
+必须先按 `GO-CLAW-v2.1.1-Windows在线更新调试交接.zh.md` 保存失败现场，再决定下一处代码修改。
+
 ## 9. 发布不可变条件
 
 正式 `v2.1.1` 修复版只有同时满足下列条件才可交付：
@@ -257,6 +279,8 @@ v2.0.1 对 staging manifest 做一次升级验收；客户不得成为第一位�
     拒绝运行。诊断只写 `version/stage/retries/restore`，不得写任何凭据。
 11. GitHub tag、Release target、update exe、签名、manifest 和 SHA256SUMS 来自同一 build，
     已发布资产不得覆盖；生产镜像只在完整 v2.0.1 → v2.1.1 staging 验收后原子切换。
+12. 完整 477MB 更新 payload 必须从干净 v2.0.1 样本分别在短路径 NTFS 和目标 U 盘完成
+    下载、替换、自动重启和版本一致性验收；小型 CI probe 不能替代此项。
 
 ## 10. 每次发布前的复核命令
 
