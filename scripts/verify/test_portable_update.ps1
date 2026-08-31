@@ -35,10 +35,23 @@ public static class Program {
 '@
 
 $probeExe = Join-Path $work "GO-CLAW-Portable-probe.exe"
-Add-Type `
-  -TypeDefinition $probeSource `
-  -OutputAssembly $probeExe `
-  -OutputType ConsoleApplication
+$probeSourceFile = Join-Path $work "GO-CLAW-Portable-probe.cs"
+[IO.File]::WriteAllText($probeSourceFile, $probeSource)
+$csc = @(
+  (Join-Path $env:WINDIR "Microsoft.NET\Framework64\v4.0.30319\csc.exe"),
+  (Join-Path $env:WINDIR "Microsoft.NET\Framework\v4.0.30319\csc.exe")
+) | Where-Object { Test-Path -LiteralPath $_ } | Select-Object -First 1
+if (-not $csc) {
+  throw "Windows .NET Framework C# compiler not found"
+}
+& $csc `
+  /nologo `
+  /target:winexe `
+  "/out:$probeExe" `
+  $probeSourceFile
+if ($LASTEXITCODE -ne 0 -or -not (Test-Path -LiteralPath $probeExe)) {
+  throw "restart probe compilation failed: $LASTEXITCODE"
+}
 
 function New-PortableRoot([string]$Name) {
   $root = Join-Path $work $Name
