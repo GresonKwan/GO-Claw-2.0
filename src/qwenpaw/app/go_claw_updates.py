@@ -424,8 +424,13 @@ class UpdateManager:
             raise RuntimeError(
                 "portable root path is unsafe for installer args",
             )
+        artifact = artifact.resolve(strict=True)
         cmd = f'"{artifact}" /S /D={root_str}'
-        logger.info("launching update installer: %s", cmd)
+        logger.info(
+            "launching update installer: %s cwd=%s",
+            cmd,
+            artifact.parent,
+        )
         # shell=False + 原始命令行字符串：避免 list2cmdline 给 /D 值加引号
         import subprocess
 
@@ -433,6 +438,7 @@ class UpdateManager:
             cmd,  # 自产签名产物 + 固定参数；进程交由 NSIS 管理，不等待
             shell=False,
             close_fds=True,
+            cwd=str(artifact.parent),
         )
 
     # ---- 版本历史 ----

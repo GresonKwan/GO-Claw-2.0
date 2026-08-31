@@ -30,6 +30,9 @@ def test_signed_windows_build_stages_exact_public_assets():
         "QwenPaw-Tauri-${{ steps.version.outputs.version }}-Windows-setup.exe"
         not in workflow
     )
+    transaction = workflow.index("test_portable_update.ps1")
+    signing = workflow.index("tauri signer sign")
+    assert transaction < signing
 
 
 def test_publish_requires_exact_credential_free_windows_assets():
@@ -51,3 +54,7 @@ def test_publish_requires_exact_credential_free_windows_assets():
     assert "GO-CLAW-Windows-x64-Full" not in attach_step
     assert "credentials.json" not in attach_step
     assert "|| true" not in attach_step
+    assert "isDraft" in attach_step
+    assert "gh release view" in attach_step
+    assert "--clobber" not in attach_step
+    assert "Refusing to replace an existing release asset" in attach_step

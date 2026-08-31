@@ -271,14 +271,29 @@ jobs:
             if (Test-Path (Join-Path $payload $item)) { throw "forbidden content in update payload: $item" }
           }
 
+          $payloadRoot = (Resolve-Path -LiteralPath $payload).Path.TrimEnd('\')
+          $relativeLengths = @(
+            Get-ChildItem -LiteralPath $payloadRoot -Recurse -File | ForEach-Object {
+              $_.FullName.Substring($payloadRoot.Length + 1).Length
+            }
+          )
+          if ($relativeLengths.Count -eq 0) { throw "update payload is empty" }
+          $maxRelativePath = ($relativeLengths | Measure-Object -Maximum).Maximum
+          Write-Host "Longest update payload relative path: $maxRelativePath"
+
           Copy-Item "console/src-tauri/nsis/go-claw-update.nsi" "dist/update.nsi"
           Push-Location "dist"
-          makensis "/DGO_CLAW_VERSION=$version" "update.nsi"
+          makensis "/DGO_CLAW_VERSION=$version" "/DGO_CLAW_MAX_RELATIVE_PATH=$maxRelativePath" "update.nsi"
           if ($LASTEXITCODE -ne 0) { Pop-Location; throw "makensis failed" }
           Pop-Location
           $setup = "dist/GO-CLAW-Update-$version-setup.exe"
           if (-not (Test-Path $setup)) { throw "update installer not produced" }
           $setup = (Resolve-Path -LiteralPath $setup).Path
+
+          # Fast executable contract: use the production NSIS script with a
+          # tiny probe payload to exercise cwd release, rollback and restart.
+          ./scripts/verify/test_portable_update.ps1 `
+            -NsisScript "console/src-tauri/nsis/go-claw-update.nsi"
 
           if ([string]::IsNullOrWhiteSpace($env:TAURI_SIGNING_PRIVATE_KEY)) {
             throw "TAURI_SIGNING_PRIVATE_KEY is required for the update package"

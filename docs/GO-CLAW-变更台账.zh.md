@@ -134,6 +134,15 @@
 | 修正：更新编排从 Rust 改为 Python（便携浏览器模式无 Tauri IPC） | 架构事实 | — | — |
 | D2 密钥落地：生成 GO CLAW 专用 Tauri 签名密钥，公钥同步到代码/GitHub Variable/入包链，私钥非空口令加密并做跨磁盘备份；Python 验签兼容 Tauri CLI 的 Base64 minisign 文本格式 | 建立可恢复的密钥保管制度，并修正真实 CI 产物的验签格式断层 | 2f0ab644 | 本地 Tauri 签名探针 + `test_go_claw_updates.py` | `docs/GO-CLAW-在线更新签名密钥运维.zh.md` |
 
+## 2026-08-31 · v2.1.0 在线更新事故与 v2.1.1 修复
+
+| 改动 | 原因 | commit | 验证 |
+|------|------|--------|------|
+| NSIS 在 `.onInit` 立即把 cwd 切到 `updates`；Python Popen 同时显式使用缓存目录 cwd | v2.0.1 后端和更新器共同继承 `binaries/qwenpaw-backend` cwd，更新器自行锁住待备份的 `binaries` | 本次修复分支 | U 盘 `stage=backup:binaries` + 30 秒重试时间线；Python/NSIS 合同测试 |
+| 回滚逐项检查，回滚失败保留 `installing.lock`；Tauri 在启动后端前拦截未完成更新；记录无敏感信息的安装阶段日志 | 禁止失败恢复产生新旧混合版本后仍自动启动 | 本次修复分支 | NSIS 静态事务合同 + Rust 锁测试（Windows CI/本地 Rust 环境待执行） |
+| 生产 NSIS + 极小 probe payload 的 Windows 成功/目录锁回滚/自动重启测试加入签名前 CI | 原测试只检查脚本文本，未真实执行 NSIS；客户不再承担首次 E2E | 本次修复分支 | `scripts/verify/test_portable_update.ps1`，必须由 Windows CI 通过 |
+| 版本升级为 v2.1.1；发布只允许 draft 且禁止覆盖同名资产 | v2.1.0 的 tag 与后来 `--clobber` 覆盖的资产来源不一致 | 本次修复分支 | release workflow 合同测试 |
+
 ## 2026-08-26 · v2.1 四计划现场 review 与事实基线
 
 | 改动 | 原因 | commit | 验证 | 关联文档 |
