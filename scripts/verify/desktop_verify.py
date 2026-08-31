@@ -359,7 +359,7 @@ def verify_go_claw_model_tiers(base_url: str) -> None:
     """Verify packaged tier startup, switching, restoration and sanitization."""
     endpoint = "/api/go-claw/model-tier"
 
-    def request(method: str, *, tier: str | None = None) -> dict:
+    def request(method: str, *, tier: str | None = None) -> object:
         url = f"{base_url}{endpoint}"
         body = None
         if method == "GET":

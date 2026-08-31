@@ -73,7 +73,7 @@ class _FakeProviderManager:
 def _manager_with_all_tiers() -> _FakeProviderManager:
     return _FakeProviderManager(
         _FakeProvider(
-            models=tuple(tier.model_id for tier in product.MODEL_TIERS)
+            models=tuple(tier.model_id for tier in product.MODEL_TIERS),
         ),
     )
 
