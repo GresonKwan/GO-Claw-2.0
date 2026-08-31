@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import json
 from copy import deepcopy
+from dataclasses import dataclass
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -11,6 +12,70 @@ import pytest
 from qwenpaw.config.config import ModelSlotConfig
 
 from qwenpaw.app import go_claw_product as product
+
+
+@dataclass
+class _FakeModel:
+    id: str
+    name: str
+
+    def model_dump(self) -> dict[str, str]:
+        return {"id": self.id, "name": self.name}
+
+
+class _FakeProvider:
+    def __init__(
+        self,
+        models: tuple[str, ...] = (),
+        extra_models: tuple[str, ...] = (),
+    ) -> None:
+        self.models = [_FakeModel(model_id, model_id) for model_id in models]
+        self.extra_models = [
+            _FakeModel(model_id, model_id) for model_id in extra_models
+        ]
+
+    def has_model(self, model_id: str) -> bool:
+        return any(
+            model.id == model_id for model in self.models + self.extra_models
+        )
+
+
+class _FakeProviderManager:
+    def __init__(
+        self,
+        provider: _FakeProvider,
+        *,
+        update_result: bool = True,
+        persist_update: bool = True,
+    ) -> None:
+        self.provider = provider
+        self.update_result = update_result
+        self.persist_update = persist_update
+        self.updates: list[dict] = []
+
+    def get_provider(self, provider_id: str) -> _FakeProvider | None:
+        return self.provider if provider_id == "token-plan" else None
+
+    def update_provider(self, provider_id: str, config: dict) -> bool:
+        if provider_id != "token-plan":
+            return False
+        self.updates.append(deepcopy(config))
+        if not self.update_result:
+            return False
+        if self.persist_update:
+            self.provider.extra_models = [
+                _FakeModel(model["id"], model["name"])
+                for model in config["extra_models"]
+            ]
+        return self.update_result
+
+
+def _manager_with_all_tiers() -> _FakeProviderManager:
+    return _FakeProviderManager(
+        _FakeProvider(
+            models=tuple(tier.model_id for tier in product.MODEL_TIERS)
+        ),
+    )
 
 
 def test_private_model_catalog_is_exact_and_ordered() -> None:
@@ -167,7 +232,8 @@ def test_migration_maps_every_profile_once_and_writes_marker_last(
 
     monkeypatch.setattr(product, "save_agent_config", save)
 
-    assert product.ensure_go_claw_model_tiers(SimpleNamespace()) is True
+    manager = _manager_with_all_tiers()
+    assert product.ensure_go_claw_model_tiers(manager) is True
 
     assert [persisted[key].active_model.model for key in source_models] == [
         "deepseek-v4-flash-0731",
@@ -193,9 +259,94 @@ def test_migration_maps_every_profile_once_and_writes_marker_last(
         model="qwen3.8-max",
     )
     events.clear()
-    assert product.ensure_go_claw_model_tiers(SimpleNamespace()) is True
+    assert product.ensure_go_claw_model_tiers(manager) is True
     assert persisted["a"].active_model.model == "qwen3.8-max"
     assert events == []
+
+
+def test_completed_migration_repairs_missing_tier_catalog_once(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    monkeypatch.setattr(
+        product,
+        "get_config_path",
+        lambda: tmp_path / "config.json",
+    )
+    product.write_routing_state("token-plan")
+    marker = tmp_path / ".migrations" / "go-claw-model-tiers-v1.json"
+    marker.parent.mkdir(parents=True, exist_ok=True)
+    marker.write_text(
+        json.dumps(
+            {
+                "schemaVersion": 1,
+                "version": product.MIGRATION_VERSION,
+                "completedAt": "2026-08-31T00:00:00Z",
+            },
+        ),
+        encoding="utf-8",
+    )
+    manager = _FakeProviderManager(
+        _FakeProvider(
+            models=("deepseek-chat",),
+            extra_models=("customer-model",),
+        ),
+    )
+    monkeypatch.setattr(
+        product,
+        "load_config",
+        lambda **_kwargs: (_ for _ in ()).throw(
+            AssertionError("completed migration must not rewrite employees"),
+        ),
+    )
+
+    assert product.ensure_go_claw_model_tiers(manager) is True
+    assert [model.id for model in manager.provider.extra_models] == [
+        "customer-model",
+        "deepseek-v4-flash-0731",
+        "qwen3.7-plus",
+        "qwen3.8-max",
+    ]
+    assert len(manager.updates) == 1
+
+    assert product.ensure_go_claw_model_tiers(manager) is True
+    assert len(manager.updates) == 1
+
+
+@pytest.mark.parametrize(
+    ("update_result", "persist_update"),
+    [(False, True), (True, False)],
+)
+def test_catalog_repair_fails_closed_when_update_is_not_persisted(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    update_result: bool,
+    persist_update: bool,
+) -> None:
+    monkeypatch.setattr(
+        product,
+        "get_config_path",
+        lambda: tmp_path / "config.json",
+    )
+    product.write_routing_state("token-plan")
+    manager = _FakeProviderManager(
+        _FakeProvider(models=("deepseek-chat",)),
+        update_result=update_result,
+        persist_update=persist_update,
+    )
+    monkeypatch.setattr(
+        product,
+        "load_config",
+        lambda **_kwargs: (_ for _ in ()).throw(
+            AssertionError("failed repair must not migrate employees"),
+        ),
+    )
+
+    assert product.ensure_go_claw_model_tiers(manager) is False
+    assert len(manager.updates) == 1
+    assert not (
+        tmp_path / ".migrations" / "go-claw-model-tiers-v1.json"
+    ).exists()
 
 
 def test_failed_profile_save_never_writes_completion_marker(
@@ -221,7 +372,9 @@ def test_failed_profile_save_never_writes_completion_marker(
         lambda *_args: (_ for _ in ()).throw(OSError("disk full")),
     )
 
-    assert product.ensure_go_claw_model_tiers(SimpleNamespace()) is False
+    assert (
+        product.ensure_go_claw_model_tiers(_manager_with_all_tiers()) is False
+    )
     assert not (
         tmp_path / ".migrations" / "go-claw-model-tiers-v1.json"
     ).exists()
