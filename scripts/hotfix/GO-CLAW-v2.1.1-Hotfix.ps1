@@ -9,6 +9,12 @@ param(
 $ErrorActionPreference = "Stop"
 Set-StrictMode -Version 2.0
 
+# Windows PowerShell 5.1 can evaluate $PSScriptRoot as empty while binding a
+# default parameter value. Resolve it again after parameter binding.
+if ([string]::IsNullOrWhiteSpace($ProductRoot)) {
+    $ProductRoot = $PSScriptRoot
+}
+
 $BuiltInEmployees = @(
     "marketing-growth",
     "content-production",
@@ -21,7 +27,10 @@ function Write-Step([string]$Message) {
 }
 
 function Get-NormalizedPath([string]$Path) {
-    return [IO.Path]::GetFullPath($Path).TrimEnd('\')
+    # Elevated CMD launchers can accidentally preserve quotes around a drive
+    # root. Normalize them defensively before calling GetFullPath.
+    $cleanPath = $Path.Trim().Trim('"')
+    return [IO.Path]::GetFullPath($cleanPath).TrimEnd('\')
 }
 
 function Test-IsChildPath([string]$Path, [string]$Parent) {
