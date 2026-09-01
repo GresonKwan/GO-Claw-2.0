@@ -129,5 +129,11 @@ G、F 产品盘上均复现出以下同根现象：
 - [x] Full ZIP 携带的共享 HMAC 被明确记录为可提取、非强身份凭证。
 - [x] `GO_CLAW_DASHSCOPE_API_KEY` 只用于构建期模型预检，不写入客户包。
 - [x] 在线更新包使用白名单 payload，不包含或覆盖客户本地凭据和 provisioning 配置。
-- [ ] 正式 Windows CI 运行需记录 run ID、commit SHA 和 Full ZIP artifact；未通过前不得把本次
-  构建合同写成已发布版本。
+- [x] 正式 Windows CI 已在代码头 `512ba07debd7ec027461f9a84fc06937dc40f9fe` 完成：Tests
+  run [`33497130435`](https://github.com/GresonKwan/GO-Claw-2.0/actions/runs/33497130435)
+  与 Windows Full run
+  [`33497201586`](https://github.com/GresonKwan/GO-Claw-2.0/actions/runs/33497201586)
+  均成功；Full ZIP artifact `GO-CLAW-Windows-x64-Full-2.1.1`（ID `9797474948`）digest 为
+  `sha256:c88d734a7e1c3e2499c5819cb88918789100fb61a5c79df21816e5c1acbefe66`。
+- [x] 上述成功仅证明“新盘完整包交付”构建合同，不代表该构建已发布，也不关闭
+  v2.0.1 → v2.1.1 在线更新事务事故。
