@@ -134,13 +134,24 @@
 | 修正：更新编排从 Rust 改为 Python（便携浏览器模式无 Tauri IPC） | 架构事实 | — | — |
 | D2 密钥落地：生成 GO CLAW 专用 Tauri 签名密钥，公钥同步到代码/GitHub Variable/入包链，私钥非空口令加密并做跨磁盘备份；Python 验签兼容 Tauri CLI 的 Base64 minisign 文本格式 | 建立可恢复的密钥保管制度，并修正真实 CI 产物的验签格式断层 | 2f0ab644 | 本地 Tauri 签名探针 + `test_go_claw_updates.py` | `docs/GO-CLAW-在线更新签名密钥运维.zh.md` |
 
+## 2026-08-31 · v2.1.0 在线更新事故与 v2.1.1 修复
+
+| 改动 | 原因 | commit | 验证 |
+|------|------|--------|------|
+| NSIS 在 `.onInit` 立即把 cwd 切到 `updates`；Python Popen 同时显式使用缓存目录 cwd | v2.0.1 后端和更新器共同继承 `binaries/qwenpaw-backend` cwd，更新器自行锁住待备份的 `binaries` | `5921dc41` | U 盘 `stage=backup:binaries` + 30 秒重试时间线；Python/NSIS 合同测试 |
+| 回滚逐项检查，回滚失败保留 `installing.lock`；Tauri 在启动后端前拦截未完成更新；记录无敏感信息的安装阶段日志 | 禁止失败恢复产生新旧混合版本后仍自动启动 | `5921dc41` | NSIS 静态事务合同 + Rust 锁测试 + Windows run `33369481282` |
+| 生产 NSIS + 极小 probe payload 的 Windows 成功/目录锁回滚/自动重启测试加入签名前 CI | 原测试只检查脚本文本，未真实执行 NSIS；明确覆盖更新器继承 backend cwd | `5921dc41`, `50a1460b` | `scripts/verify/test_portable_update.ps1`；Windows run `33369481282` 通过 |
+| 版本升级为 v2.1.1；发布只允许 draft 且禁止覆盖同名资产 | v2.1.0 的 tag 与后来 `--clobber` 覆盖的资产来源不一致 | `5921dc41` | release workflow 合同测试 |
+| staging 启动器先结束旧单实例，再注入 v2.1.1 endpoint 并从绝对路径启动 EXE | 旧托盘实例保留生产 endpoint，导致第二次启动被单实例转发后仍只看到 v2.1.0 | `77f7916e` | `test_portable_staging_launcher.py` + 更新脚本合同共 13 例；仅验证启动合同 |
+| 建立 Windows 新机在线更新事故交接，记录分支/提交/CI/staging/运行时合同、未决假设和失败后最小取证流程 | 完整 staging 包再次实机失败，必须消除聊天上下文依赖并区分 probe 通过与真实更新失败 | `e5877f87` | 路径/URL/提交/CI/服务器 SHA 只读复核；Markdown 与仓库合同检查 | `docs/GO-CLAW-v2.1.1-Windows在线更新调试交接.zh.md` |
+
 ## 2026-08-26 · v2.1 四计划现场 review 与事实基线
 
 | 改动 | 原因 | commit | 验证 | 关联文档 |
 | --- | --- | --- | --- | --- |
-| 建立当前项目事实/发布基线，记录生产服务器、New API revision/digest、真实网关、签名状态、GitHub/CI 和更新镜像现状 | 防止把旧聊天、计划目标或另一台网关误当成生产事实 | （待推送） | SSH/Nginx/Docker/SQLite/GitHub/HTTP 只读复核；现有 updater 私钥签名后由项目 verifier 验证通过 | `docs/GO-CLAW-项目事实与发布基线.zh.md` |
+| 建立当前项目事实/发布基线，记录生产服务器、New API revision/digest、真实网关、签名状态、GitHub/CI 和更新镜像现状 | 防止把旧聊天、计划目标或另一台网关误当成生产事实 | `5ac46580` | SSH/Nginx/Docker/SQLite/GitHub/HTTP 只读复核；现有 updater 私钥签名后由项目 verifier 验证通过 | `docs/GO-CLAW-项目事实与发布基线.zh.md` |
 | 四份原计划统一受一份 review 后总执行计划约束；修正员工页模型泄漏、重复签名密钥、后端失败错误回退和更新镜像等问题 | 原计划之间存在可导致模型泄漏、更新验签分叉和不可用启动的合同冲突 | `5ac46580` | 文档交叉检查、路径/route/symbol 复核、服务器只读核对 | `docs/superpowers/plans/2026-08-26-go-claw-v2-1-reviewed-execution-plan.md` |
-| 按用户确认的最小实施原则修订 v2.1 计划：Full ZIP 保留本地低额度 API key；取消激活/ticket/provisioning v2；媒体只替换 Token Plan 模型和中性名称 | 前一版 review 将未证实风险扩展成了新开户系统、新媒体渠道和 New API 私有补丁，与已工作链路及产品体验冲突 | （本次文档提交） | 现有插件 URL/body/轮询代码复核；计划冲突扫描；`git diff --check` | `docs/superpowers/plans/2026-08-26-go-claw-v2-1-reviewed-execution-plan.md`、`docs/superpowers/plans/2026-08-26-go-claw-token-plan-media-plan.md` |
+| 按用户确认的最小实施原则修订 v2.1 计划：Full ZIP 保留本地低额度 API key；取消激活/ticket/provisioning v2；媒体只替换 Token Plan 模型和中性名称 | 前一版 review 将未证实风险扩展成了新开户系统、新媒体渠道和 New API 私有补丁，与已工作链路及产品体验冲突 | `5c247e89` | 现有插件 URL/body/轮询代码复核；计划冲突扫描；`git diff --check` | `docs/superpowers/plans/2026-08-26-go-claw-v2-1-reviewed-execution-plan.md`、`docs/superpowers/plans/2026-08-26-go-claw-token-plan-media-plan.md` |
 | 媒体插件改为中性工具名并固定 Token Plan 目标模型；移除工具级 key/endpoint/model 和自动模型回退；保留现有 New API 请求体 | 收敛客户界面和模型选择，不改变客户端协议 | `cf6b0597`, `e2490713` | 媒体/迁移/客户合同相关测试 223 例 | 同上 |
 | 真实媒体调用推翻“只增加模型名即可”的现场假设：新模型挂在 OpenAI 文字渠道会返回 400 `url error`，旧插件实际由独立 `type=17` 阿里渠道承载 | 防止把 `/v1/models` 可见性误判为媒体协议可用 | `9546eebb` | 服务器 SQLite 只读核对；New API 与上游各一次图片调用；New API 一次视频调用；阿里云 Token Plan 官方媒体接口文档 | `docs/GO-CLAW-项目事实与发布基线.zh.md` |
 | 经用户授权新增 Token Plan `type=17` 媒体渠道 3；在不修改 New API 镜像的前提下，插件通过 `metadata.input.media` / `metadata.parameters` 适配固定 Ali task adaptor | 保持客户端 New API 公开 endpoint 不变，让五项媒体能力全部进入 Token Plan | `753a8646` | 数据库备份完整性 `ok`；图片生成/编辑、文生/图生/参考图生视频五项真实调用成功；相关单测 146 例 | `docs/GO-CLAW-项目事实与发布基线.zh.md`、媒体分计划 |
@@ -156,6 +167,7 @@
 | 08-26 | 创建七模型限定、非无限额度的交付令牌 ID 29，并不经本地输出直接更新 GitHub Secret `GO_CLAW_DASHSCOPE_API_KEY`；备份为 `/opt/new-api/data/backups/one-api-before-main-delivery-token-20260826T153608Z.db` | 为 Main Full ZIP 使用用户已接受的本地低额度 API key，不引入激活系统 |
 | 08-26 | 在 8443 Nginx server 增加 `/updates/` 静态 location，配置备份为 `newapi-8443.conf.before-updates-20260826`，`nginx -t`/reload 通过；生产软链尚未切换 | 为后续原子发布更新资产建立独立静态入口 |
 | 08-28 | 发布 GitHub Release `v2.1.0`（固定 `f6732aa`，仅四个在线更新资产）；服务器落盘 `/srv/go-claw-updates/releases/2.1.0`，完成 Actions digest、SHA-256、Ed25519 验证后原子切换 `updates -> releases/2.1.0`；公网 manifest 200，更新文件 Range/MZ/长度合同通过 | 开放已安装 v2.0.1 到 v2.1.0 的线上更新检查与下载链；真实 Windows 安装/重启/数据保留验收由用户完成 |
+| 08-31 | 新增隔离 `/updates-staging/2.1.1/`，部署 run `33369481282` 的完整更新包、manifest 和测试启动器；生产软链保持 `releases/2.1.0-a9ab44b`；用户完整包实测仍失败，事故保持开放 | 在不影响生产的前提下复现 v2.1.1；实际失败说明 CI 小型 probe 不能作为发布结论 |
 | 08-25 | deepseek-v4-flash 不可用三层修复：渠道 #1 models 名单补名 + `abilities` 表补路由行 + `options.ModelRatio` 补定价 0.25 + `model_mapping` 映射到 deepseek-v4-flash-0731（上游只认带日期型号）；实测 chat completion 200 | 模型选择器调用必 503 |
 | 08-25 | provisioning 服务器 `CHAT_MODEL_ID` 由 qwen3.7-plus 改为 `deepseek-v4-flash` 并重启；服务端 quota 语义更新已部署 | 交付模型与白名单对齐 / 充值语义 |
 
@@ -170,5 +182,6 @@
 | `GO-CLAW-文档规范.zh.md` | 文档编写与维护规则 |
 | `go-claw-auto-provisioning.zh.md` | 开通/计费专题（持续更新） |
 | `GO-CLAW-在线更新签名密钥运维.zh.md` | 更新签名密钥的保管、发布前检查、恢复与轮换规则 |
+| `GO-CLAW-v2.1.1-Windows在线更新调试交接.zh.md` | 未解决的 v2.0.1 → v2.1.1 Windows 在线更新事故接手、取证和验收入口 |
 | `superpowers/specs/*`、`plans/*` | 设计规格与实施计划（带状态标记） |
 | 工作区 `GO-CLAW-debug计划.md`、`GO-CLAW-修改计划.md` | 现场排查原始记录（快照，不再更新） |

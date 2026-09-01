@@ -76,6 +76,25 @@ def _responses() -> dict[str, Any]:
     }
 
 
+def _tier_response(selected: str = "economy") -> dict[str, Any]:
+    return {
+        "schemaVersion": 1,
+        "agentId": "default",
+        "selectedTier": selected,
+        "tiers": [
+            {
+                "id": tier_id,
+                "label": label,
+                "description": f"{label}档说明",
+                "warning": None,
+                "icon": icon,
+            }
+            for tier_id, label, icon in desktop_verify.GO_CLAW_MODEL_TIERS
+        ],
+        "effectiveMaxInputLength": 131072,
+    }
+
+
 def _install_http_mock(
     monkeypatch: pytest.MonkeyPatch,
     responses: dict[str, object],
@@ -96,6 +115,59 @@ def test_go_claw_startup_smoke_accepts_real_http_schema(monkeypatch) -> None:
     desktop_verify.verify_frontend("http://desktop.local")
     desktop_verify.verify_go_claw_employees("http://desktop.local")
     desktop_verify.verify_go_claw_plugins("http://desktop.local")
+
+
+def test_model_tier_smoke_switches_and_restores_exact_public_contract(
+    monkeypatch,
+) -> None:
+    calls: list[tuple[str, dict | None]] = []
+
+    def fake_http(method: str, url: str, body=None, **_kwargs) -> str:
+        assert url.startswith("http://desktop.local/api/go-claw/model-tier")
+        calls.append((method, body))
+        selected = body["tier"] if method == "PUT" else "economy"
+        return json.dumps(_tier_response(selected))
+
+    monkeypatch.setattr(desktop_verify, "_http", fake_http)
+
+    desktop_verify.verify_go_claw_model_tiers("http://desktop.local")
+
+    assert calls == [
+        ("GET", None),
+        (
+            "PUT",
+            {"schemaVersion": 1, "agentId": "default", "tier": "balanced"},
+        ),
+        (
+            "PUT",
+            {"schemaVersion": 1, "agentId": "default", "tier": "economy"},
+        ),
+        ("GET", None),
+    ]
+
+
+@pytest.mark.parametrize(
+    "mutation",
+    [
+        lambda payload: payload["tiers"].pop(),
+        lambda payload: payload["tiers"].reverse(),
+        lambda payload: payload.update({"providerId": "private"}),
+    ],
+)
+def test_model_tier_smoke_rejects_invalid_or_private_contract(
+    monkeypatch,
+    mutation,
+) -> None:
+    payload = _tier_response()
+    mutation(payload)
+    monkeypatch.setattr(
+        desktop_verify,
+        "_http",
+        lambda *_args, **_kwargs: json.dumps(payload),
+    )
+
+    with pytest.raises(RuntimeError, match="model-tier"):
+        desktop_verify.verify_go_claw_model_tiers("http://desktop.local")
 
 
 @pytest.mark.parametrize(
@@ -239,9 +311,20 @@ def test_main_runs_keyless_go_claw_smoke_for_existing_verify_entry(
         "verify_go_claw_plugins",
         lambda _url: calls.append("plugins"),
     )
+    monkeypatch.setattr(
+        desktop_verify,
+        "verify_go_claw_model_tiers",
+        lambda _url: calls.append("model-tiers"),
+    )
 
     assert desktop_verify.main() == 0
-    assert calls == ["health", "frontend", "employees", "plugins"]
+    assert calls == [
+        "health",
+        "frontend",
+        "employees",
+        "model-tiers",
+        "plugins",
+    ]
 
 
 def test_cdp_ui_requires_content_marker_before_chat_input() -> None:

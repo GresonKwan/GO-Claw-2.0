@@ -159,4 +159,41 @@ describe("ModelSelector", () => {
       expect(screen.getByRole("button", { name: /经济/ })).toBeInTheDocument(),
     );
   });
+
+  it("shows an enabled retry instead of permanent loading after failure", async () => {
+    vi.mocked(goClawProductApi.getModelTier)
+      .mockRejectedValueOnce(new Error("API"))
+      .mockResolvedValueOnce(tierResponse);
+    const consoleError = vi
+      .spyOn(console, "error")
+      .mockImplementation(() => {});
+    const user = userEvent.setup();
+
+    try {
+      renderWithProviders(<ModelSelector />);
+      const retry = await screen.findByRole("button", {
+        name: "模型档位加载失败，点击重试",
+      });
+      expect(retry).toBeEnabled();
+      expect(screen.getByText("重新加载")).toBeInTheDocument();
+      expect(screen.queryByText("加载中")).not.toBeInTheDocument();
+
+      await user.click(retry);
+      expect(await screen.findByText("经济")).toBeInTheDocument();
+      expect(goClawProductApi.getModelTier).toHaveBeenCalledTimes(2);
+    } finally {
+      consoleError.mockRestore();
+    }
+  });
+
+  it("keeps the initial pending state disabled", () => {
+    vi.mocked(goClawProductApi.getModelTier).mockImplementation(
+      () => new Promise(() => {}),
+    );
+
+    renderWithProviders(<ModelSelector />);
+
+    expect(screen.getByRole("button", { name: "加载模型档位" })).toBeDisabled();
+    expect(screen.getByText("加载中")).toBeInTheDocument();
+  });
 });

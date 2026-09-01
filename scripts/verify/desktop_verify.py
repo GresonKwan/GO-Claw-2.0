@@ -72,6 +72,11 @@ GO_CLAW_MEDIA_TOOLS = (
     "generate_video_from_reference",
 )
 GO_CLAW_MEDIA_PLUGINS = ("qwen-image-tool", "wan27-tool")
+GO_CLAW_MODEL_TIERS = (
+    ("economy", "经济", "leaf"),
+    ("balanced", "均衡", "balance"),
+    ("performance", "高性能", "rocket"),
+)
 
 # Selectors come straight from e2e/pages/chat_page.py so they stay in sync
 # with what the real UI tests expect.
@@ -286,6 +291,92 @@ def verify_go_claw_employees(base_url: str) -> None:
         )
 
     print("PASS  GO CLAW five digital employees and keyless media tools")
+
+
+def _validate_model_tier_payload(
+    payload: object,
+    *,
+    expected_selected: str,
+) -> None:
+    endpoint = "/api/go-claw/model-tier"
+    if not isinstance(payload, dict):
+        raise RuntimeError(f"{endpoint} must return an object")
+    expected_keys = {
+        "schemaVersion",
+        "agentId",
+        "selectedTier",
+        "tiers",
+        "effectiveMaxInputLength",
+    }
+    if set(payload) != expected_keys:
+        raise RuntimeError(f"{endpoint} returned an invalid public contract")
+    if (
+        payload.get("schemaVersion") != 1
+        or payload.get("agentId") != "default"
+    ):
+        raise RuntimeError(f"{endpoint} returned invalid schema or employee")
+    if payload.get("selectedTier") != expected_selected:
+        raise RuntimeError(
+            f"{endpoint} selected tier is not {expected_selected!r}",
+        )
+    if (
+        not isinstance(payload.get("effectiveMaxInputLength"), int)
+        or int(
+            payload["effectiveMaxInputLength"],
+        )
+        <= 0
+    ):
+        raise RuntimeError(f"{endpoint} returned an invalid context length")
+
+    tiers = payload.get("tiers")
+    if not isinstance(tiers, list):
+        raise RuntimeError(f"{endpoint} missing tiers list")
+    actual = []
+    for tier in tiers:
+        if not isinstance(tier, dict) or set(tier) != {
+            "id",
+            "label",
+            "description",
+            "warning",
+            "icon",
+        }:
+            raise RuntimeError(f"{endpoint} returned an invalid tier contract")
+        actual.append((tier.get("id"), tier.get("label"), tier.get("icon")))
+    if tuple(actual) != GO_CLAW_MODEL_TIERS:
+        raise RuntimeError(
+            f"{endpoint} tiers must be {GO_CLAW_MODEL_TIERS}, got {actual}",
+        )
+
+    serialized = json.dumps(payload, ensure_ascii=False)
+    for private_key in ("providerId", "modelId", "provider_id", "model_id"):
+        if f'"{private_key}"' in serialized:
+            raise RuntimeError(
+                f"{endpoint} leaked private field {private_key!r}",
+            )
+
+
+def verify_go_claw_model_tiers(base_url: str) -> None:
+    """Verify packaged tier startup, switching, restoration and sanitization."""
+    endpoint = "/api/go-claw/model-tier"
+
+    def request(method: str, *, tier: str | None = None) -> object:
+        url = f"{base_url}{endpoint}"
+        body = None
+        if method == "GET":
+            url += "?agent_id=default"
+        else:
+            body = {"schemaVersion": 1, "agentId": "default", "tier": tier}
+        return _json_payload(_http(method, url, body=body), endpoint)
+
+    initial = request("GET")
+    _validate_model_tier_payload(initial, expected_selected="economy")
+    balanced = request("PUT", tier="balanced")
+    _validate_model_tier_payload(balanced, expected_selected="balanced")
+    restored = request("PUT", tier="economy")
+    _validate_model_tier_payload(restored, expected_selected="economy")
+    persisted = request("GET")
+    _validate_model_tier_payload(persisted, expected_selected="economy")
+    print("PASS  GO CLAW three model tiers switch and persist")
 
 
 def verify_go_claw_plugins(base_url: str) -> None:
@@ -1078,6 +1169,7 @@ def main() -> int:
         health_check(base_url)
         verify_frontend(base_url)
         verify_go_claw_employees(base_url)
+        verify_go_claw_model_tiers(base_url)
         verify_go_claw_plugins(base_url)
 
         # ---- UI load (always run unless --skip-ui, no key needed) ----

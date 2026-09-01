@@ -1,7 +1,13 @@
 # GO CLAW 在线更新功能实施计划（方案 C：Tauri updater + 自家 Release）
 
-> 状态：已完成（2026-08-26，代码与 D2 密钥运维均已落地）
+> 状态：实现已落地；v2.1.0 真实更新验收失败，v2.1.1 修复与发布门禁处理中（2026-08-31）
 > 客户形态：U盘/本地目录，根目录有 `GO CLAW.exe`（非安装版）。更新包必须只替换程序文件，永不触碰 `data/`、`GO-CLAW-Config/`、`portable.json`、`updates/`。
+
+> **事故接手提示（2026-08-31）**：本文保留原始计划和历史决策，不代表当前实现细节。
+> v2.1.1 完整 staging 包仍在 Windows 实机更新失败。当前分支、CI 覆盖边界、服务器资产、
+> 运行时合同和唯一取证流程以
+> `docs/GO-CLAW-v2.1.1-Windows在线更新调试交接.zh.md` 为准；不得从本文早期 Rust/Tauri
+> 方案反推现状或直接发布。
 
 ## 〇、现状盘点（已核实，方案以此为基础）
 
@@ -146,3 +152,16 @@
 **D2 密钥运维（已完成）**：已生成 GO CLAW 专用、非空口令保护的 Tauri 签名密钥，并将公钥同步到 `tauri.conf.json`、GitHub Variable `TAURI_UPDATER_PUBKEY` 与便携包自动生成链。保管、发布前检查、恢复与轮换规则见 `docs/GO-CLAW-在线更新签名密钥运维.zh.md`。
 
 **可选镜像运维（未实施）**：goclaw.host nginx 增加 `/updates/` 反代到 GitHub Release 资产（镜像 endpoint 已内置为首选，未配置时会自动回退 GitHub 直连）。
+
+## 八、2026-08-31 事故修订（优先于前文冲突内容）
+
+- v2.1.0 更新器继承 Python 后端的 `binaries/qwenpaw-backend` cwd，并在第一次
+  `SetOutPath` 之前备份 `binaries`，因此更新器自行阻止目录重命名并在 30 次重试后回滚。
+- 兼容已部署 v2.0.1 的修复必须位于下载的 NSIS 包：`.onInit` 验证便携根后立即
+  `SetOutPath "$INSTDIR\updates"`。Python `Popen(cwd=<cached-update>)` 只是后续版本的第二层防线。
+- `installing.lock` 不再是文档声明：Tauri 在后端启动前实际检查它。只有成功或逐项验证完整的
+  回滚才删除锁；回滚不完整时保留锁并禁止启动混合版本。
+- Windows CI 必须使用生产 NSIS 脚本真实执行“从 binaries cwd 成功升级”“外部锁失败回滚”
+  和“新 EXE 自动重启”，且位于签名与上传之前。
+- v2.1.0 不再覆盖；修复固定为 v2.1.1。已发布 Release 资产不可变，production mirror 只能在
+  完整 v2.0.1 → v2.1.1 staging 验收通过后切换。

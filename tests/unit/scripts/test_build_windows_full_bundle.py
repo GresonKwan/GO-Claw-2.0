@@ -64,7 +64,9 @@ def _fixture(tmp_path: Path) -> dict[str, Path | str]:
         json.dumps({"plugins": {"updater": {"pubkey": "PUBLIC-KEY"}}}),
         encoding="utf-8",
     )
-    (config / "update-pubkey.txt").write_text("PUBLIC-KEY\n", encoding="ascii")
+    # Keep the fixture byte-identical across platforms.  ``write_text`` uses
+    # CRLF translation on Windows, while the tracked updater key is LF-only.
+    (config / "update-pubkey.txt").write_bytes(b"PUBLIC-KEY\n")
     webview = tmp_path / "MicrosoftEdgeWebView2RuntimeInstallerX64.exe"
     webview.write_bytes(b"MZ-webview")
     start_here = tmp_path / "START-HERE.zh-CN.txt"

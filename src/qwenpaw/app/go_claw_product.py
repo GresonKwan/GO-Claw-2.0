@@ -178,22 +178,77 @@ def _marker_complete(path: Path) -> bool:
     )
 
 
+def _ensure_tier_models_registered(
+    provider_manager,
+    routing: ProductRoutingState,
+) -> bool:
+    """Register private tier model IDs in the configured provider catalog."""
+    provider = provider_manager.get_provider(routing.provider_id)
+    if provider is None:
+        logger.warning(
+            "GO CLAW model tiers: product routing provider is unavailable",
+        )
+        return False
+
+    missing = [
+        tier.model_id
+        for tier in MODEL_TIERS
+        if not provider.has_model(tier.model_id)
+    ]
+    if not missing:
+        return True
+
+    existing_extra = [
+        model.model_dump() if hasattr(model, "model_dump") else model
+        for model in getattr(provider, "extra_models", [])
+    ]
+    if not provider_manager.update_provider(
+        routing.provider_id,
+        {
+            "extra_models": [
+                *existing_extra,
+                *({"id": model_id, "name": model_id} for model_id in missing),
+            ],
+        },
+    ):
+        logger.warning(
+            "GO CLAW model tiers: provider model catalog update failed",
+        )
+        return False
+
+    updated = provider_manager.get_provider(routing.provider_id)
+    if updated is None or any(
+        not updated.has_model(tier.model_id) for tier in MODEL_TIERS
+    ):
+        logger.warning(
+            "GO CLAW model tiers: provider model catalog verification failed",
+        )
+        return False
+    logger.info("GO CLAW model tier catalog repaired")
+    return True
+
+
 def ensure_go_claw_model_tiers(provider_manager) -> bool:
-    """Migrate every employee once; leave the marker absent on any failure."""
+    """Keep the tier catalog usable and migrate every employee exactly once."""
     try:
         data_root = get_config_path().expanduser().parent
         marker = data_root / MIGRATION_MARKER
         lock = data_root / ".migrations" / "go-claw-model-tiers-v1.lock"
         lock.parent.mkdir(parents=True, exist_ok=True)
         with get_sync_path_lock(lock):
-            if _marker_complete(marker):
-                return True
             routing = ensure_routing_state(provider_manager)
             if routing is None:
                 logger.warning(
                     "GO CLAW model tiers: product routing is not configured",
                 )
                 return False
+            # This repair intentionally runs even after the one-time employee
+            # migration marker exists.  v2.1.1 could persist tier slots without
+            # registering all three private model IDs in the provider catalog.
+            if not _ensure_tier_models_registered(provider_manager, routing):
+                return False
+            if _marker_complete(marker):
+                return True
 
             config = load_config(force_reload=True)
             expected: dict[str, ModelSlotConfig] = {}

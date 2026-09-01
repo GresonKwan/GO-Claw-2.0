@@ -3,6 +3,7 @@ import {
   CheckOutlined,
   DownOutlined,
   LoadingOutlined,
+  ReloadOutlined,
 } from "@ant-design/icons";
 import { Dropdown } from "antd";
 import { goClawProductApi } from "@/api/modules/goClawProduct";
@@ -95,6 +96,34 @@ export default function ModelSelector() {
   };
 
   const selected = data?.tiers.find((tier) => tier.id === data.selectedTier);
+  if (loading) {
+    return (
+      <button
+        type="button"
+        className={styles.trigger}
+        disabled
+        aria-label="加载模型档位"
+      >
+        <LoadingOutlined />
+        <span>加载中</span>
+        <DownOutlined className={styles.chevron} />
+      </button>
+    );
+  }
+  if (!selected) {
+    return (
+      <button
+        type="button"
+        className={styles.trigger}
+        aria-label="模型档位加载失败，点击重试"
+        onClick={() => void load()}
+      >
+        <ReloadOutlined />
+        <span>重新加载</span>
+        <DownOutlined className={styles.chevron} />
+      </button>
+    );
+  }
   const panel = (
     <div className={styles.panel} role="menu" aria-label="模型档位">
       <div className={styles.panelTitle}>选择模型档位</div>
@@ -135,15 +164,10 @@ export default function ModelSelector() {
       <button
         type="button"
         className={styles.trigger}
-        disabled={loading || !selected}
-        aria-label={selected?.label ?? "加载模型档位"}
+        aria-label={selected.label}
       >
-        {loading || !selected ? (
-          <LoadingOutlined />
-        ) : (
-          <TierIcon tier={selected} />
-        )}
-        <span>{selected?.label ?? "加载中"}</span>
+        <TierIcon tier={selected} />
+        <span>{selected.label}</span>
         <DownOutlined className={styles.chevron} />
       </button>
     </Dropdown>

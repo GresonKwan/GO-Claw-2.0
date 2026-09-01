@@ -276,6 +276,9 @@ gh workflow run desktop-build.yml --ref main -f ref=main -f windows_only=true
 - [ ] `credentials.json` 存在、可被应用导入、指向 `https://goclaw.host:8443/v1`，验收时不打印 key。
 - [ ] ZIP 不包含 `provision.json`、HMAC、ticket 或签名私钥。
 - [ ] installer/update `.sig`、`latest.json`、SHA-256 和入包公钥相互匹配。
+- [ ] Windows job 在签名前执行生产 NSIS 事务探针，验证从 `binaries/qwenpaw-backend`
+  cwd 启动仍能成功替换并自动重启，外部目录锁失败时完整回滚。
+- [ ] 目标 Release 仍为 draft 且不存在任何同名资产；禁止 `--clobber`。
 
 ### 9.3 Windows 验收
 
@@ -285,7 +288,8 @@ gh workflow run desktop-build.yml --ref main -f ref=main -f windows_only=true
 4. 首次启动自动导入 Full ZIP 中的本地凭据；不出现激活、ticket 或 provisioning 交互。
 5. 客户界面无“代码/模型/数字员工统计/文件/语言选择”入口，无非输入框闪烁 caret，字号图标和左下固定区符合设计。
 6. 五个媒体工具各调用一次；界面/提示词不显示厂商和模型名，New API 记录命中 Token Plan 媒体渠道 3。
-7. 从 staging 下载一次更新，完成验签、安装、自动重启和回滚；客户本地凭据未被更新包覆盖。
+7. 使用完整 v2.0.1 从 staging 下载 v2.1.1，完成验签、安装、自动重启和回滚；确认
+   `updates/version.txt` 与 `/api/updates/status.currentVersion` 均为 2.1.1，客户本地凭据未被覆盖。
 
 全部通过后才切换 `/srv/go-claw-updates/updates` 并发布 GitHub Release。Full ZIP 是首次交付和恢复产物；后续普通版本只发在线更新资产。
 

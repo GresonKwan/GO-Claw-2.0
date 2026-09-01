@@ -108,6 +108,13 @@ impl PortableState {
                 self.root.display()
             ));
         }
+        let update_lock = self.root.join("updates").join("installing.lock");
+        if update_lock.is_file() {
+            return Err(format!(
+                "检测到未完成的在线更新，GO CLAW 已停止启动，以免运行混合版本。\n\n请保留现场并联系支持；诊断文件：{}",
+                update_lock.display()
+            ));
+        }
         for directory in [
             &self.working_dir,
             &self.secret_dir,
@@ -238,5 +245,26 @@ mod tests {
         let error = PortableState::detect_from_exe(&exe).unwrap_err();
 
         assert!(error.contains("unsupported portable schema 2"));
+    }
+
+    #[test]
+    fn unfinished_update_lock_blocks_portable_startup() {
+        let temp = tempfile::tempdir().unwrap();
+        let exe = temp.path().join("GO-CLAW-Portable.exe");
+        std::fs::write(&exe, b"").unwrap();
+        std::fs::write(
+            temp.path().join(PORTABLE_MANIFEST),
+            br#"{"schemaVersion":1}"#,
+        )
+        .unwrap();
+        std::fs::create_dir(temp.path().join("updates")).unwrap();
+        std::fs::write(temp.path().join("updates/installing.lock"), b"2.1.1")
+            .unwrap();
+
+        let state = PortableState::detect_from_exe(&exe).unwrap().unwrap();
+        let error = state.prepare().unwrap_err();
+
+        assert!(error.contains("未完成的在线更新"));
+        assert!(error.contains("installing.lock"));
     }
 }

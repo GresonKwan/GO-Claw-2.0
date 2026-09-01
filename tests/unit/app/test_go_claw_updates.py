@@ -1,14 +1,20 @@
 # -*- coding: utf-8 -*-
 """Tests for the GO CLAW online update backend module."""
+
 from __future__ import annotations
 
 import base64
 import hashlib
 import os
+from unittest.mock import Mock
 
 import pytest
 
-from qwenpaw.app.go_claw_updates import _parse_version, verify_minisign
+from qwenpaw.app.go_claw_updates import (
+    UpdateManager,
+    _parse_version,
+    verify_minisign,
+)
 
 
 def _make_keypair() -> tuple[str, str]:
@@ -116,3 +122,28 @@ def test_minisign_rejects_tampered_tauri_global_signature() -> None:
 
     with pytest.raises(ValueError, match="verification failed"):
         verify_minisign(data, tampered_signature, tauri_pubkey)
+
+
+@pytest.mark.asyncio
+async def test_installer_is_spawned_outside_the_program_binaries(
+    tmp_path,
+    monkeypatch,
+) -> None:
+    root = tmp_path / "GO CLAW portable"
+    artifact = root / "updates" / "cached-update" / "update.exe"
+    artifact.parent.mkdir(parents=True)
+    artifact.write_bytes(b"MZ")
+    (root / "data").mkdir()
+    monkeypatch.setenv("QWENPAW_PORTABLE", "1")
+    monkeypatch.setenv("QWENPAW_WORKING_DIR", str(root / "data"))
+    popen = Mock()
+    monkeypatch.setattr("subprocess.Popen", popen)
+
+    await UpdateManager()._launch_installer(artifact)
+
+    popen.assert_called_once_with(
+        f'"{artifact.resolve()}" /S /D={root.resolve()}',
+        shell=False,
+        close_fds=True,
+        cwd=str(artifact.resolve().parent),
+    )

@@ -65,8 +65,25 @@ jobs:
           copy_one './go-claw-update-package-*/SHA256SUMS.txt'
           files=(GO-CLAW-Setup-*-Windows-x64.exe GO-CLAW-Setup-*-Windows-x64.exe.sig GO-CLAW-Update-*-setup.exe GO-CLAW-Update-*-setup.exe.sig latest.json SHA256SUMS.txt)
           sha256sum -c SHA256SUMS.txt
+
+          release_json=$(gh release view "${{ inputs.tag }}" --json isDraft,assets --repo "$GITHUB_REPOSITORY")
+          if [ "$(jq -r '.isDraft' <<<"$release_json")" != "true" ]; then
+            echo "::error::Release ${{ inputs.tag }} is already published; assets are immutable"
+            exit 1
+          fi
+
+          mapfile -t existing_assets < <(jq -r '.assets[].name' <<<"$release_json")
+          for file in "${files[@]}"; do
+            for existing in "${existing_assets[@]}"; do
+              if [ "$existing" = "$file" ]; then
+                echo "::error::Refusing to replace an existing release asset: $file"
+                exit 1
+              fi
+            done
+          done
+
           echo "Attaching to draft release ${{ inputs.tag }}: ${files[*]}"
-          gh release upload "${{ inputs.tag }}" "${files[@]}" --clobber --repo "$GITHUB_REPOSITORY"
+          gh release upload "${{ inputs.tag }}" "${files[@]}" --repo "$GITHUB_REPOSITORY"
 
   # ── Publish files + updater metadata to OSS (skipped on dry_run) ───────────
   upload-oss:

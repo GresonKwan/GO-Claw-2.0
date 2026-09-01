@@ -509,10 +509,10 @@ def test_main_build_does_not_gate_on_runner_browser_observation() -> None:
     assert "desktop-browser-fallback.png" not in workflow
 
 
-def test_main_build_uses_v2_1_0_release_version() -> None:
+def test_main_build_uses_v2_1_1_release_version() -> None:
     version_file = _read_customer_text("src/qwenpaw/__version__.py")
 
-    assert '__version__ = "2.1.0"' in version_file
+    assert '__version__ = "2.1.1"' in version_file
 
 
 def test_zh_locale_does_not_contain_legacy_smart_agent_term() -> None:

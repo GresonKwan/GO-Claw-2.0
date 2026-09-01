@@ -1,6 +1,6 @@
 # GO CLAW 项目事实与发布基线
 
-> 状态：当前有效。最后现场复核：2026-08-28（Asia/Shanghai）。
+> 状态：当前有效。最后现场复核：2026-08-31（Asia/Shanghai）。
 >
 > 本文只记录“现在是什么”和“发布前必须成立什么”。历史变更见
 > `GO-CLAW-变更台账.zh.md`，操作步骤见各专题文档，尚未实施的内容不得写成现状。
@@ -24,12 +24,15 @@
 
 | 项目 | 已验证现状 | 验证方式 |
 | --- | --- | --- |
-| 本地仓库 | `/Volumes/固态2/2026/0811 GO Claw 2.0/upstream/QwenPaw-v2.0.1` | `git rev-parse --show-toplevel` |
+| 当前调试工作树 | `/Volumes/固态2/2026/0811 GO Claw 2.0/upstream/go-claw-v2.1.1` | `git rev-parse --show-toplevel` |
 | GitHub 仓库 | `GresonKwan/GO-Claw-2.0` | `gh repo view` |
 | 产品基线 | QwenPaw v2.0.1，导入提交 `24813b3` | 变更台账和 Git 历史 |
 | 本轮设计提交 | `ce18d02f` | `git show --stat ce18d02f` |
 | 本轮四份原始计划提交 | `3fc3be19` | `git show --stat 3fc3be19` |
 | 在线更新实现提交 | `58b5fbe8` | `git show --stat 58b5fbe8` |
+| v2.1.1 调试分支 | `codex/portable-updater-v2-1-1` | 本地与 `origin` 均为 `77f7916e`（文档提交前） |
+| v2.1.1 事务修复提交 | `5921dc41`、`50a1460b` | `git show --stat`、Windows run `33369481282` |
+| staging 单实例启动器 | `77f7916e` | 13 项脚本合同测试；不代表安装成功 |
 
 后续实施以本轮 review 后的总执行计划为唯一跨模块顺序；四份原始分计划只能作为文件级
 任务明细使用，不得越过总计划中的前置门禁。
@@ -185,6 +188,13 @@ GitHub Variable `TAURI_UPDATER_PUBKEY` 已存在并与仓库公钥一致。
 
 ### 7.2 产物与发布现状
 
+> **事故状态（2026-08-31，仍未解决）**：公开 `v2.1.0` 更新包不能完成 v2.0.1 的
+> 原地更新；第一轮已确认因更新器继承 `binaries/qwenpaw-backend` 当前目录而自行锁住
+> `binaries`，最终在 `stage=backup:binaries` 回滚。`v2.1.1` 已修复该已知原因并通过
+> Windows 小型 probe 事务测试，但用户使用完整 staging 更新包再次实测仍然失败。本次失败
+> 尚未取得安装阶段日志，原因未知；不得宣称 `v2.1.1` 已修复或让客户继续重试。完整接手资料见
+> `GO-CLAW-v2.1.1-Windows在线更新调试交接.zh.md`。
+
 - Windows-only Main Build run `33059759882` 已对提交
   `f6732aa67e012a5f5b03048276ba05df1051ded9` 成功完成；客户 artifact
   `GO-CLAW-Windows-x64-Full-2.1.0` 内只有一个
@@ -196,6 +206,18 @@ GitHub Variable `TAURI_UPDATER_PUBKEY` 已存在并与仓库公钥一致。
   不包含历史 Tauri Setup，也不包含带客户本地凭据的 Full ZIP。
 - GitHub 记录的四个 Release asset SHA-256 digest 已与服务器原文件逐项比对一致；服务器另以
   包内公钥完成更新 exe 的 Ed25519 真实验签。
+- 当前公开更新 exe 的 SHA-256 为
+  `0ac1dc32c3a0321665394ef2905861cc1accd1e26eb811d8b671037ec1219ed0`；测试 U 盘
+  缓存与该值一致，排除了旧缓存或下载损坏。
+- `desktop-publish.yml` 历史上允许 `--clobber`，导致 `v2.1.0` tag 的 target SHA 与后来
+  覆盖的资产构建 SHA 不再一一对应。v2.1.1 起，发布只允许向 draft 上传不存在的资产，
+  已发布资产不可变。
+- v2.1.1 Windows-only build run
+  [`33369481282`](https://github.com/GresonKwan/GO-Claw-2.0/actions/runs/33369481282)
+  在提交 `50a1460bb53106f7016c8f73950b13d7ecb1eb18` 上成功；它验证了完整构建和生产 NSIS
+  的小型 probe，不是完整 v2.0.1 → v2.1.1 实机验收。
+- staging 启动器提交 `77f7916e` 会先结束旧单实例，再注入测试 endpoint；它只消除旧
+  v2.0.1 托盘进程继续使用生产 endpoint 的干扰，不修复安装事务。
 
 GitHub Actions 下载 artifact 时会额外使用平台包装层；客户文件合同是该 artifact 内只包含
 一个 `GO-CLAW-Windows-x64-Full.zip`。
@@ -212,7 +234,7 @@ GitHub Actions 下载 artifact 时会额外使用平台包装层；客户文件�
 `updates -> releases/2.1.0`。公网
 `https://goclaw.host:8443/updates/latest.json` 当前返回 HTTP 200、
 `application/json`、版本 `2.1.0`；更新 exe 支持 Range，请求 `0-1` 返回 `MZ`，总长度
-`476989105`。
+线上文件当前长度为 `477008062`，但该包已确认存在上述 `backup:binaries` 缺陷。
 
 生产镜像的 `latest.json` 下载 URL 固定为同域
 `https://goclaw.host:8443/updates/GO-CLAW-Update-2.1.0-setup.exe`，避免国内客户端再跳转
@@ -220,12 +242,25 @@ GitHub 下载。v2.0.1 的 manifest 拉取没有开启 HTTP redirect，GitHub
 `/releases/latest/download/latest.json` 回退会因 302 失败；在后续客户端修正前，
 `goclaw.host` 主 endpoint 是已安装 v2.0.1 的必要更新入口，不得下线。
 
-尚未完成的是用户在真实 v2.0.1 Windows 客户端执行“检查、下载、验签、更新、重启、
-数据保留”的最终端到端验收；线上资产和检查链已经开放。
+生产 `latest.json` 当前仍指向已知不可安装的 v2.1.0，切换到 v2.1.1 前不得再让用户重试。
+v2.1.1 必须先在 Windows CI 真实执行生产 NSIS 的成功、回滚和自动重启事务，再用完整
+v2.0.1 对 staging manifest 做一次升级验收；客户不得成为第一位端到端测试者。
+
+2026-08-31 已建立隔离的 staging 路径：
+
+- manifest：`https://goclaw.host:8443/updates-staging/2.1.1/latest.json`；
+- update exe：`477092325` bytes，SHA-256
+  `1e21ec0e485258513252f19128f09d114e1511e5029b21472f2ff5b6e63ef34d`；
+- 测试启动器 ZIP：SHA-256
+  `4afad8861d113c840257f5768e6e4aa24b16c9f354e99b0170ca433bcb7f0500`；
+- 生产软链仍为 `/srv/go-claw-updates/releases/2.1.0-a9ab44b`，未切换。
+
+上述 staging 的完整包再次实机失败，当前只能用于受控调试，不得推广。新 Windows 调试机
+必须先按 `GO-CLAW-v2.1.1-Windows在线更新调试交接.zh.md` 保存失败现场，再决定下一处代码修改。
 
 ## 9. 发布不可变条件
 
-正式 `v2.1.0` Main Build 只有同时满足下列条件才可交付：
+正式 `v2.1.1` 修复版只有同时满足下列条件才可交付：
 
 1. Tauri Auto 模式以 React 内容首帧为成功条件；WebView 失败只打开一次浏览器，后端失败
    显示明确故障页而不是打开一个同样不可用的浏览器。
@@ -238,6 +273,14 @@ GitHub 下载。v2.0.1 的 manifest 拉取没有开启 HTTP redirect，GitHub
 7. `/updates/latest.json` 返回 `application/json`，文件、SHA-256、签名和 URL 相互一致。
 8. Main Build 的客户 artifact 内恰好有一个完整 ZIP；在两类 Windows 终端完成 Tauri、
    浏览器回退和 WebView2 恢复验收。
+9. 生产 NSIS 可执行事务测试证明：更新器即使从 `binaries/qwenpaw-backend` cwd 启动，也能
+   完成备份、替换和自动重启；外部锁失败时完整回滚且没有混合版本。
+10. `installing.lock` 只在成功或完整回滚后删除；回滚不完整时保留，并由 Tauri 在后端启动前
+    拒绝运行。诊断只写 `version/stage/retries/restore`，不得写任何凭据。
+11. GitHub tag、Release target、update exe、签名、manifest 和 SHA256SUMS 来自同一 build，
+    已发布资产不得覆盖；生产镜像只在完整 v2.0.1 → v2.1.1 staging 验收后原子切换。
+12. 完整 477MB 更新 payload 必须从干净 v2.0.1 样本分别在短路径 NTFS 和目标 U 盘完成
+    下载、替换、自动重启和版本一致性验收；小型 CI probe 不能替代此项。
 
 ## 10. 每次发布前的复核命令
 
