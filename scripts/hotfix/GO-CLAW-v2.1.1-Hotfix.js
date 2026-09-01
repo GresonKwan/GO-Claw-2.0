@@ -2,6 +2,7 @@
 
 const fs = require("fs");
 const path = require("path");
+const { TextDecoder } = require("util");
 
 const builtIns = new Set([
   "marketing-growth",
@@ -11,7 +12,24 @@ const builtIns = new Set([
 ]);
 
 function readJson(file) {
-  return JSON.parse(fs.readFileSync(file, "utf8").replace(/^\uFEFF/, ""));
+  const bytes = fs.readFileSync(file);
+  const encodings = bytes[0] === 0xff && bytes[1] === 0xfe
+    ? ["utf-16le", "utf-8", "gb18030", "utf-16be"]
+    : bytes[0] === 0xfe && bytes[1] === 0xff
+      ? ["utf-16be", "utf-8", "gb18030", "utf-16le"]
+      : ["utf-8", "gb18030", "utf-16le", "utf-16be"];
+  let lastError;
+  for (const encoding of encodings) {
+    try {
+      const text = new TextDecoder(encoding, { fatal: true })
+        .decode(bytes)
+        .replace(/^\uFEFF/, "");
+      return JSON.parse(text);
+    } catch (error) {
+      lastError = error;
+    }
+  }
+  throw new Error(`Cannot parse JSON ${file}: ${lastError.message}`);
 }
 
 function isChild(candidate, parent) {
