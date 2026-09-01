@@ -34,7 +34,7 @@
 | v2.1.1 事务修复提交 | `5921dc41`、`50a1460b` | `git show --stat`、Windows run `33369481282` |
 | staging 单实例启动器 | `77f7916e` | 13 项脚本合同测试；不代表安装成功 |
 | v2.1.1 媒体/员工修复分支 | `codex/hotfix-v2-1-1-media-agents` | PR #4；媒体插件与员工恢复提交 `5bec4dc`，后续热修复稳健性至 `fb50f05` |
-| 新盘 provisioning 正式构建修复 | `codex/p0-full-provision` | 2026-09-01 本地合同与文档更新，正式 CI 运行待记录 |
+| 新盘 provisioning 正式构建修复 | `565cd13`（分支 `codex/p0-full-provision`） | 54 项针对性测试通过；正式 CI 运行待记录 |
 
 后续实施以本轮 review 后的总执行计划为唯一跨模块顺序；四份原始分计划只能作为文件级
 任务明细使用，不得越过总计划中的前置门禁。

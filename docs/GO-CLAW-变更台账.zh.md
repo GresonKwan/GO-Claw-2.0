@@ -150,8 +150,8 @@
 | 改动 | 原因 | commit | 验证 | 关联文档 |
 | --- | --- | --- | --- | --- |
 | 捆绑图片/视频插件版本提升并允许 v2.1.1 host；启动时原子升级旧 manifest；恢复预置员工和缺失 workspace | 正式 v2.1.1 中旧插件兼容上限为 2.1.0，两个员工 workspace 还可能损坏或缺失 | `5bec4dc`、`0b7ded0`、`250843d`、`fb50f05` | 插件/员工单测；G、F 盘 `/api/plugins` 均确认两个插件 loaded/enabled，五个员工 running | `GO-CLAW-项目事实与发布基线.zh.md` |
-| Main Full ZIP 从静态 `credentials.json` 改为唯一 `provision.json`；manifest 升级 schema 3；打包和发布 verifier 禁止混装/静态凭据并校验 provisioning 哈希 | 新空盘没有 `instance.id`，额度接口不可用；共享静态 token 也违背每实例额度合同 | （待推送） | 打包、Full ZIP、发布合同、桌面额度验证共 54 项针对性测试 | `go-claw-auto-provisioning.zh.md` |
-| Windows portable CI 新增 `/api/console/quota` 运行门禁；构建期七模型 key 只做预检，不再写入客户包；临时 provisioning 源在组包后清理 | 旧 CI 只验证文件结构和应用启动，无法发现新盘缺额度条 | （待推送） | 本地合同测试通过；正式 Windows-only run 待记录 | `GO-CLAW-项目事实与发布基线.zh.md` |
+| Main Full ZIP 从静态 `credentials.json` 改为唯一 `provision.json`；manifest 升级 schema 3；打包和发布 verifier 禁止混装/静态凭据并校验 provisioning 哈希 | 新空盘没有 `instance.id`，额度接口不可用；共享静态 token 也违背每实例额度合同 | `565cd13` | 打包、Full ZIP、发布合同、桌面额度验证共 54 项针对性测试 | `go-claw-auto-provisioning.zh.md` |
+| Windows portable CI 新增 `/api/console/quota` 运行门禁；构建期七模型 key 只做预检，不再写入客户包；临时 provisioning 源在组包后清理 | 旧 CI 只验证文件结构和应用启动，无法发现新盘缺额度条 | `565cd13` | 本地合同测试通过；正式 Windows-only run 待记录 | `GO-CLAW-项目事实与发布基线.zh.md` |
 
 ## 2026-08-26 · v2.1 四计划现场 review 与事实基线
 
