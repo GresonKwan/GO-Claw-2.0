@@ -125,7 +125,15 @@ def _migrate_existing_media_tool_names() -> tuple[str, ...]:
     migrated_ids: list[str] = []
     for agent_id, ref in config.agents.profiles.items():
         workspace = Path(ref.workspace_dir).expanduser()
-        payload, _profile = _read_agent_profile(workspace, agent_id)
+        try:
+            payload, _profile = _read_agent_profile(workspace, agent_id)
+        except RuntimeError:
+            logger.warning(
+                "Skipping media tool migration for unreadable employee %s; "
+                "built-in recovery will run next when applicable",
+                agent_id,
+            )
+            continue
         tools = payload.get("tools")
         if not isinstance(tools, dict):
             continue

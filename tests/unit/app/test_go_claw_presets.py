@@ -606,7 +606,7 @@ def test_concurrent_migrations_are_serialized_before_marker_check(
     preset_env: PresetHarness,
     monkeypatch,
 ) -> None:
-    """Only one caller stages resources; the waiter observes its marker."""
+    """Plugin repair runs per call, but never overlaps preset migration."""
     first_installer_entered = threading.Event()
     release_first_installer = threading.Event()
     plugin_calls = 0
@@ -636,7 +636,7 @@ def test_concurrent_migrations_are_serialized_before_marker_check(
 
     assert calls_while_first_holds_transaction == 1
     assert results == (True, True)
-    assert plugin_calls == 1
+    assert plugin_calls == 2
     assert preset_env.marker.is_file()
 
 
