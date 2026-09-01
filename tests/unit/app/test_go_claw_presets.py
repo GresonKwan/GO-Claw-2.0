@@ -358,7 +358,6 @@ def test_existing_specialist_refs_are_entirely_user_owned(
 
 def test_completed_marker_means_deleted_specialist_is_not_recreated(
     preset_env: PresetHarness,
-    monkeypatch,
 ) -> None:
     assert preset_migration.ensure_go_claw_presets() is True
     deleted_id = PRESET_ORDER[2]
@@ -368,22 +367,15 @@ def test_completed_marker_means_deleted_specialist_is_not_recreated(
     shutil.rmtree(deleted_workspace)
     del preset_env.config.agents.profiles[deleted_id]
 
-    monkeypatch.setattr(
-        preset_migration,
-        "install_go_claw_bundled_plugins",
-        lambda: (_ for _ in ()).throw(
-            AssertionError("completed migration must not inspect plugins"),
-        ),
-    )
-
+    calls_before = preset_env.plugin_calls
     assert preset_migration.ensure_go_claw_presets() is True
+    assert preset_env.plugin_calls == calls_before + 1
     assert deleted_id not in preset_env.config.agents.profiles
     assert not deleted_workspace.exists()
 
 
 def test_completed_marker_still_migrates_legacy_media_tool_names(
     preset_env: PresetHarness,
-    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     workspace = preset_env.add_existing_agent("legacy-media")
     config_path = workspace / "agent.json"
@@ -435,15 +427,9 @@ def test_completed_marker_still_migrates_legacy_media_tool_names(
         ),
         encoding="utf-8",
     )
-    monkeypatch.setattr(
-        preset_migration,
-        "install_go_claw_bundled_plugins",
-        lambda: (_ for _ in ()).throw(
-            AssertionError("valid marker must skip plugin installation"),
-        ),
-    )
-
+    calls_before = preset_env.plugin_calls
     assert preset_migration.ensure_go_claw_presets() is True
+    assert preset_env.plugin_calls == calls_before + 1
     migrated = json.loads(config_path.read_text(encoding="utf-8"))
     migrated_tools = migrated["tools"]["builtin_tools"]
     assert "generate_image_qwen" not in migrated_tools
@@ -864,7 +850,6 @@ def test_invalid_marker_schema_is_safely_retried(
 )
 def test_strict_valid_marker_returns_without_rechecking_state(
     preset_env: PresetHarness,
-    monkeypatch,
     completed_at: str,
 ) -> None:
     preset_env.marker.parent.mkdir(parents=True, exist_ok=True)
@@ -876,16 +861,43 @@ def test_strict_valid_marker_returns_without_rechecking_state(
         json.dumps(marker_payload),
         encoding="utf-8",
     )
-    monkeypatch.setattr(
-        preset_migration,
-        "install_go_claw_bundled_plugins",
-        lambda: (_ for _ in ()).throw(
-            AssertionError("valid marker must not inspect plugins"),
+    assert preset_migration.ensure_go_claw_presets() is True
+    assert preset_env.plugin_calls == 1
+    assert tuple(preset_env.config.agents.profiles) == ("default",)
+
+
+def test_completed_marker_rehomes_unreadable_builtin_employee(
+    preset_env: PresetHarness,
+) -> None:
+    broken_id = "data-processing"
+    broken_workspace = preset_env.add_existing_agent(broken_id)
+    broken_agent_json = broken_workspace / "agent.json"
+    broken_agent_json.write_text("{broken", encoding="utf-8")
+    preset_env.marker.parent.mkdir(parents=True, exist_ok=True)
+    preset_env.marker.write_text(
+        json.dumps(
+            {
+                "version": preset_migration.PRESET_VERSION,
+                "completedAt": "2026-08-26T00:00:00Z",
+            },
         ),
+        encoding="utf-8",
     )
 
     assert preset_migration.ensure_go_claw_presets() is True
-    assert tuple(preset_env.config.agents.profiles) == ("default",)
+
+    repaired_ref = preset_env.config.agents.profiles[broken_id]
+    repaired_workspace = Path(repaired_ref.workspace_dir)
+    assert repaired_workspace.name == f"{broken_id}-recovered"
+    assert repaired_workspace != broken_workspace
+    assert broken_agent_json.read_text(encoding="utf-8") == "{broken"
+    repaired_payload = json.loads(
+        (repaired_workspace / "agent.json").read_text(encoding="utf-8"),
+    )
+    assert repaired_payload["id"] == broken_id
+    assert repaired_payload["workspace_dir"] == str(repaired_workspace)
+    assert repaired_ref.enabled is True
+    assert repaired_ref.pinned is True
 
 
 def test_only_owned_stale_temp_directory_is_recovered(

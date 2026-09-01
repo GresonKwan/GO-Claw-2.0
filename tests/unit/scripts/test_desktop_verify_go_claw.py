@@ -71,7 +71,7 @@ def _responses() -> dict[str, Any]:
         ],
         "/api/plugins": [
             {"id": "qwen-image-tool", "enabled": True, "loaded": True},
-            {"id": "wan27-tool", "enabled": True, "loaded": False},
+            {"id": "wan27-tool", "enabled": True, "loaded": True},
         ],
     }
 
@@ -266,6 +266,19 @@ def test_plugins_reject_missing_bundled_media_plugin(monkeypatch) -> None:
     _install_http_mock(monkeypatch, responses)
 
     with pytest.raises(RuntimeError, match="wan27-tool"):
+        desktop_verify.verify_go_claw_plugins("http://desktop.local")
+
+
+@pytest.mark.parametrize("field", ("loaded", "enabled"))
+def test_plugins_reject_discovered_but_unavailable_plugin(
+    monkeypatch,
+    field: str,
+) -> None:
+    responses = _responses()
+    responses["/api/plugins"][1][field] = False
+    _install_http_mock(monkeypatch, responses)
+
+    with pytest.raises(RuntimeError, match=r"unavailable.*wan27-tool"):
         desktop_verify.verify_go_claw_plugins("http://desktop.local")
 
 

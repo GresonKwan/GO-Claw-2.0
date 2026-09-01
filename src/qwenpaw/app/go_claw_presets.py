@@ -76,13 +76,13 @@ def _ensure_go_claw_presets() -> bool:
 
 def _ensure_go_claw_presets_locked(data_root: Path) -> bool:
     marker_path = data_root / MARKER_RELATIVE_PATH
-    _migrate_existing_media_tool_names()
-    if _has_completed_marker(marker_path):
-        return True
-
     _validate_bundled_plugin_manifests(
         install_go_claw_bundled_plugins(),
     )
+    _migrate_existing_media_tool_names()
+    if _has_completed_marker(marker_path):
+        _repair_broken_specialist_profiles(data_root)
+        return True
 
     config = load_config(force_reload=True)
     original_order = list(config.agents.agent_order)
@@ -284,6 +284,60 @@ def _ensure_specialist(
         specialist_id=preset.id,
         workspace=canonical_workspace,
     )
+
+
+def _repair_broken_specialist_profiles(data_root: Path) -> tuple[str, ...]:
+    """Re-home unreadable built-in employees without deleting user data."""
+    repaired: list[str] = []
+    workspaces_root = data_root / "workspaces"
+    for specialist_id in PRESET_ORDER[1:]:
+        config = load_config(force_reload=True)
+        ref = config.agents.profiles.get(specialist_id)
+        if ref is None:
+            continue
+        try:
+            _validate_profile_ref(ref, specialist_id)
+        except Exception:  # noqa: BLE001 - recovery is intentionally broad
+            logger.error(
+                "GO CLAW built-in employee %s has an unreadable profile; "
+                "provisioning a clean recovery workspace and preserving %s",
+                specialist_id,
+                ref.workspace_dir,
+                exc_info=True,
+            )
+            recovery_workspace = _next_recovery_workspace(
+                workspaces_root,
+                specialist_id,
+            )
+            _stage_specialist_workspace(
+                preset=SPECIALIST_PRESETS[specialist_id],
+                canonical_workspace=recovery_workspace,
+            )
+            config = load_config(force_reload=True)
+            config.agents.profiles[specialist_id] = AgentProfileRef(
+                id=specialist_id,
+                workspace_dir=str(recovery_workspace),
+                enabled=True,
+                pinned=True,
+            )
+            save_config(config)
+            invalidate_agent_config_cache(specialist_id)
+            repaired.append(specialist_id)
+    return tuple(repaired)
+
+
+def _next_recovery_workspace(
+    workspaces_root: Path,
+    specialist_id: str,
+) -> Path:
+    """Choose a deterministic unused sibling for a recovered employee."""
+    stem = f"{specialist_id}-recovered"
+    candidate = workspaces_root / stem
+    suffix = 2
+    while _path_exists(candidate):
+        candidate = workspaces_root / f"{stem}-{suffix}"
+        suffix += 1
+    return candidate
 
 
 def _validate_profile_ref(ref: AgentProfileRef, expected_id: str) -> None:

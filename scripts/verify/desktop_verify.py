@@ -380,7 +380,7 @@ def verify_go_claw_model_tiers(base_url: str) -> None:
 
 
 def verify_go_claw_plugins(base_url: str) -> None:
-    """Verify startup discovers both bundled media plugins."""
+    """Verify startup loads and enables both bundled media plugins."""
     endpoint = "/api/plugins"
     payload = _json_payload(_http("GET", f"{base_url}{endpoint}"), endpoint)
     if not isinstance(payload, list):
@@ -397,7 +397,27 @@ def verify_go_claw_plugins(base_url: str) -> None:
         raise RuntimeError(
             f"GO CLAW bundled media plugins were not discovered: {missing}",
         )
-    print("PASS  GO CLAW bundled media plugins discovered")
+    unavailable = []
+    for plugin_id in GO_CLAW_MEDIA_PLUGINS:
+        plugin = next(
+            item
+            for item in payload
+            if isinstance(item, dict) and item.get("id") == plugin_id
+        )
+        if (
+            plugin.get("loaded") is not True
+            or plugin.get("enabled") is not True
+        ):
+            unavailable.append(
+                f"{plugin_id}(loaded={plugin.get('loaded')!r}, "
+                f"enabled={plugin.get('enabled')!r})",
+            )
+    if unavailable:
+        raise RuntimeError(
+            "GO CLAW bundled media plugins are unavailable: "
+            + ", ".join(unavailable),
+        )
+    print("PASS  GO CLAW bundled media plugins loaded and enabled")
 
 
 def configure_provider(
