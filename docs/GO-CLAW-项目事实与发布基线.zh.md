@@ -1,6 +1,6 @@
 # GO CLAW 项目事实与发布基线
 
-> 状态：当前有效。最后现场复核：2026-08-31（Asia/Shanghai）。
+> 状态：当前有效。最后现场复核：2026-09-01（Asia/Shanghai）。
 >
 > 本文只记录“现在是什么”和“发布前必须成立什么”。历史变更见
 > `GO-CLAW-变更台账.zh.md`，操作步骤见各专题文档，尚未实施的内容不得写成现状。
@@ -24,7 +24,7 @@
 
 | 项目 | 已验证现状 | 验证方式 |
 | --- | --- | --- |
-| 当前调试工作树 | `/Volumes/固态2/2026/0811 GO Claw 2.0/upstream/go-claw-v2.1.1` | `git rev-parse --show-toplevel` |
+| 当前 P0 修复工作树 | `H:\2026\0811 GO Claw 2.0-hotfix-media-agents` | `git rev-parse --show-toplevel` |
 | GitHub 仓库 | `GresonKwan/GO-Claw-2.0` | `gh repo view` |
 | 产品基线 | QwenPaw v2.0.1，导入提交 `24813b3` | 变更台账和 Git 历史 |
 | 本轮设计提交 | `ce18d02f` | `git show --stat ce18d02f` |
@@ -33,6 +33,8 @@
 | v2.1.1 调试分支 | `codex/portable-updater-v2-1-1` | 本地与 `origin` 均为 `77f7916e`（文档提交前） |
 | v2.1.1 事务修复提交 | `5921dc41`、`50a1460b` | `git show --stat`、Windows run `33369481282` |
 | staging 单实例启动器 | `77f7916e` | 13 项脚本合同测试；不代表安装成功 |
+| v2.1.1 媒体/员工修复分支 | `codex/hotfix-v2-1-1-media-agents` | PR #4；媒体插件与员工恢复提交 `5bec4dc`，后续热修复稳健性至 `fb50f05` |
+| 新盘 provisioning 正式构建修复 | `codex/p0-full-provision` | 2026-09-01 本地合同与文档更新，正式 CI 运行待记录 |
 
 后续实施以本轮 review 后的总执行计划为唯一跨模块顺序；四份原始分计划只能作为文件级
 任务明细使用，不得越过总计划中的前置门禁。
@@ -121,25 +123,25 @@ Nginx 的已验证配置文件是：
 
 ## 5. 交付凭据和 provisioning 现状
 
-当前代码仍是 schema 1：通用 `provision.json` 内嵌一个所有客户端共享的 HMAC secret，
-客户端用它签名后换取每实例 New API 子令牌。当前实现还有两个必须正视的事实：
+客户端和服务端仍使用 schema 1：Full ZIP 内的 `provision.json` 携带 provisioning URL 和
+共享 HMAC，客户端首次启动生成 `data/instance.id`，按实例换取低额度 New API 子令牌，再将
+schema-1 `credentials.json` 原子写入产品盘并导入文字、媒体 provider。
 
-1. 分发进客户端的 HMAC secret 可以被提取，不能作为强身份凭证；
-2. `go_claw_provision.py` 发现已有 `credentials.json` 时会跳过 provisioning，因此同时打包
-   静态共享凭据和 provisioning 配置会直接绕过每实例开户。
+正式 Main Build 合同为：
 
-用户已确认接受低额度 API key 存放在客户本地的交付取舍。v2.1 保留现有
-`credentials.json` schema 1 和一次性本地导入逻辑：
+- CI 从既有 `GO_CLAW_PROVISION_URL` 和 `GO_CLAW_PROVISION_HMAC_SECRET` 生成唯一的
+  `Portable/GO-CLAW-Config/provision.json`；
+- Full ZIP 严禁包含任何 `credentials.json`，也严禁 provisioning 与静态凭据混装；
+- `GO_CLAW_DASHSCOPE_API_KEY` 只用于构建期七模型预检，不进入客户包；
+- Full ZIP manifest 使用 schema 3，记录 `containsCredentials=false`、
+  `containsProvisioningConfig=true` 和 provisioning 配置 SHA-256；
+- 便携运行验证必须确认 `/api/console/quota` 返回有效三字段额度合同，并确认两个媒体插件均已
+  加载、启用；
+- 在线更新 payload 不包含 `GO-CLAW-Config`，因此不覆盖客户已有 provisioning 配置或实例凭据。
 
-- Main CI 使用已有 `GO_CLAW_DASHSCOPE_API_KEY` 生成一份指向
-  `https://goclaw.host:8443/v1` 的本地 `credentials.json`；
-- 同一个低额度 New API key 供文字和媒体 provider 使用，不新增 secret；
-- Main Full ZIP 包含该凭据，首次启动自动导入，不出现激活或开户交互；
-- Main Full ZIP 不包含 `provision.json`、共享 HMAC 或 enrollment ticket；
-- 在线更新 payload 不包含 `GO-CLAW-Config`，因此不覆盖客户本地 key。
-
-现有 schema-1 HMAC provisioning 服务可保留用于历史客户，但不是 v2.1 Main Build 前置条件；
-本轮不实施 schema 2、激活码、ticket DB 或客户 ZIP sealing。
+共享 HMAC 会随 Full ZIP 分发，可以被提取，不能作为强身份凭证。这是 v2.1.1 明确接受的
+限制；通过每实例低额度、模型白名单和服务端幂等控制影响面。本轮不实施 schema 2、激活码、
+ticket DB 或客户 ZIP sealing。
 
 ## 6. 更新签名事实
 
@@ -175,16 +177,17 @@ GitHub Secrets 已存在：
 
 GitHub Variable `TAURI_UPDATER_PUBKEY` 已存在并与仓库公钥一致。
 
-`GO_CLAW_LLM_API_KEY` 当前不存在，v2.1 不新增它。Main Build 直接复用已有
-`GO_CLAW_DASHSCOPE_API_KEY` 作为低额度 New API key，同时写入客户本地的文字和媒体凭据字段。
-保留的是 Secret 名称；其值必须通过 `https://goclaw.host:8443/v1/models` 七模型预检。若现值不是
-可用的低额度 New API key，只替换该 Secret 的值。本轮不新建 `GO_CLAW_CI_TEST_API_KEY` 或其他测试额度机制。
+`GO_CLAW_LLM_API_KEY` 当前不存在，v2.1.1 不新增它。Main Build 使用已有
+`GO_CLAW_DASHSCOPE_API_KEY` 请求 `https://goclaw.host:8443/v1/models` 做七模型预检，但不把该
+key 写入 Full ZIP。客户盘首次启动后由 provisioning 服务签发独立低额度 token。本轮不新建
+`GO_CLAW_CI_TEST_API_KEY` 或其他测试额度机制。
 
 2026-08-26 已在 New API 创建专用交付令牌 ID 29（名称
 `go-claw-main-v2.1-full`）：非无限额度，只允许本轮七个产品模型。创建前数据库备份为
 `/opt/new-api/data/backups/one-api-before-main-delivery-token-20260826T153608Z.db`，完整性为 `ok`。
 令牌值已直接写入现有 GitHub Secret `GO_CLAW_DASHSCOPE_API_KEY`，未输出到日志；
-实测 `/v1/models` 七模型全部可见。
+实测 `/v1/models` 七模型全部可见。该 Secret 现在仅作为构建期可用性探针，客户实例 token
+由 provisioning 服务另行签发。
 
 ### 7.2 产物与发布现状
 
@@ -194,6 +197,13 @@ GitHub Variable `TAURI_UPDATER_PUBKEY` 已存在并与仓库公钥一致。
 > Windows 小型 probe 事务测试，但用户使用完整 staging 更新包再次实测仍然失败。本次失败
 > 尚未取得安装阶段日志，原因未知；不得宣称 `v2.1.1` 已修复或让客户继续重试。完整接手资料见
 > `GO-CLAW-v2.1.1-Windows在线更新调试交接.zh.md`。
+
+> **新盘 Full ZIP P0（2026-09-01）**：当天新拷贝的 G、F 两块空产品盘均复现额度条缺失、
+> 生图生视频工具不可用。现场证据显示旧 Full ZIP 携带共享 `credentials.json` 而没有
+> `provision.json`/`data/instance.id`，同时两个媒体插件 manifest 的 host 上限停在 `2.1.0`。
+> 两块盘均在备份后完成本地最小修复，并验证额度接口、两个媒体插件和五个员工恢复。
+> 正式代码合同已改为 provisioning-only，并增加额度运行门禁；正式 Windows CI run 尚待记录。
+> 此 P0 与上方“v2.0.1 → v2.1.1 原地更新事务”是两个独立问题，不能互相作为关闭证据。
 
 - Windows-only Main Build run `33059759882` 已对提交
   `f6732aa67e012a5f5b03048276ba05df1051ded9` 成功完成；客户 artifact
@@ -268,7 +278,9 @@ v2.0.1 对 staging manifest 做一次升级验收；客户不得成为第一位�
 3. 每个员工独立保存经济/均衡/高性能档位，新员工默认经济。
 4. 五个媒体工具均通过 New API 的 Token Plan 原生媒体渠道实测，不存在旧百炼直连自动回退；
    当前该门禁已通过。
-5. Main Full ZIP 包含已接受的低额度本地 `credentials.json`，但不包含 `provision.json`、共享 HMAC、ticket 或签名私钥；在线更新资产不包含客户凭据。
+5. Main Full ZIP 只包含唯一、规范的 `provision.json`，不包含任何静态 `credentials.json`、
+   enrollment ticket 或签名私钥；共享 HMAC 的可提取局限已记录。首次启动必须生成
+   `data/instance.id` 和实例凭据，`/api/console/quota` 返回 200 且额度字段有效。
 6. 三处 updater 公钥一致，安装器和更新包均由现有私钥签名并经项目 verifier 复验。
 7. `/updates/latest.json` 返回 `application/json`，文件、SHA-256、签名和 URL 相互一致。
 8. Main Build 的客户 artifact 内恰好有一个完整 ZIP；在两类 Windows 终端完成 Tauri、
@@ -281,6 +293,8 @@ v2.0.1 对 staging manifest 做一次升级验收；客户不得成为第一位�
     已发布资产不得覆盖；生产镜像只在完整 v2.0.1 → v2.1.1 staging 验收后原子切换。
 12. 完整 477MB 更新 payload 必须从干净 v2.0.1 样本分别在短路径 NTFS 和目标 U 盘完成
     下载、替换、自动重启和版本一致性验收；小型 CI probe 不能替代此项。
+13. 两个捆绑媒体插件在 v2.1.1 host 上必须同时 `loaded=true`、`enabled=true`，内容生产员工
+    必须暴露五个媒体工具；全新盘验证不能复用已有 `credentials.json` 或 `instance.id`。
 
 ## 10. 每次发布前的复核命令
 

@@ -420,6 +420,28 @@ def verify_go_claw_plugins(base_url: str) -> None:
     print("PASS  GO CLAW bundled media plugins loaded and enabled")
 
 
+def verify_go_claw_quota(base_url: str) -> None:
+    """Verify fresh portable provisioning exposes the sidebar quota data."""
+    endpoint = "/api/console/quota"
+    payload = _json_payload(_http("GET", f"{base_url}{endpoint}"), endpoint)
+    if not isinstance(payload, dict) or set(payload) != {
+        "granted",
+        "remaining",
+        "percent",
+    }:
+        raise RuntimeError(f"{endpoint} returned an invalid quota contract")
+    values = tuple(payload[key] for key in ("granted", "remaining", "percent"))
+    if any(
+        isinstance(value, bool) or not isinstance(value, (int, float))
+        for value in values
+    ):
+        raise RuntimeError(f"{endpoint} returned non-numeric quota values")
+    granted, remaining, percent = values
+    if granted < 0 or remaining < 0 or not 0 <= percent <= 100:
+        raise RuntimeError(f"{endpoint} returned out-of-range quota values")
+    print("PASS  GO CLAW per-instance quota contract is available")
+
+
 def configure_provider(
     base_url: str,
     provider_id: str,
@@ -1191,6 +1213,7 @@ def main() -> int:
         verify_go_claw_employees(base_url)
         verify_go_claw_model_tiers(base_url)
         verify_go_claw_plugins(base_url)
+        verify_go_claw_quota(base_url)
 
         # ---- UI load (always run unless --skip-ui, no key needed) ----
         # This catches broken Vite bundles, missing assets, CSP issues,

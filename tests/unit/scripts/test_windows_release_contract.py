@@ -35,6 +35,12 @@ def _write_full_zip(path: Path, pubkey_text: str) -> None:
         "Portable/GO-CLAW-Portable.exe": b"portable",
         "Portable/binaries/node.exe": b"node",
         "Portable/binaries/python-runtime/python/Lib/hmac.py": b"stdlib",
+        "Portable/GO-CLAW-Config/provision.json": json.dumps(
+            {
+                "provisionUrl": ("https://goclaw.host:8443/go-claw/provision"),
+                "hmacSecret": "unit-test-provision-secret",
+            },
+        ).encode(),
         "Portable/GO-CLAW-Config/credentials.example.json": b"{}",
         "Portable/GO-CLAW-Config/update-pubkey.txt": (
             pubkey_text + "\n"
@@ -44,21 +50,6 @@ def _write_full_zip(path: Path, pubkey_text: str) -> None:
         "Portable/portable.json": b"{}",
         "WebView2/MicrosoftEdgeWebView2RuntimeInstallerX64.exe": b"webview",
     }
-    credentials = {
-        "schemaVersion": 1,
-        "llm": {
-            "modelId": "deepseek-v4-flash-0731",
-            "baseUrl": "https://goclaw.host:8443/v1",
-            "apiKey": "sk-test-" + "x" * 32,
-        },
-        "dashscope": {
-            "compatibleBaseUrl": "https://goclaw.host:8443/v1",
-            "apiKey": "sk-test-" + "x" * 32,
-        },
-    }
-    files["Portable/GO-CLAW-Config/credentials.json"] = json.dumps(
-        credentials,
-    ).encode()
     manifest_files = [
         {
             "path": name,
@@ -68,13 +59,14 @@ def _write_full_zip(path: Path, pubkey_text: str) -> None:
         for name, data in sorted(files.items())
     ]
     manifest = {
-        "schemaVersion": 2,
+        "schemaVersion": 3,
         "product": "GO CLAW",
         "version": "2.1.0",
         "platform": "windows-x86_64",
         "sourceCommit": "a" * 40,
         "confidential": True,
-        "containsCredentials": True,
+        "containsCredentials": False,
+        "containsProvisioningConfig": True,
         "containsEnrollmentTicket": False,
         "webView2": {
             "authenticodeSubject": "Microsoft Corporation",
@@ -82,6 +74,9 @@ def _write_full_zip(path: Path, pubkey_text: str) -> None:
         },
         "updaterPublicKeySha256": hashlib.sha256(
             (pubkey_text + "\n").encode(),
+        ).hexdigest(),
+        "provisioningConfigSha256": hashlib.sha256(
+            files["Portable/GO-CLAW-Config/provision.json"],
         ).hexdigest(),
         "files": manifest_files,
     }
@@ -158,6 +153,7 @@ def test_verifies_complete_release_contract(tmp_path):
     summary = MODULE.verify_release_contract(**_fixture(tmp_path))
     assert summary["version"] == "2.1.0"
     assert summary["signatureChecks"] == 2
+    assert summary["containsProvisioningConfig"] is True
 
 
 def test_allows_runtime_cache_directory_in_update_payload(tmp_path):

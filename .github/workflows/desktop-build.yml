@@ -104,37 +104,44 @@ jobs:
           }
           Write-Host "Signed Windows build settings are present"
 
-      - name: Materialize required GO CLAW Full ZIP credentials
+      - name: Validate delivery key and materialize GO CLAW provisioning
         shell: pwsh
         env:
           GO_CLAW_DASHSCOPE_API_KEY: ${{ secrets.GO_CLAW_DASHSCOPE_API_KEY }}
+          GO_CLAW_PROVISION_URL: ${{ secrets.GO_CLAW_PROVISION_URL }}
+          GO_CLAW_PROVISION_HMAC_SECRET: ${{ secrets.GO_CLAW_PROVISION_HMAC_SECRET }}
         run: |
-          if ([string]::IsNullOrWhiteSpace($env:GO_CLAW_DASHSCOPE_API_KEY)) {
-            throw "GO_CLAW_DASHSCOPE_API_KEY is required for the Full ZIP"
+          foreach ($name in @(
+            "GO_CLAW_DASHSCOPE_API_KEY",
+            "GO_CLAW_PROVISION_URL",
+            "GO_CLAW_PROVISION_HMAC_SECRET"
+          )) {
+            if ([string]::IsNullOrWhiteSpace([Environment]::GetEnvironmentVariable($name))) {
+              throw "$name is required for the GO CLAW Full ZIP"
+            }
+          }
+          if ($env:GO_CLAW_PROVISION_URL -ne "https://goclaw.host:8443/go-claw/provision") {
+            throw "GO_CLAW_PROVISION_URL does not match the production provisioning endpoint"
+          }
+          if ($env:GO_CLAW_PROVISION_HMAC_SECRET.Length -lt 16) {
+            throw "GO_CLAW_PROVISION_HMAC_SECRET is structurally invalid"
           }
           $configDir = "scripts/pack-tauri/GO-CLAW-Config"
           New-Item -ItemType Directory -Force -Path $configDir | Out-Null
+          if (Test-Path -LiteralPath "$configDir/credentials.json") {
+            throw "credentials.json must not be staged with provisioning"
+          }
           $payload = [ordered]@{
-            schemaVersion = 1
-            batchId = "go-claw-main-${{ github.run_id }}"
-            llm = [ordered]@{
-              providerId = "deepseek"
-              modelId = "deepseek-v4-flash-0731"
-              baseUrl = "https://goclaw.host:8443/v1"
-              apiKey = $env:GO_CLAW_DASHSCOPE_API_KEY
-            }
-            dashscope = [ordered]@{
-              compatibleBaseUrl = "https://goclaw.host:8443/v1"
-              apiKey = $env:GO_CLAW_DASHSCOPE_API_KEY
-            }
+            provisionUrl = $env:GO_CLAW_PROVISION_URL
+            hmacSecret = $env:GO_CLAW_PROVISION_HMAC_SECRET
           }
           [IO.File]::WriteAllText(
-            "$configDir/credentials.json",
-            ($payload | ConvertTo-Json -Depth 4),
+            "$configDir/provision.json",
+            ($payload | ConvertTo-Json -Depth 2),
             [Text.UTF8Encoding]::new($false)
           )
-          $headers = @{ Authorization = "Bearer $($payload.dashscope.apiKey)" }
-          $modelsUrl = "$($payload.dashscope.compatibleBaseUrl.TrimEnd('/'))/models"
+          $headers = @{ Authorization = "Bearer $env:GO_CLAW_DASHSCOPE_API_KEY" }
+          $modelsUrl = "https://goclaw.host:8443/v1/models"
           $models = Invoke-RestMethod `
             -Method Get `
             -Uri $modelsUrl `
@@ -156,7 +163,7 @@ jobs:
             }
           }
           Write-Host "GO CLAW seven-model credential preflight passed"
-          Write-Host "Full ZIP credentials staged without displaying the key"
+          Write-Host "Full ZIP provisioning staged without displaying secrets"
 
       - name: Build Tauri Windows package
         shell: pwsh
@@ -362,6 +369,16 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw "Full ZIP assembly failed" }
           if (-not (Test-Path -LiteralPath "dist/GO-CLAW-Windows-x64-Full.zip")) {
             throw "Canonical GO CLAW Full ZIP was not produced"
+          }
+
+      - name: Remove build-time provisioning source
+        if: always()
+        shell: pwsh
+        run: |
+          $path = "scripts/pack-tauri/GO-CLAW-Config/provision.json"
+          Remove-Item -LiteralPath $path -Force -ErrorAction SilentlyContinue
+          if (Test-Path -LiteralPath $path) {
+            throw "Failed to remove build-time provisioning source"
           }
 
       - name: Verify signed Windows release contract

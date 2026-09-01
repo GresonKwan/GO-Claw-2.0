@@ -2,7 +2,7 @@
 
 > 状态：**事故未解决，禁止发布**。
 >
-> 最后更新：2026-08-31（Asia/Shanghai）。
+> 最后更新：2026-09-01（Asia/Shanghai）。
 >
 > 用途：让一台全新 Windows 电脑上的 Codex 不依赖历史聊天即可继续定位
 > v2.0.1 → v2.1.1 便携版原地更新失败。
@@ -115,6 +115,20 @@ backend 进程，再设置 staging endpoint，并从脚本所在目录以绝对�
 2026-08-31 用户随后再次进行实机更新，结果仍然失败。失败后的 `install.log`、
 `last-update-error.txt`、进程列表和文件树尚未在仓库中取得，因此本次失败处于**原因未知**状态；
 不得继续沿用“仍是 updater 自身 cwd 锁”这一未经新证据确认的结论。
+
+### 3.5 2026-09-01 新盘 P0（不要与在线更新事故混淆）
+
+当天新拷贝 v2.1.1 的 G、F 两块空产品盘均出现额度条缺失、生图生视频工具不可用。现场证据为：
+
+- 盘内只有 Main Build 注入的静态 `GO-CLAW-Config/credentials.json`，没有
+  `provision.json` 和 `data/instance.id`，所以 `/api/console/quota` 无法识别实例；
+- qwen-image/wan27 两个捆绑插件 manifest 的 host 上限仍为 `2.1.0`，在 v2.1.1 上不兼容；
+- 本地最小修复后，两块盘的额度接口、两个媒体插件和五个员工均恢复。
+
+PR #4 分支 `codex/hotfix-v2-1-1-media-agents` 已包含媒体插件/员工修复；后续正式构建合同改为
+provisioning-only，并增加 Full ZIP schema 3、禁止静态凭据混装及额度运行验证。这些证据证明
+“全新 Full ZIP 交付”故障的根因，**不证明** 477MB 在线更新事务成功。生产更新软链仍不得修改，
+本交接 §7 的干净 v2.0.1 实机复现和取证门禁保持不变。
 
 ## 4. 当前发布和服务器事实
 

@@ -21,7 +21,7 @@ from qwenpaw.app.go_claw_updates import (  # noqa: E402
     verify_minisign,
 )
 
-EXPECTED_API_URL = "https://goclaw.host:8443/v1"
+EXPECTED_PROVISION_URL = "https://goclaw.host:8443/go-claw/provision"
 FORBIDDEN_UPDATE_PARTS = {
     "go-claw-config",
     "credentials.json",
@@ -59,29 +59,24 @@ def _read_pubkey(config_path: Path) -> str:
     return value.strip()
 
 
-def _validate_credentials(data: bytes) -> None:
+def _validate_provision(data: bytes) -> None:
     try:
         payload = json.loads(data)
-        llm = payload["llm"]
-        media = payload["dashscope"]
-        llm_key = llm["apiKey"]
-        media_key = media["apiKey"]
+        url = payload["provisionUrl"]
+        secret = payload["hmacSecret"]
     except (json.JSONDecodeError, KeyError, TypeError) as exc:
         raise ValueError(
-            "Full ZIP credentials are structurally invalid",
+            "Full ZIP provision config is structurally invalid",
         ) from exc
     if (
-        payload.get("schemaVersion") != 1
-        or llm.get("modelId") != "deepseek-v4-flash-0731"
-        or llm.get("baseUrl") != EXPECTED_API_URL
-        or media.get("compatibleBaseUrl") != EXPECTED_API_URL
-        or llm_key != media_key
-        or not isinstance(llm_key, str)
-        or not llm_key.startswith("sk-")
-        or len(llm_key) < 20
+        set(payload) != {"provisionUrl", "hmacSecret"}
+        or url != EXPECTED_PROVISION_URL
+        or not isinstance(secret, str)
+        or len(secret) < 16
+        or any(char.isspace() for char in secret)
     ):
         raise ValueError(
-            "Full ZIP credentials do not match the delivery contract",
+            "Full ZIP provision config does not match the delivery contract",
         )
 
 
@@ -119,7 +114,7 @@ def _verify_full_zip(full_zip: Path, pubkey: str) -> dict[str, object]:
     required = {
         "START-HERE.zh-CN.txt",
         "Portable/GO-CLAW-Portable.exe",
-        "Portable/GO-CLAW-Config/credentials.json",
+        "Portable/GO-CLAW-Config/provision.json",
         "Portable/GO-CLAW-Config/credentials.example.json",
         "Portable/GO-CLAW-Config/update-pubkey.txt",
         "Portable/LICENSE",
@@ -135,6 +130,8 @@ def _verify_full_zip(full_zip: Path, pubkey: str) -> dict[str, object]:
             f"Full ZIP is missing required files: {sorted(missing)}",
         )
     for relative in relative_data:
+        if relative == "Portable/GO-CLAW-Config/provision.json":
+            continue
         parts = PurePosixPath(relative).parts
         if (
             len(parts) >= 2
@@ -157,8 +154,9 @@ def _verify_full_zip(full_zip: Path, pubkey: str) -> dict[str, object]:
     staged_pubkey = relative_data["Portable/GO-CLAW-Config/update-pubkey.txt"]
     if staged_pubkey != (pubkey + "\n").encode("ascii"):
         raise ValueError("Full ZIP updater public key does not match config")
-    _validate_credentials(
-        relative_data["Portable/GO-CLAW-Config/credentials.json"],
+    provision_data = relative_data["Portable/GO-CLAW-Config/provision.json"]
+    _validate_provision(
+        provision_data,
     )
 
     try:
@@ -166,16 +164,19 @@ def _verify_full_zip(full_zip: Path, pubkey: str) -> dict[str, object]:
     except json.JSONDecodeError as exc:
         raise ValueError("Full ZIP manifest is invalid JSON") from exc
     if (
-        manifest.get("schemaVersion") != 2
+        manifest.get("schemaVersion") != 3
         or manifest.get("product") != "GO CLAW"
         or manifest.get("platform") != "windows-x86_64"
         or manifest.get("confidential") is not True
-        or manifest.get("containsCredentials") is not True
+        or manifest.get("containsCredentials") is not False
+        or manifest.get("containsProvisioningConfig") is not True
         or manifest.get("containsEnrollmentTicket") is not False
     ):
-        raise ValueError("Full ZIP manifest does not match schema 2 contract")
+        raise ValueError("Full ZIP manifest does not match schema 3 contract")
     if manifest.get("updaterPublicKeySha256") != _sha256(staged_pubkey):
         raise ValueError("Full ZIP manifest updater public key hash mismatch")
+    if manifest.get("provisioningConfigSha256") != _sha256(provision_data):
+        raise ValueError("Full ZIP manifest provisioning config hash mismatch")
     webview_path = "WebView2/MicrosoftEdgeWebView2RuntimeInstallerX64.exe"
     if manifest.get("webView2", {}).get("sha256") != _sha256(
         relative_data[webview_path],
@@ -316,7 +317,8 @@ def verify_release_contract(
         "version": zip_summary["version"],
         "signatureChecks": 2,
         "fullZipFiles": zip_summary["files"],
-        "containsCredentials": True,
+        "containsCredentials": False,
+        "containsProvisioningConfig": True,
     }
 
 

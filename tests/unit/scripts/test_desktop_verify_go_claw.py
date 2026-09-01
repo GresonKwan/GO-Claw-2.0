@@ -73,6 +73,11 @@ def _responses() -> dict[str, Any]:
             {"id": "qwen-image-tool", "enabled": True, "loaded": True},
             {"id": "wan27-tool", "enabled": True, "loaded": True},
         ],
+        "/api/console/quota": {
+            "granted": 2.0,
+            "remaining": 1.5,
+            "percent": 75,
+        },
     }
 
 
@@ -115,6 +120,7 @@ def test_go_claw_startup_smoke_accepts_real_http_schema(monkeypatch) -> None:
     desktop_verify.verify_frontend("http://desktop.local")
     desktop_verify.verify_go_claw_employees("http://desktop.local")
     desktop_verify.verify_go_claw_plugins("http://desktop.local")
+    desktop_verify.verify_go_claw_quota("http://desktop.local")
 
 
 def test_model_tier_smoke_switches_and_restores_exact_public_contract(
@@ -282,6 +288,28 @@ def test_plugins_reject_discovered_but_unavailable_plugin(
         desktop_verify.verify_go_claw_plugins("http://desktop.local")
 
 
+@pytest.mark.parametrize(
+    "payload",
+    [
+        {"granted": 2.0, "remaining": 1.0},
+        {"granted": 2.0, "remaining": 1.0, "percent": 101},
+        {"granted": 2.0, "remaining": "1.0", "percent": 50},
+    ],
+)
+def test_quota_rejects_missing_or_invalid_contract(
+    monkeypatch,
+    payload,
+) -> None:
+    monkeypatch.setattr(
+        desktop_verify,
+        "_http",
+        lambda *_args, **_kwargs: json.dumps(payload),
+    )
+
+    with pytest.raises(RuntimeError, match="quota"):
+        desktop_verify.verify_go_claw_quota("http://desktop.local")
+
+
 def test_main_runs_keyless_go_claw_smoke_for_existing_verify_entry(
     monkeypatch,
 ) -> None:
@@ -329,6 +357,11 @@ def test_main_runs_keyless_go_claw_smoke_for_existing_verify_entry(
         "verify_go_claw_model_tiers",
         lambda _url: calls.append("model-tiers"),
     )
+    monkeypatch.setattr(
+        desktop_verify,
+        "verify_go_claw_quota",
+        lambda _url: calls.append("quota"),
+    )
 
     assert desktop_verify.main() == 0
     assert calls == [
@@ -337,6 +370,7 @@ def test_main_runs_keyless_go_claw_smoke_for_existing_verify_entry(
         "employees",
         "model-tiers",
         "plugins",
+        "quota",
     ]
 
 
