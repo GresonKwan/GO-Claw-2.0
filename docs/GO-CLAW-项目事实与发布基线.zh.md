@@ -33,8 +33,8 @@
 | v2.1.1 调试分支 | `codex/portable-updater-v2-1-1` | 本地与 `origin` 均为 `77f7916e`（文档提交前） |
 | v2.1.1 事务修复提交 | `5921dc41`、`50a1460b` | `git show --stat`、Windows run `33369481282` |
 | staging 单实例启动器 | `77f7916e` | 13 项脚本合同测试；不代表安装成功 |
-| v2.1.1 媒体/员工修复分支 | `codex/hotfix-v2-1-1-media-agents` | PR #4；媒体插件与员工恢复提交 `5bec4dc`，后续热修复稳健性至 `fb50f05` |
-| 新盘 provisioning 正式构建修复 | `565cd13`（分支 `codex/p0-full-provision`） | 54 项针对性测试通过；正式 CI 运行待记录 |
+| v2.1.1 媒体/员工修复分支 | `codex/hotfix-v2-1-1-media-agents` | PR #4；媒体插件与员工恢复提交 `5bec4dc`，后续热修复稳健性至 `512ba07` |
+| 新盘 provisioning 正式构建修复 | `565cd13`（正式构建代码头 `512ba07`） | 54 项针对性测试及完整 Tests run `33497130435` 通过；Windows Full run `33497201586` 成功 |
 
 后续实施以本轮 review 后的总执行计划为唯一跨模块顺序；四份原始分计划只能作为文件级
 任务明细使用，不得越过总计划中的前置门禁。
@@ -202,7 +202,9 @@ key 写入 Full ZIP。客户盘首次启动后由 provisioning 服务签发独�
 > 生图生视频工具不可用。现场证据显示旧 Full ZIP 携带共享 `credentials.json` 而没有
 > `provision.json`/`data/instance.id`，同时两个媒体插件 manifest 的 host 上限停在 `2.1.0`。
 > 两块盘均在备份后完成本地最小修复，并验证额度接口、两个媒体插件和五个员工恢复。
-> 正式代码合同已改为 provisioning-only，并增加额度运行门禁；正式 Windows CI run 尚待记录。
+> 正式代码合同已改为 provisioning-only，并增加额度运行门禁；最终 Windows Full run
+> [`33497201586`](https://github.com/GresonKwan/GO-Claw-2.0/actions/runs/33497201586)
+> 已在代码头 `512ba07debd7ec027461f9a84fc06937dc40f9fe` 成功完成。
 > 此 P0 与上方“v2.0.1 → v2.1.1 原地更新事务”是两个独立问题，不能互相作为关闭证据。
 
 - Windows-only Main Build run `33059759882` 已对提交
@@ -226,6 +228,17 @@ key 写入 Full ZIP。客户盘首次启动后由 provisioning 服务签发独�
   [`33369481282`](https://github.com/GresonKwan/GO-Claw-2.0/actions/runs/33369481282)
   在提交 `50a1460bb53106f7016c8f73950b13d7ecb1eb18` 上成功；它验证了完整构建和生产 NSIS
   的小型 probe，不是完整 v2.0.1 → v2.1.1 实机验收。
+- v2.1.1 新盘 P0 最终代码头 `512ba07debd7ec027461f9a84fc06937dc40f9fe` 的完整 Tests run
+  [`33497130435`](https://github.com/GresonKwan/GO-Claw-2.0/actions/runs/33497130435)
+  成功，Windows、macOS、Ubuntu 的 unit/contract/integrated 矩阵全部通过。
+- 同一代码头的 Windows Full run
+  [`33497201586`](https://github.com/GresonKwan/GO-Claw-2.0/actions/runs/33497201586)
+  成功；客户 artifact `GO-CLAW-Windows-x64-Full-2.1.1` 的 artifact ID 为
+  `9797474948`，GitHub artifact digest 为
+  `sha256:c88d734a7e1c3e2499c5819cb88918789100fb61a5c79df21816e5c1acbefe66`。
+  运行日志确认五个员工和无 key 媒体工具、三档模型、两个媒体插件及实例额度合同均 PASS；
+  最终 verifier 输出 `containsCredentials=false`、`containsProvisioningConfig=true`、
+  `fullZipFiles=13910`、`signatureChecks=2`。
 - staging 启动器提交 `77f7916e` 会先结束旧单实例，再注入测试 endpoint；它只消除旧
   v2.0.1 托盘进程继续使用生产 endpoint 的干扰，不修复安装事务。
 
