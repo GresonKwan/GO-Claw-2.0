@@ -1,7 +1,7 @@
 {
   "id": "wan27-tool",
   "name": "视频生成",
-  "version": "1.1.0",
+  "version": "1.1.1",
   "description": "根据文字、图片或参考素材生成视频",
   "description_i18n": {
     "zh-CN": "根据文字、图片或参考素材生成视频",
@@ -17,7 +17,7 @@
   ],
   "qwenpaw_version": {
     "min": "1.1.6",
-    "max": "2.1.0"
+    "max": "2.2.0"
   },
   "meta": {
     "tools": [

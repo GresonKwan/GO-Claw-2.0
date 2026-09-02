@@ -1,10 +1,12 @@
-# 为 QwenPaw 贡献代码
+# 为 GO CLAW 贡献代码
 
 ## 欢迎！🐾
 
-感谢你对 QwenPaw 的关注！QwenPaw 是一个开源的**个人 AI 助手**，可以在你自己的环境中运行——无论是你的机器还是云端。它可以连接钉钉、飞书、QQ、Discord、iMessage 等聊天应用，支持定时任务和心跳机制，并通过 **Skills** 扩展其能力。我们热烈欢迎能让 QwenPaw 对所有人更有用的贡献：无论是添加新的频道、新的模型提供商、Skill，改进文档，还是修复 bug。
+GO CLAW 是基于 QwenPaw 的独立二开产品；`qwenpaw` 仍作为内部包名保留。所有 GO CLAW
+改动只提交到 `GresonKwan/GO-Claw-2.0`，不得向 QwenPaw 上游创建或推送 PR、Issue、
+Release、Tag 或分支。
 
-**快速链接：** [GitHub](https://github.com/agentscope-ai/QwenPaw) · [文档](https://qwenpaw.agentscope.io/) · [许可证：Apache 2.0](LICENSE)
+**快速链接：** [GitHub](https://github.com/GresonKwan/GO-Claw-2.0) · [运行时与维护规则](docs/GO-CLAW-运行时序与维护规则.zh.md) · [许可证：Apache 2.0](LICENSE)
 
 ---
 
@@ -16,7 +18,7 @@
 
 在开始之前：
 
-- **检查 [Open Issues](https://github.com/agentscope-ai/QwenPaw/issues)** 以及任何 [Projects](https://github.com/agentscope-ai/QwenPaw/projects) 或路线图标签。
+- **检查 [Open Issues](https://github.com/GresonKwan/GO-Claw-2.0/issues)** 以及仓库内现行计划和事实基线。
 - **如果存在相关 issue** 且处于开放或未分配状态：发表评论表示你想要处理它，以避免重复工作。
 - **如果不存在相关 issue**：创建一个新 issue 描述你的提案。维护者会回复并帮助与项目方向对齐。
 
@@ -226,8 +228,8 @@ QwenPaw 旨在在 **Windows**、**Linux** 和 **macOS** 上运行。欢迎改进
 
 ## 获取帮助
 
-- **讨论：** [GitHub Discussions](https://github.com/agentscope-ai/QwenPaw/discussions)
-- **Bug 和功能：** [GitHub Issues](https://github.com/agentscope-ai/QwenPaw/issues)
+- **讨论：** [GitHub Discussions](https://github.com/GresonKwan/GO-Claw-2.0/discussions)
+- **Bug 和功能：** [GitHub Issues](https://github.com/GresonKwan/GO-Claw-2.0/issues)
 - **社区：** 钉钉群（见 [README](README_zh.md)）和 [Discord](https://discord.gg/eYMpfnkG8h)
 
-感谢你为 QwenPaw 贡献代码。你的工作帮助它成为每个人更好的助手。🐾
+感谢你为 GO CLAW 贡献代码。

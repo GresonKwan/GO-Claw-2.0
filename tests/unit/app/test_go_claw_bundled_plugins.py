@@ -25,6 +25,7 @@ def _write_plugin(
     plugin_id: str,
     *,
     marker: str,
+    version: str = "1.0.0",
 ) -> Path:
     plugin_dir = root / directory_name
     plugin_dir.mkdir(parents=True)
@@ -32,7 +33,7 @@ def _write_plugin(
     manifest = {
         "id": plugin_id,
         "name": f"{plugin_id} fixture",
-        "version": "1.0.0",
+        "version": version,
         "description": f"Fixture plugin for {plugin_id}",
         "author": "GO CLAW Test",
         "entry": {"backend": "plugin.py"},
@@ -234,6 +235,57 @@ def test_existing_plugin_id_is_preserved_regardless_of_directory_name(
         "customer content"
     )
     assert not (plugins_dir / "qwen-image").exists()
+
+
+def test_older_canonical_bundled_plugins_are_upgraded_atomically(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    source_root = tmp_path / "bundle"
+    plugins_dir = tmp_path / "installed"
+    _write_plugin(
+        source_root,
+        "qwen-image",
+        "qwen-image-tool",
+        marker="new qwen",
+        version="1.1.1",
+    )
+    _write_plugin(
+        source_root,
+        "wan27",
+        "wan27-tool",
+        marker="new wan",
+        version="1.1.1",
+    )
+    _write_plugin(
+        plugins_dir,
+        "qwen-image",
+        "qwen-image-tool",
+        marker="old qwen",
+        version="1.0.0",
+    )
+    _write_plugin(
+        plugins_dir,
+        "wan27",
+        "wan27-tool",
+        marker="old wan",
+        version="1.0.0",
+    )
+    _configure_roots(monkeypatch, source_root, plugins_dir)
+
+    manifests = go_claw_bundled_plugins.install_go_claw_bundled_plugins()
+
+    assert [
+        json.loads(path.read_text(encoding="utf-8"))["version"]
+        for path in manifests
+    ] == ["1.1.1", "1.1.1"]
+    assert (plugins_dir / "qwen-image/marker.txt").read_text() == "new qwen"
+    assert (plugins_dir / "wan27/marker.txt").read_text() == "new wan"
+    assert not [
+        path
+        for path in plugins_dir.iterdir()
+        if ".go-claw-plugin.tmp" in path.name
+    ]
 
 
 def test_canonical_directory_with_another_manifest_id_is_a_conflict(

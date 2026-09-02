@@ -19,6 +19,7 @@ REQUIRED_RUNTIME_ENTRIES = (
     Path("python-runtime/python/python.exe"),
     Path("node-runtime/node.exe"),
 )
+EXPECTED_PROVISION_URL = "https://goclaw.host:8443/go-claw/provision"
 
 
 @dataclass(frozen=True)
@@ -55,7 +56,7 @@ def _validate_batch_credentials_file(credentials_file: Path) -> None:
 
 def _validate_provision_file(provision_file: Path) -> None:
     try:
-        payload = json.loads(provision_file.read_text(encoding="utf-8"))
+        payload = json.loads(provision_file.read_text(encoding="utf-8-sig"))
         url = payload["provisionUrl"]
         secret = payload["hmacSecret"]
     except (json.JSONDecodeError, KeyError, TypeError) as exc:
@@ -63,10 +64,11 @@ def _validate_provision_file(provision_file: Path) -> None:
             "Provisioning config is structurally invalid",
         ) from exc
     if (
-        not isinstance(url, str)
-        or not url.startswith("https://")
+        set(payload) != {"provisionUrl", "hmacSecret"}
+        or url != EXPECTED_PROVISION_URL
         or not isinstance(secret, str)
         or len(secret) < 16
+        or any(char.isspace() for char in secret)
     ):
         raise ValueError("Provisioning config is structurally invalid")
 
@@ -139,6 +141,10 @@ def stage_portable(
     """Create a versioned portable directory, ZIP and SHA-256 sidecar."""
     if not version.strip() or any(char in version for char in "/\\"):
         raise ValueError("version must be a non-empty path-safe value")
+    if credentials_file is not None and provision_file is not None:
+        raise ValueError(
+            "credentials and provision config cannot be staged together",
+        )
     exe = _require_file(exe, "Tauri executable")
     license_file = _require_file(license_file, "license file")
     readme_file = _require_file(readme_file, "portable readme")

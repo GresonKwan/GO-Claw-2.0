@@ -40,22 +40,12 @@ def _fixture(tmp_path: Path) -> dict[str, Path | str]:
         '{"schemaVersion":1,"clientMode":"auto"}\n',
         encoding="utf-8",
     )
-    credentials = {
-        "schemaVersion": 1,
-        "batchId": "main-test",
-        "llm": {
-            "providerId": "deepseek",
-            "modelId": "deepseek-v4-flash-0731",
-            "baseUrl": "https://goclaw.host:8443/v1",
-            "apiKey": "sk-test-" + "a" * 32,
-        },
-        "dashscope": {
-            "compatibleBaseUrl": "https://goclaw.host:8443/v1",
-            "apiKey": "sk-test-" + "a" * 32,
-        },
+    provision = {
+        "provisionUrl": "https://goclaw.host:8443/go-claw/provision",
+        "hmacSecret": "unit-test-provision-secret",
     }
-    (config / "credentials.json").write_text(
-        json.dumps(credentials),
+    (config / "provision.json").write_text(
+        json.dumps(provision),
         encoding="utf-8",
     )
     (config / "credentials.example.json").write_text("{}\n", encoding="utf-8")
@@ -102,7 +92,7 @@ def test_builds_exact_root_contract_manifest_and_sorted_checksums(
             f"{root}/START-HERE.zh-CN.txt",
             f"{root}/Portable/GO-CLAW-Portable.exe",
             f"{root}/Portable/binaries/runtime/node.exe",
-            f"{root}/Portable/GO-CLAW-Config/credentials.json",
+            f"{root}/Portable/GO-CLAW-Config/provision.json",
             f"{root}/Portable/GO-CLAW-Config/credentials.example.json",
             f"{root}/Portable/GO-CLAW-Config/update-pubkey.txt",
             f"{root}/Portable/LICENSE",
@@ -114,11 +104,12 @@ def test_builds_exact_root_contract_manifest_and_sorted_checksums(
         }
         assert required <= set(names)
         manifest = json.loads(archive.read(f"{root}/MANIFEST.json"))
-        assert manifest["schemaVersion"] == 2
+        assert manifest["schemaVersion"] == 3
         assert manifest["version"] == "2.1.0"
         assert manifest["sourceCommit"] == "a" * 40
         assert manifest["confidential"] is True
-        assert manifest["containsCredentials"] is True
+        assert manifest["containsCredentials"] is False
+        assert manifest["containsProvisioningConfig"] is True
         assert manifest["containsEnrollmentTicket"] is False
         assert (
             manifest["webView2"]["sha256"]
@@ -177,7 +168,7 @@ def test_allows_runtime_modules_with_security_terms_in_their_names(tmp_path):
 @pytest.mark.parametrize(
     "forbidden",
     [
-        "provision.json",
+        "another-provision.json",
         "enrollment-ticket.json",
         "provision-hmac.txt",
         "tauri-signing-private-key.txt",
@@ -205,20 +196,20 @@ def test_rejects_symlink_in_portable_stage(tmp_path):
         MODULE.build_full_bundle(**args)
 
 
-def test_rejects_missing_asset_and_wrong_credentials_url(tmp_path):
+def test_rejects_missing_asset_and_wrong_provision_url(tmp_path):
     args = _fixture(tmp_path)
     Path(args["webview2_installer"]).unlink()
     with pytest.raises(FileNotFoundError, match="WebView2"):
         MODULE.build_full_bundle(**args)
 
     args = _fixture(tmp_path / "wrong-url")
-    credentials_path = (
-        Path(args["portable_stage"]) / "GO-CLAW-Config/credentials.json"
+    provision_path = (
+        Path(args["portable_stage"]) / "GO-CLAW-Config/provision.json"
     )
-    credentials = json.loads(credentials_path.read_text(encoding="utf-8"))
-    credentials["dashscope"]["compatibleBaseUrl"] = "https://wrong.invalid/v1"
-    credentials_path.write_text(json.dumps(credentials), encoding="utf-8")
-    with pytest.raises(ValueError, match="credentials"):
+    provision = json.loads(provision_path.read_text(encoding="utf-8"))
+    provision["provisionUrl"] = "https://wrong.invalid/api/provision"
+    provision_path.write_text(json.dumps(provision), encoding="utf-8")
+    with pytest.raises(ValueError, match="provision"):
         MODULE.build_full_bundle(**args)
 
 
@@ -230,19 +221,31 @@ def test_rejects_pubkey_mismatch(tmp_path):
         MODULE.build_full_bundle(**args)
 
 
-def test_rejects_wrong_llm_model_mismatched_keys_and_hmac_field(tmp_path):
-    for case in ("model", "key", "hmac"):
+def test_rejects_invalid_provision_secret_and_packaged_credentials(tmp_path):
+    for case in ("short-secret", "extra-field", "credentials"):
         args = _fixture(tmp_path / case)
-        credentials_path = (
-            Path(args["portable_stage"]) / "GO-CLAW-Config/credentials.json"
-        )
-        credentials = json.loads(credentials_path.read_text(encoding="utf-8"))
-        if case == "model":
-            credentials["llm"]["modelId"] = "wrong-model"
-        elif case == "key":
-            credentials["dashscope"]["apiKey"] = "sk-other-" + "b" * 32
+        config_dir = Path(args["portable_stage"]) / "GO-CLAW-Config"
+        provision_path = config_dir / "provision.json"
+        provision = json.loads(provision_path.read_text(encoding="utf-8"))
+        if case == "short-secret":
+            provision["hmacSecret"] = "too-short"
+        elif case == "extra-field":
+            provision["unexpected"] = "forbidden"
         else:
-            credentials["hmacSecret"] = "forbidden"
-        credentials_path.write_text(json.dumps(credentials), encoding="utf-8")
-        with pytest.raises(ValueError, match="credentials|forbidden"):
+            (config_dir / "credentials.json").write_text(
+                '{"schemaVersion":1}',
+                encoding="utf-8",
+            )
+        provision_path.write_text(json.dumps(provision), encoding="utf-8")
+        with pytest.raises(ValueError, match="provision|credentials"):
             MODULE.build_full_bundle(**args)
+
+
+def test_rejects_missing_canonical_provision_config(tmp_path):
+    args = _fixture(tmp_path)
+    provision_path = (
+        Path(args["portable_stage"]) / "GO-CLAW-Config/provision.json"
+    )
+    provision_path.unlink()
+    with pytest.raises(FileNotFoundError, match="provision"):
+        MODULE.build_full_bundle(**args)
