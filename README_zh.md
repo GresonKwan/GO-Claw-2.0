@@ -1,16 +1,21 @@
+> **GO CLAW 二开仓库边界：** 本仓库由 `GresonKwan/GO-Claw-2.0` 独立维护。QwenPaw
+> 仅是代码来源和兼容命名空间；GO CLAW 的代码、Issue、PR 与 Release 不提交到 QwenPaw
+> 上游。维护入口见 [`AGENTS.md`](AGENTS.md) 和
+> [`docs/GO-CLAW-运行时序与维护规则.zh.md`](docs/GO-CLAW-运行时序与维护规则.zh.md)。
+
 <div align="center">
 
 # QwenPaw
 
-[![GitHub 仓库](https://img.shields.io/badge/GitHub-仓库-black.svg?logo=github)](https://github.com/agentscope-ai/QwenPaw)
+[![GitHub 仓库](https://img.shields.io/badge/GitHub-仓库-black.svg?logo=github)](https://github.com/GresonKwan/GO-Claw-2.0)
 [![PyPI](https://img.shields.io/pypi/v/qwenpaw?color=3775A9&label=PyPI&logo=pypi)](https://pypi.org/project/qwenpaw/)
 [![文档](https://img.shields.io/badge/文档-在线-green.svg?logo=readthedocs&label=Docs)](https://qwenpaw.agentscope.io/)
 [![Python 版本](https://img.shields.io/badge/python-3.11%20~%20%3C3.14-blue.svg?logo=python&label=Python)](https://www.python.org/downloads/)
-[![最后提交](https://img.shields.io/github/last-commit/agentscope-ai/QwenPaw)](https://github.com/agentscope-ai/QwenPaw)
+[![最后提交](https://img.shields.io/github/last-commit/GresonKwan/GO-Claw-2.0)](https://github.com/GresonKwan/GO-Claw-2.0)
 [![许可证](https://img.shields.io/badge/license-Apache%202.0-red.svg?logo=apache&label=%E8%AE%B8%E5%8F%AF%E8%AF%81)](LICENSE)
 [![代码风格](https://img.shields.io/badge/code%20style-black-black.svg?logo=python&label=%E4%BB%A3%E7%A0%81%E9%A3%8E%E6%A0%BC)](https://github.com/psf/black)
-[![GitHub Star](https://img.shields.io/github/stars/agentscope-ai/QwenPaw?style=flat&logo=github&color=yellow&label=Star)](https://github.com/agentscope-ai/QwenPaw/stargazers)
-[![GitHub Fork](https://img.shields.io/github/forks/agentscope-ai/QwenPaw?style=flat&logo=github&color=purple&label=Fork)](https://github.com/agentscope-ai/QwenPaw/network)
+[![GitHub Star](https://img.shields.io/github/stars/GresonKwan/GO-Claw-2.0?style=flat&logo=github&color=yellow&label=Star)](https://github.com/GresonKwan/GO-Claw-2.0/stargazers)
+[![GitHub Fork](https://img.shields.io/github/forks/GresonKwan/GO-Claw-2.0?style=flat&logo=github&color=purple&label=Fork)](https://github.com/GresonKwan/GO-Claw-2.0/network)
 [![DeepWiki](https://img.shields.io/badge/DeepWiki-Ask_Devin-navy.svg?logo=data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAACwAAAAyCAYAAAAnWDnqAAAAAXNSR0IArs4c6QAAA05JREFUaEPtmUtyEzEQhtWTQyQLHNak2AB7ZnyXZMEjXMGeK/AIi+QuHrMnbChYY7MIh8g01fJoopFb0uhhEqqcbWTp06/uv1saEDv4O3n3dV60RfP947Mm9/SQc0ICFQgzfc4CYZoTPAswgSJCCUJUnAAoRHOAUOcATwbmVLWdGoH//PB8mnKqScAhsD0kYP3j/Yt5LPQe2KvcXmGvRHcDnpxfL2zOYJ1mFwrryWTz0advv1Ut4CJgf5uhDuDj5eUcAUoahrdY/56ebRWeraTjMt/00Sh3UDtjgHtQNHwcRGOC98BJEAEymycmYcWwOprTgcB6VZ5JK5TAJ+fXGLBm3FDAmn6oPPjR4rKCAoJCal2eAiQp2x0vxTPB3ALO2CRkwmDy5WohzBDwSEFKRwPbknEggCPB/imwrycgxX2NzoMCHhPkDwqYMr9tRcP5qNrMZHkVnOjRMWwLCcr8ohBVb1OMjxLwGCvjTikrsBOiA6fNyCrm8V1rP93iVPpwaE+gO0SsWmPiXB+jikdf6SizrT5qKasx5j8ABbHpFTx+vFXp9EnYQmLx02h1QTTrl6eDqxLnGjporxl3NL3agEvXdT0WmEost648sQOYAeJS9Q7bfUVoMGnjo4AZdUMQku50McDcMWcBPvr0SzbTAFDfvJqwLzgxwATnCgnp4wDl6Aa+Ax283gghmj+vj7feE2KBBRMW3FzOpLOADl0Isb5587h/U4gGvkt5v60Z1VLG8BhYjbzRwyQZemwAd6cCR5/XFWLYZRIMpX39AR0tjaGGiGzLVyhse5C9RKC6ai42ppWPKiBagOvaYk8lO7DajerabOZP46Lby5wKjw1HCRx7p9sVMOWGzb/vA1hwiWc6jm3MvQDTogQkiqIhJV0nBQBTU+3okKCFDy9WwferkHjtxib7t3xIUQtHxnIwtx4mpg26/HfwVNVDb4oI9RHmx5WGelRVlrtiw43zboCLaxv46AZeB3IlTkwouebTr1y2NjSpHz68WNFjHvupy3q8TFn3Hos2IAk4Ju5dCo8B3wP7VPr/FGaKiG+T+v+TQqIrOqMTL1VdWV1DdmcbO8KXBz6esmYWYKPwDL5b5FA1a0hwapHiom0r/cKaoqr+27/XcrS5UwSMbQAAAABJRU5ErkJggg==)](https://deepwiki.com/agentscope-ai/QwenPaw)
 [![Discord](https://img.shields.io/badge/Discord-Join_Us-blueviolet.svg?logo=discord)](https://discord.gg/eYMpfnkG8h)
 [![X](https://img.shields.io/badge/X-Follow_Us-black.svg?logo=x)](https://x.com/agentscope_ai)
@@ -460,20 +465,21 @@ _状态说明：**进行中** — 正在积极开发；**计划中** — 已排�
 
 ## 参与贡献
 
-QwenPaw 在开放协作中持续演进，欢迎各种形式的参与！请参考上方 [路线图](#路线图)（尤其是标记为 **征集中** 的项）选择你感兴趣的方向，并阅读 [CONTRIBUTING](https://github.com/agentscope-ai/QwenPaw/blob/main/CONTRIBUTING_zh.md) 了解如何开始。我们特别欢迎：
+GO CLAW 在独立仓库中维护。修改前请阅读仓库内的 [CONTRIBUTING](CONTRIBUTING_zh.md)；
+所有项目贡献只进入 `GresonKwan/GO-Claw-2.0`，不得提交到 QwenPaw 上游。
 
 - **横向拓展** — 新频道、模型提供商、Skills、MCP。
 - **已有功能扩展与完善** — 展示与交互优化、下载提示、Windows 路径兼容等。
 
-欢迎在 [GitHub Discussions](https://github.com/agentscope-ai/QwenPaw/discussions) 参与讨论、提出想法或认领任务。
+欢迎在 [GO CLAW Discussions](https://github.com/GresonKwan/GO-Claw-2.0/discussions) 参与讨论、提出想法或认领任务。
 
 ---
 
 ## 从源码安装
 
 ```bash
-git clone https://github.com/agentscope-ai/QwenPaw.git
-cd QwenPaw
+git clone https://github.com/GresonKwan/GO-Claw-2.0.git
+cd GO-Claw-2.0
 
 # 先构建前端控制台（Web 界面必需）
 cd console && npm ci && npm run build
@@ -516,11 +522,11 @@ QwenPaw 既是 Qwen Personal Agent Workstation（千问个人智能体工作台�
 
 ## 掌握最新动态
 
-<a href="https://github.com/agentscope-ai/QwenPaw">
-  <img src="https://img.alicdn.com/imgextra/i1/O1CN01V8HYv61By0HYcIDaq_!!6000000000013-1-tps-1698-954.gif" width="600" alt="Star QwenPaw" />
+<a href="https://github.com/GresonKwan/GO-Claw-2.0">
+  <img src="https://img.alicdn.com/imgextra/i1/O1CN01V8HYv61By0HYcIDaq_!!6000000000013-1-tps-1698-954.gif" width="600" alt="Star GO CLAW" />
 </a>
 
-在 GitHub 上 Star QwenPaw，第一时间收到新版本发布通知。
+在 GitHub 上 Star GO CLAW，获取本项目的新版本通知。
 
 ---
 
@@ -553,6 +559,6 @@ QwenPaw 采用 [Apache License 2.0](LICENSE) 开源协议。
 
 感谢所有为 QwenPaw 做出贡献的朋友们：
 
-<a href="https://github.com/agentscope-ai/QwenPaw/graphs/contributors">
-  <img src="https://contrib.rocks/image?repo=agentscope-ai/QwenPaw" alt="贡献者" />
+<a href="https://github.com/GresonKwan/GO-Claw-2.0/graphs/contributors">
+  <img src="https://contrib.rocks/image?repo=GresonKwan/GO-Claw-2.0" alt="贡献者" />
 </a>

@@ -130,6 +130,11 @@ provisioning-only，并增加 Full ZIP schema 3、禁止静态凭据混装及额
 “全新 Full ZIP 交付”故障的根因，**不证明** 477MB 在线更新事务成功。生产更新软链仍不得修改，
 本交接 §7 的干净 v2.0.1 实机复现和取证门禁保持不变。
 
+启动、产品就绪、更新成功、完整回滚和不完整回滚的规范顺序统一由
+`GO-CLAW-运行时序与维护规则.zh.md` 维护；
+`scripts/verify/go_claw_maintenance_contract.py` 自动核对 Python、Rust 和 NSIS 的关键顺序。
+本文保留事故现场证据与 §7 操作步骤，不再复制另一套运行顺序。
+
 ## 4. 当前发布和服务器事实
 
 ### 4.1 生产（不要修改）

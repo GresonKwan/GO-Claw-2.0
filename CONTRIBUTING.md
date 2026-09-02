@@ -1,10 +1,13 @@
-# Contributing to QwenPaw
+# Contributing to GO CLAW
 
 ## Welcome! 🐾
 
-Thank you for your interest in contributing to QwenPaw! QwenPaw is an open-source **personal AI assistant** that runs in your own environment—on your machine or in the cloud. It connects to DingTalk, Feishu, QQ, Discord, iMessage, and other chat apps, supports scheduled tasks and heartbeat, and extends its capabilities through **Skills**. We warmly welcome contributions that help make QwenPaw more useful for everyone: whether you add a new channel, a new model provider, a Skill, improve docs, or fix bugs.
+GO CLAW is an independently maintained product derived from QwenPaw; the
+`qwenpaw` name remains as an internal compatibility namespace. Submit all GO
+CLAW changes only to `GresonKwan/GO-Claw-2.0`. Do not create or push pull
+requests, issues, releases, tags, or branches to a QwenPaw upstream repository.
 
-**Quick links:** [GitHub](https://github.com/agentscope-ai/QwenPaw) · [Docs](https://qwenpaw.agentscope.io/) · [License: Apache 2.0](LICENSE)
+**Quick links:** [GitHub](https://github.com/GresonKwan/GO-Claw-2.0) · [Runtime and maintenance rules](docs/GO-CLAW-运行时序与维护规则.zh.md) · [License: Apache 2.0](LICENSE)
 
 ---
 
@@ -16,7 +19,7 @@ To keep collaboration smooth and maintain quality, please follow these guideline
 
 Before starting:
 
-- **Check [Open Issues](https://github.com/agentscope-ai/QwenPaw/issues)** and any [Projects](https://github.com/agentscope-ai/QwenPaw/projects) or roadmap labels.
+- **Check [Open Issues](https://github.com/GresonKwan/GO-Claw-2.0/issues)** and the repository's current plans and fact baseline.
 - **If a related issue exists** and is open or unassigned: comment to say you want to work on it to avoid duplicate effort.
 - **If no related issue exists**: open a new issue describing your proposal. The maintainers will respond and can help align with the project direction.
 
@@ -224,8 +227,8 @@ If you add or change platform support, please test on the affected OS and mentio
 
 ## Getting Help
 
-- **Discussions:** [GitHub Discussions](https://github.com/agentscope-ai/QwenPaw/discussions)
-- **Bugs and features:** [GitHub Issues](https://github.com/agentscope-ai/QwenPaw/issues)
+- **Discussions:** [GitHub Discussions](https://github.com/GresonKwan/GO-Claw-2.0/discussions)
+- **Bugs and features:** [GitHub Issues](https://github.com/GresonKwan/GO-Claw-2.0/issues)
 - **Community:** DingTalk group (see [README](README.md)) and [Discord](https://discord.gg/eYMpfnkG8h)
 
-Thank you for contributing to QwenPaw. Your work helps make it a better assistant for everyone. 🐾
+Thank you for contributing to GO CLAW.

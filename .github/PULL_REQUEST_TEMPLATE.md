@@ -1,3 +1,14 @@
+## GO CLAW Repository Boundary
+
+- [ ] This PR targets `GresonKwan/GO-Claw-2.0` only.
+- [ ] This change will not be pushed or submitted to a QwenPaw upstream repo.
+
+## Canonical Runtime Sequence
+
+- [ ] Runtime/startup/update order is not affected, or I updated
+      `docs/GO-CLAW-运行时序与维护规则.zh.md`, the executable maintenance
+      contract, and its tests in the same change.
+
 ## Description
 
 [Describe what this PR does and why]
@@ -32,6 +43,8 @@
 - [ ] If pre-commit auto-fixed files, I committed those changes and reran checks
 - [ ] I ran tests locally (`pytest` or as relevant) and they pass
 - [ ] Documentation updated (if needed)
+- [ ] `python scripts/verify/go_claw_maintenance_contract.py --repo-root .`
+      passes
 - [ ] Ready for review
 
 ### For Channel Changes (DingTalk, Lark, QQ, Console, etc.)

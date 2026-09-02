@@ -106,7 +106,6 @@ logs/
 *.log
 
 # vibe coding
-/AGENTS.md
 .claude
 openspec
 CLAUDE.md

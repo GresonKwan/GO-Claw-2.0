@@ -143,3 +143,10 @@ repos:
     hooks:
       - id: actionlint
         args: ['-shellcheck=']
+  - repo: local
+    hooks:
+      - id: go-claw-maintenance-contract
+        name: GO CLAW repository and runtime contract
+        entry: python scripts/verify/go_claw_maintenance_contract.py --repo-root .
+        language: system
+        pass_filenames: false
