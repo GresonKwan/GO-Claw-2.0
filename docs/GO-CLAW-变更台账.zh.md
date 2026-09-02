@@ -149,8 +149,8 @@
 
 | 改动 | 原因 | commit | 验证 | 关联文档 |
 | --- | --- | --- | --- | --- |
-| 新增根级维护规则，固定干净样本、按首个失败 stage 单点修复、便携盘安全、发布门禁和 GO CLAW 唯一可写仓库 | 将连续调试中形成的有效做法变成后续执行者默认规则，并阻止误向 QwenPaw 源仓库写入 | `（待推送）` | 维护合同、pre-commit、正式 Windows 构建门禁 | `AGENTS.md`、`GO-CLAW-运行时序与维护规则.zh.md` |
-| 固化启动、产品就绪、更新成功、完整回滚和不完整回滚五张 Mermaid 时序图，并以可执行合同检查真实代码顺序 | 防止文档顺序与 Python/Rust/NSIS 实现漂移，避免只验证 HTTP 启动而漏掉员工、插件或额度未就绪 | `（待推送）` | `test_go_claw_maintenance_contract.py`；合同脚本直接通过 | `GO-CLAW-运行时序与维护规则.zh.md` |
+| 新增根级维护规则，固定干净样本、按首个失败 stage 单点修复、便携盘安全、发布门禁和 GO CLAW 唯一可写仓库 | 将连续调试中形成的有效做法变成后续执行者默认规则，并阻止误向 QwenPaw 源仓库写入 | `92be9d0` | 维护合同、pre-commit、正式 Windows 构建门禁 | `AGENTS.md`、`GO-CLAW-运行时序与维护规则.zh.md` |
+| 固化启动、产品就绪、更新成功、完整回滚和不完整回滚五张 Mermaid 时序图，并以可执行合同检查真实代码顺序 | 防止文档顺序与 Python/Rust/NSIS 实现漂移，避免只验证 HTTP 启动而漏掉员工、插件或额度未就绪 | `92be9d0` | `test_go_claw_maintenance_contract.py`；合同脚本直接通过 | `GO-CLAW-运行时序与维护规则.zh.md` |
 
 ## 2026-09-01 · v2.1.1 新盘额度与媒体工具 P0
 
