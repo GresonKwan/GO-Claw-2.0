@@ -1,6 +1,6 @@
 # GO CLAW 项目事实与发布基线
 
-> 状态：当前有效。最后现场复核：2026-09-01（Asia/Shanghai）。
+> 状态：当前有效。最后现场复核：2026-09-02（Asia/Shanghai）。
 >
 > 本文只记录“现在是什么”和“发布前必须成立什么”。历史变更见
 > `GO-CLAW-变更台账.zh.md`，操作步骤见各专题文档，尚未实施的内容不得写成现状。
@@ -26,6 +26,7 @@
 | --- | --- | --- |
 | 当前 P0 修复工作树 | `H:\2026\0811 GO Claw 2.0-hotfix-media-agents` | `git rev-parse --show-toplevel` |
 | GitHub 仓库 | `GresonKwan/GO-Claw-2.0` | `gh repo view` |
+| 唯一可写远端 | `origin` → `GresonKwan/GO-Claw-2.0` | `git remote -v` 与维护合同 |
 | 产品基线 | QwenPaw v2.0.1，导入提交 `24813b3` | 变更台账和 Git 历史 |
 | 本轮设计提交 | `ce18d02f` | `git show --stat ce18d02f` |
 | 本轮四份原始计划提交 | `3fc3be19` | `git show --stat 3fc3be19` |
@@ -36,8 +37,12 @@
 | v2.1.1 媒体/员工修复分支 | `codex/hotfix-v2-1-1-media-agents` | PR #4；媒体插件与员工恢复提交 `5bec4dc`，后续热修复稳健性至 `512ba07` |
 | 新盘 provisioning 正式构建修复 | `565cd13`（正式构建代码头 `512ba07`） | 54 项针对性测试及完整 Tests run `33497130435` 通过；Windows Full run `33497201586` 成功 |
 
-后续实施以本轮 review 后的总执行计划为唯一跨模块顺序；四份原始分计划只能作为文件级
-任务明细使用，不得越过总计划中的前置门禁。
+GO CLAW 是基于 QwenPaw 的独立二开。保留 `qwenpaw` 代码命名空间只为兼容，不表示仍向
+QwenPaw 源项目贡献；不得在 `agentscope-ai/QwenPaw` 创建或更新 PR、Issue、分支、Tag、
+Release，也不得向其推送本项目提交。
+
+当前启动、产品就绪、更新和回滚顺序以 `GO-CLAW-运行时序与维护规则.zh.md` 及其可执行
+合同为准。后续计划只能作为文件级任务明细，不得越过事实基线、运行合同和发布门禁。
 
 ## 3. 生产服务器和域名
 
