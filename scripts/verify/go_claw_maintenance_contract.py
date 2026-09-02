@@ -66,7 +66,7 @@ def _require_order(
         return
     if positions != sorted(positions):
         errors.append(
-            f"{relative} runtime order no longer matches its contract"
+            f"{relative} runtime order no longer matches its contract",
         )
 
 
@@ -155,7 +155,7 @@ def validate_contract(
             if UPSTREAM_REPOSITORY.casefold() in text.casefold():
                 relative = path.relative_to(root).as_posix()
                 errors.append(
-                    f"workflow references writable upstream: {relative}"
+                    f"workflow references writable upstream: {relative}",
                 )
 
     entry_points = [
