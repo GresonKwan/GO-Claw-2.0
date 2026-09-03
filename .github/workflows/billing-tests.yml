@@ -1,0 +1,57 @@
+name: GO CLAW Billing Tests
+
+on:
+  pull_request:
+    paths:
+      - "scripts/billing/**"
+      - "docs/contracts/compute-recharge/**"
+      - "deploy/nginx/go-claw-billing.conf"
+      - "deploy/systemd/go-claw-billing.service"
+      - ".github/workflows/billing-tests.yml"
+  push:
+    branches: [main]
+    paths:
+      - "scripts/billing/**"
+      - "docs/contracts/compute-recharge/**"
+      - "deploy/nginx/go-claw-billing.conf"
+      - "deploy/systemd/go-claw-billing.service"
+
+permissions:
+  contents: read
+
+jobs:
+  billing:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: billing_test
+          POSTGRES_PASSWORD: billing_test
+          POSTGRES_DB: billing_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U billing_test -d billing_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 12
+    env:
+      BILLING_TEST_DSN: postgresql://billing_test:billing_test@127.0.0.1:5432/billing_test
+      PGPASSWORD: billing_test
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - name: Install billing test dependencies
+        run: python -m pip install -e "scripts/billing[test]" ruff
+      - name: Apply billing migrations
+        env:
+          GO_CLAW_BILLING_DATABASE_DSN: ${{ env.BILLING_TEST_DSN }}
+        run: python scripts/billing/migrate.py
+      - name: Static checks
+        run: ruff check scripts/billing
+      - name: Billing unit, contract, and PostgreSQL integration tests
+        run: pytest scripts/billing/tests -q

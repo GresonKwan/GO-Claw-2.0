@@ -27,3 +27,21 @@ def test_versioned_initial_migration_exactly_matches_frozen_contract() -> None:
         ROOT / "scripts" / "billing" / "migrations" / "0001_initial.sql"
     ).read_bytes()
     assert hashlib.sha256(migration).digest() == hashlib.sha256(contract).digest()
+
+
+def test_customer_console_has_no_refund_action_or_internal_admin_route() -> None:
+    recharge_api = (ROOT / "console" / "src" / "api" / "modules" / "recharge.ts").read_text(
+        "utf-8"
+    )
+    recharge_page = (
+        ROOT
+        / "console"
+        / "src"
+        / "pages"
+        / "Settings"
+        / "ComputeRecharge"
+        / "index.tsx"
+    ).read_text("utf-8")
+    assert "/internal/admin/refunds" not in recharge_api
+    assert "requestRefund" not in recharge_api
+    assert "onRefund" not in recharge_page

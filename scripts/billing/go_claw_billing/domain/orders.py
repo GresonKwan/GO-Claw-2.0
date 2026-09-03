@@ -24,6 +24,8 @@ class GrantState(StrEnum):
     QUEUED = "QUEUED"
     APPLYING = "APPLYING"
     APPLIED = "APPLIED"
+    REVERSING = "REVERSING"
+    REVERSED = "REVERSED"
     REVIEW_REQUIRED = "REVIEW_REQUIRED"
 
 
@@ -43,10 +45,18 @@ class PaymentOrder:
     expires_at: datetime = field(
         default_factory=lambda: datetime.now(UTC) + timedelta(minutes=15)
     )
+    refunded_at: datetime | None = None
+    refund_state: str = "NONE"
 
     def public_dict(self) -> dict[str, object]:
         if self.payment_state in {PaymentState.CREATED, PaymentState.QR_READY}:
             status = "PENDING_PAYMENT"
+        elif self.refund_state == "REFUNDED" or self.refunded_at is not None:
+            status = "REFUNDED"
+        elif self.refund_state == "PROCESSING":
+            status = "REFUNDING"
+        elif self.refund_state == "REVIEW_REQUIRED":
+            status = "REVIEW_REQUIRED"
         elif (
             self.payment_state is PaymentState.PAID
             and self.grant_state is GrantState.APPLIED
@@ -77,4 +87,6 @@ class PaymentOrder:
         }
         if self.code_url is not None:
             data["codeUrl"] = self.code_url
+        if self.refunded_at is not None:
+            data["refundedAt"] = self.refunded_at.isoformat().replace("+00:00", "Z")
         return data

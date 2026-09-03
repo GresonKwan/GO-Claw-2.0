@@ -7,6 +7,7 @@ BASE = {
     "audit_hmac_key": "a" * 32,
     "code_url_encryption_key": "c" * 32,
     "internal_enrollment_token": "i" * 32,
+    "admin_token": "m" * 32,
 }
 
 WECHAT = {

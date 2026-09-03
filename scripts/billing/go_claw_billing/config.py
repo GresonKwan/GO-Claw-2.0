@@ -27,6 +27,7 @@ class Settings(BaseSettings):
     audit_hmac_key: SecretStr = Field(min_length=32)
     code_url_encryption_key: SecretStr = Field(min_length=32)
     internal_enrollment_token: SecretStr = Field(min_length=32)
+    admin_token: SecretStr | None = None
     public_base_url: str = "https://goclaw.host:8443/go-claw/billing"
     daily_limit_fen: int = Field(default=10_000_000, ge=10_000_000, le=10_000_000)
     terms_version: str = "2026-09-v1"
@@ -52,6 +53,11 @@ class Settings(BaseSettings):
     def _required_by_mode(self) -> Settings:
         if self.environment != "development" and self.database_dsn is None:
             raise ValueError("database_dsn is required outside development")
+        if self.environment != "development" and (
+            self.admin_token is None
+            or len(self.admin_token.get_secret_value()) < 32
+        ):
+            raise ValueError("admin_token is required outside development")
         if self.payment_provider == "wechatpay":
             missing = [
                 name

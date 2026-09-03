@@ -13,19 +13,28 @@ from .adapters.fake_payment import FakePaymentProvider
 from .adapters.newapi import NewAPIAdapter
 from .adapters.postgres import Postgres
 from .adapters.repositories import (
+    AuditRepository,
     CodeUrlCipher,
     LedgerRepository,
+    OutboxRepository,
     PaymentCommitterRepository,
     PostgresAccountStore,
     PostgresOrderRepository,
     QuotaAdjustmentRepository,
+    ReconciliationRepository,
+    RefundRepository,
 )
 from .adapters.wechatpay import WeChatNotificationVerifier, WeChatPayClient
 from .api import admin, customer, webhooks
 from .application.accounts import InMemoryAccountStore
 from .application.order_service import InMemoryOrders, OrderService
+from .application.payment_recovery import PaymentRecoveryService
 from .config import Settings, get_settings
+from .workers.outbox import OutboxWorker
+from .workers.payment_recovery import PaymentRecoveryWorker
 from .workers.quota import QuotaWorker
+from .workers.reconciliation import ReconciliationWorker
+from .workers.refunds import RefundWorker
 
 logger = logging.getLogger(__name__)
 
@@ -60,6 +69,11 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 pool,
                 resolved.audit_hmac_key.get_secret_value(),
             )
+            app.state.ledger_repository = ledger
+            app.state.audit = AuditRepository(
+                pool, resolved.audit_hmac_key.get_secret_value()
+            )
+            app.state.refunds = RefundRepository(pool, ledger)
             repository = PostgresOrderRepository(
                 pool,
                 CodeUrlCipher(resolved.code_url_encryption_key.get_secret_value()),
@@ -102,6 +116,11 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                     resolved.wechat_api_v3_key.get_secret_value().encode(),
                 )
                 app.state.payment_committer = PaymentCommitterRepository(pool, ledger)
+                app.state.payment_recovery = PaymentRecoveryService(
+                    repository,
+                    payment,
+                    app.state.payment_committer,
+                )
             else:
                 payment = FakePaymentProvider()
             app.state.orders = OrderService(
@@ -110,20 +129,39 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 pricing_version="cny-v1",
                 active_terms_version=resolved.terms_version,
             )
-            if (
-                resolved.run_workers
-                and resolved.newapi_base_url
-                and resolved.newapi_admin_token
-            ):
+            newapi = None
+            if resolved.newapi_base_url and resolved.newapi_admin_token:
+                newapi = NewAPIAdapter(
+                    resolved.newapi_base_url,
+                    resolved.newapi_admin_token.get_secret_value(),
+                    resolved.newapi_admin_user_id,
+                )
+                app.state.newapi = newapi
+            if resolved.run_workers and newapi is not None:
                 quota_worker = QuotaWorker(
                     QuotaAdjustmentRepository(pool, ledger),
-                    NewAPIAdapter(
-                        resolved.newapi_base_url,
-                        resolved.newapi_admin_token.get_secret_value(),
-                        resolved.newapi_admin_user_id,
-                    ),
+                    newapi,
                 )
                 tasks.append(asyncio.create_task(quota_worker.run(stop)))
+            if resolved.run_workers and hasattr(app.state, "payment_recovery"):
+                recovery_worker = PaymentRecoveryWorker(app.state.payment_recovery)
+                tasks.append(asyncio.create_task(recovery_worker.run(stop)))
+                tasks.append(
+                    asyncio.create_task(
+                        RefundWorker(app.state.refunds, payment).run(stop)
+                    )
+                )
+                tasks.append(
+                    asyncio.create_task(
+                        ReconciliationWorker(
+                            ReconciliationRepository(pool), payment
+                        ).run(stop)
+                    )
+                )
+            if resolved.run_workers:
+                tasks.append(
+                    asyncio.create_task(OutboxWorker(OutboxRepository(pool)).run(stop))
+                )
         app.state.database = database
         try:
             yield

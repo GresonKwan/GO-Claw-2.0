@@ -44,7 +44,7 @@ class Postgres:
                 await cursor.execute(
                     """
                     SELECT to_regclass('public.payment_order') IS NOT NULL
-                       AND COALESCE((SELECT max(version) FROM billing_schema_version), 0) >= 2
+                       AND COALESCE((SELECT max(version) FROM billing_schema_version), 0) >= 4
                     """,
                 )
                 row = await cursor.fetchone()

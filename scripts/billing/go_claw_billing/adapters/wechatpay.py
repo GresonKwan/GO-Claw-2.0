@@ -242,15 +242,18 @@ class WeChatPayClient:
         out_trade_no: str,
         out_refund_no: str,
         amount_fen: int,
+        total_amount_fen: int,
         reason: str,
     ) -> dict[str, Any]:
+        if amount_fen <= 0 or total_amount_fen < amount_fen:
+            raise ValueError("invalid refund amount")
         payload: dict[str, object] = {
             "out_trade_no": out_trade_no,
             "out_refund_no": out_refund_no,
             "reason": reason[:80],
             "amount": {
                 "refund": amount_fen,
-                "total": amount_fen,
+                "total": total_amount_fen,
                 "currency": "CNY",
             },
         }

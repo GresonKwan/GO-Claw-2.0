@@ -11,6 +11,7 @@ from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request, R
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from pydantic import BaseModel, ConfigDict, Field
 
+from ..adapters.newapi import NewAPIReadError
 from ..application.order_service import DailyLimitExceeded, IdempotencyConflict
 from ..domain.money import (
     DISPLAY_UNITS_PER_FEN,
@@ -69,13 +70,36 @@ async def config(
 
 
 @router.get("/balance")
-async def balance(_account: Annotated[UUID, Depends(account_id)]) -> dict:
-    # A read-through NewAPI balance adapter is connected in production.  Do
-    # not invent a balance if it is not yet observed.
+async def balance(
+    request: Request, account: Annotated[UUID, Depends(account_id)]
+) -> dict:
+    newapi = getattr(request.app.state, "newapi", None)
+    ledger = getattr(request.app.state, "ledger_repository", None)
+    if newapi is None or ledger is None:
+        # Development keeps the non-financial shell usable; production never
+        # fabricates a balance when NewAPI cannot be observed.
+        if request.app.state.settings.environment != "development":
+            raise HTTPException(503, detail={"code": "BALANCE_UNAVAILABLE"})
+        granted = remaining = 0
+    else:
+        try:
+            newapi_user_id = await request.app.state.accounts.newapi_user_id(account)
+            snapshot = await newapi.read_quota_snapshot(newapi_user_id)
+            remaining = snapshot.remaining_units * 200 // 3
+            observed_total = (
+                snapshot.remaining_units + snapshot.used_units
+            ) * 200 // 3
+            ledger_granted = await ledger.granted_display_units(account)
+            granted = max(ledger_granted, observed_total)
+        except (LookupError, NewAPIReadError) as exc:
+            raise HTTPException(
+                503, detail={"code": "BALANCE_UNAVAILABLE"}
+            ) from exc
+    percent = min(100, remaining * 100 // granted) if granted else 0
     return {
-        "grantedComputeUnits": 0,
-        "remainingComputeUnits": 0,
-        "percent": 0,
+        "grantedComputeUnits": granted,
+        "remainingComputeUnits": remaining,
+        "percent": percent,
         "observedAt": datetime.now(UTC).isoformat().replace("+00:00", "Z"),
     }
 
@@ -143,7 +167,18 @@ async def close_order(
     ],
 ) -> dict:
     del idempotency_key
-    order = await request.app.state.order_repository.close_owned(account, order_id)
+    recovery = getattr(request.app.state, "payment_recovery", None)
+    if recovery is None:
+        order = await request.app.state.order_repository.close_owned(account, order_id)
+    else:
+        try:
+            order = await recovery.close_owned(account, order_id)
+        except Exception as exc:
+            # Never tell the customer an order was closed when the signed
+            # WeChat query/close result is unknown.
+            raise HTTPException(
+                503, detail={"code": "ORDER_CLOSE_RESULT_UNKNOWN"}
+            ) from exc
     if order is None:
         raise HTTPException(404, detail={"code": "ORDER_NOT_FOUND"})
     if order.payment_state.value == "PAID":
@@ -165,9 +200,16 @@ async def list_orders(
 
 @router.get("/ledger")
 async def list_ledger(
-    _account: Annotated[UUID, Depends(account_id)],
+    request: Request,
+    account: Annotated[UUID, Depends(account_id)],
     page_size: int = Query(default=20, ge=1, le=100),
     cursor: str | None = Query(default=None, max_length=256),
 ) -> dict:
-    del page_size, cursor
-    return {"items": [], "nextCursor": None}
+    del cursor
+    ledger = getattr(request.app.state, "ledger_repository", None)
+    if ledger is None:
+        return {"items": [], "nextCursor": None}
+    return {
+        "items": await ledger.customer_entries(account, page_size),
+        "nextCursor": None,
+    }
