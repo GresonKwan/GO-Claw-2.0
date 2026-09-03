@@ -219,12 +219,16 @@ async def _ensure_billing_enrollment(http_post: HttpPost) -> bool:
         canonical.encode("utf-8"),
         hashlib.sha256,
     ).hexdigest()
+    token_fingerprint = hashlib.sha256(
+        newapi_subtoken.encode("utf-8"),
+    ).hexdigest()
     result_payload = await http_post(
         f"{enrollment_url}/enrollments",
         {
             "instanceId": instance_id,
             "challengeId": challenge.challenge_id,
             "proof": proof,
+            "tokenFingerprint": token_fingerprint,
         },
     )
     result = EnrollmentResult.model_validate(result_payload)

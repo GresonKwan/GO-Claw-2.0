@@ -148,6 +148,41 @@ def get_provision(instance_id: str) -> sqlite3.Row | None:
         ).fetchone()
 
 
+def _resolve_legacy_token(token_fingerprint: str) -> tuple[int, str] | None:
+    """Resolve one active legacy token without accepting a client user ID."""
+    if not NEWAPI_DB_PATH:
+        return None
+    matches: list[tuple[int, str]] = []
+    try:
+        with closing(
+            sqlite3.connect(
+                f"file:{NEWAPI_DB_PATH}?mode=ro",
+                uri=True,
+                timeout=5,
+            ),
+        ) as conn:
+            rows = conn.execute(
+                "SELECT user_id, key FROM tokens"
+                " WHERE status = 1 AND deleted_at IS NULL",
+            )
+            for user_id, stored_key in rows:
+                raw_key = str(stored_key or "")
+                candidates = (
+                    (raw_key, raw_key[3:])
+                    if raw_key.startswith("sk-")
+                    else (raw_key, "sk-" + raw_key)
+                )
+                for candidate in candidates:
+                    digest = hashlib.sha256(candidate.encode()).hexdigest()
+                    if hmac.compare_digest(digest, token_fingerprint):
+                        matches.append((int(user_id), candidate))
+                        break
+    except (OSError, sqlite3.Error, TypeError, ValueError):
+        logger.warning("legacy billing identity lookup failed")
+        return None
+    return matches[0] if len(matches) == 1 and matches[0][0] > 0 else None
+
+
 def insert_pending(
     instance_id: str,
     username: str,
@@ -409,6 +444,12 @@ class BillingEnrollmentRequest(BaseModel):
         max_length=64,
         pattern=r"^[a-f0-9]{64}$",
     )
+    tokenFingerprint: str | None = Field(
+        default=None,
+        min_length=64,
+        max_length=64,
+        pattern=r"^[a-f0-9]{64}$",
+    )
 
 
 app = FastAPI(title="GO CLAW Provisioning", docs_url=None, redoc_url=None)
@@ -540,6 +581,12 @@ def complete_billing_enrollment(body: BillingEnrollmentRequest) -> JSONResponse:
             " WHERE instance_id = ? AND status = 'done'",
             (body.instanceId,),
         ).fetchone()
+        resolved_api_key = row["api_key"] if row is not None else None
+        resolved_user_id = row["newapi_user_id"] if row is not None else None
+        if row is None and body.tokenFingerprint:
+            legacy_identity = _resolve_legacy_token(body.tokenFingerprint)
+            if legacy_identity is not None:
+                resolved_user_id, resolved_api_key = legacy_identity
         canonical = (
             "goclaw-billing-enrollment-v1\n"
             f"{body.instanceId}\n{body.challengeId}\n"
@@ -547,11 +594,11 @@ def complete_billing_enrollment(body: BillingEnrollmentRequest) -> JSONResponse:
         )
         expected = (
             hmac.new(
-                row["api_key"].encode(),
+                resolved_api_key.encode(),
                 canonical.encode(),
                 hashlib.sha256,
             ).hexdigest()
-            if row is not None and row["api_key"]
+            if resolved_api_key and resolved_user_id
             else secrets.token_hex(32)
         )
         if expires_at <= now or not hmac.compare_digest(expected, body.proof):
@@ -569,7 +616,7 @@ def complete_billing_enrollment(body: BillingEnrollmentRequest) -> JSONResponse:
             headers={"Authorization": f"Bearer {BILLING_INTERNAL_TOKEN}"},
             json={
                 "instanceId": body.instanceId,
-                "newapiUserId": int(row["newapi_user_id"]),
+                "newapiUserId": int(resolved_user_id),
             },
             timeout=10,
         )

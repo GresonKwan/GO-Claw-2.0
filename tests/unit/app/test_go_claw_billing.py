@@ -114,6 +114,7 @@ async def test_legacy_enrollment_uses_existing_subtoken_and_writes_profile(
         "instanceId": instance_id,
         "challengeId": challenge_id,
         "proof": expected,
+        "tokenFingerprint": hashlib.sha256(SUBTOKEN.encode()).hexdigest(),
     }
     profile = load_billing_profile()
     assert profile is not None
