@@ -54,4 +54,13 @@ describe("QuotaBar", () => {
     });
     expect(screen.queryByRole("progressbar")).toBeNull();
   });
+
+  it("refreshes immediately after a successful recharge", async () => {
+    getQuota.mockResolvedValue({ granted: 2, remaining: 1, percent: 50 });
+    renderWithProviders(<QuotaBar />);
+    await waitFor(() => expect(getQuota).toHaveBeenCalledTimes(1));
+
+    window.dispatchEvent(new Event("go-claw:quota-updated"));
+    await waitFor(() => expect(getQuota).toHaveBeenCalledTimes(2));
+  });
 });

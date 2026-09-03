@@ -179,6 +179,102 @@ def test_healthz(service):
         assert client.get("/healthz").json() == {"ok": True}
 
 
+def test_legacy_billing_enrollment_proves_existing_token(
+    service,
+    monkeypatch,
+):
+    module = service
+    instance_id = str(uuid.uuid4())
+    module.insert_pending(instance_id, "gc-test", "pw", "127.0.0.1")
+    module.finalize_provision(instance_id, 42, ISSUED_KEY, "{}")
+    monkeypatch.setattr(module, "BILLING_INTERNAL_URL", "https://billing.example")
+    monkeypatch.setattr(module, "BILLING_INTERNAL_TOKEN", "internal-token")
+
+    class Result:
+        def raise_for_status(self):
+            return None
+
+        def json(self):
+            return {
+                "schemaVersion": 2,
+                "billing": {
+                    "schemaVersion": 1,
+                    "accountId": str(uuid.uuid4()),
+                    "baseUrl": "https://billing.example/go-claw/billing",
+                    "accessToken": "gcb_live_" + "x" * 56,
+                    "tokenVersion": 1,
+                    "issuedAt": "2026-09-03T08:00:00Z",
+                },
+            }
+
+    captured = {}
+
+    def billing_post(url, **kwargs):
+        captured["url"] = url
+        captured.update(kwargs)
+        return Result()
+
+    monkeypatch.setattr(module.httpx, "post", billing_post)
+    with TestClient(module.app) as client:
+        challenge_response = client.post(
+            "/go-claw/provision/billing/challenges",
+            json={
+                "instanceId": instance_id,
+                "requestNonce": "n" * 22,
+                "clientVersion": "2.1.1",
+            },
+        )
+        assert challenge_response.status_code == 201
+        challenge = challenge_response.json()
+        canonical = (
+            f"goclaw-billing-enrollment-v1\n{instance_id}\n"
+            f"{challenge['challengeId']}\n{challenge['nonce']}\n"
+            f"{challenge['expiresAt']}"
+        )
+        proof = hmac.new(
+            ISSUED_KEY.encode(), canonical.encode(), hashlib.sha256,
+        ).hexdigest()
+        enrolled = client.post(
+            "/go-claw/provision/billing/enrollments",
+            json={
+                "instanceId": instance_id,
+                "challengeId": challenge["challengeId"],
+                "proof": proof,
+            },
+        )
+        replay = client.post(
+            "/go-claw/provision/billing/enrollments",
+            json={
+                "instanceId": instance_id,
+                "challengeId": challenge["challengeId"],
+                "proof": proof,
+            },
+        )
+    assert enrolled.status_code == 200
+    assert replay.status_code == 409
+    assert captured["json"] == {"instanceId": instance_id, "newapiUserId": 42}
+
+
+def test_billing_challenge_does_not_enumerate_instances(service):
+    with TestClient(service.app) as client:
+        response = client.post(
+            "/go-claw/provision/billing/challenges",
+            json={
+                "instanceId": str(uuid.uuid4()),
+                "requestNonce": "z" * 22,
+                "clientVersion": "2.1.1",
+            },
+        )
+    assert response.status_code == 201
+    assert set(response.json()) == {
+        "schemaVersion",
+        "challengeId",
+        "nonce",
+        "expiresAt",
+        "canonicalFormat",
+    }
+
+
 def test_startup_fails_fast_without_required_env(tmp_path, monkeypatch):
     monkeypatch.delenv("NEWAPI_BASE_URL", raising=False)
     monkeypatch.delenv("NEWAPI_ADMIN_ACCESS_TOKEN", raising=False)

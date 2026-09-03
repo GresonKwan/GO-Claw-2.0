@@ -1,0 +1,42 @@
+[Unit]
+Description=GO CLAW Billing API
+After=network-online.target postgresql.service
+Wants=network-online.target
+
+[Service]
+Type=exec
+User=go-claw-billing
+Group=go-claw-billing
+WorkingDirectory=/opt/go-claw-billing
+Environment=GO_CLAW_BILLING_ENVIRONMENT=production
+Environment=GO_CLAW_BILLING_ENABLED=false
+EnvironmentFile=-/etc/go-claw-billing/non-secret.env
+LoadCredential=database_dsn:/etc/go-claw-billing/credentials/database_dsn
+LoadCredential=token_pepper:/etc/go-claw-billing/credentials/token_pepper
+LoadCredential=audit_hmac_key:/etc/go-claw-billing/credentials/audit_hmac_key
+LoadCredential=code_url_key:/etc/go-claw-billing/credentials/code_url_key
+LoadCredential=internal_token:/etc/go-claw-billing/credentials/internal_token
+ExecStart=/opt/go-claw-billing/.venv/bin/python /opt/go-claw-billing/run_with_credentials.py
+Restart=on-failure
+RestartSec=5s
+TimeoutStopSec=30s
+NoNewPrivileges=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectSystem=strict
+ProtectHome=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+LockPersonality=true
+CapabilityBoundingSet=
+AmbientCapabilities=
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+SystemCallArchitectures=native
+UMask=0077
+LimitNOFILE=4096
+MemoryMax=768M
+
+[Install]
+WantedBy=multi-user.target

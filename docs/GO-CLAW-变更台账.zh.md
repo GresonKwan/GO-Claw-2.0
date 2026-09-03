@@ -152,6 +152,13 @@
 | 新增根级维护规则，固定干净样本、按首个失败 stage 单点修复、便携盘安全、发布门禁和 GO CLAW 唯一可写仓库 | 将连续调试中形成的有效做法变成后续执行者默认规则，并阻止误向 QwenPaw 源仓库写入 | `92be9d0` | 维护合同、pre-commit、正式 Windows 构建门禁 | `AGENTS.md`、`GO-CLAW-运行时序与维护规则.zh.md` |
 | 固化启动、产品就绪、更新成功、完整回滚和不完整回滚五张 Mermaid 时序图，并以可执行合同检查真实代码顺序 | 防止文档顺序与 Python/Rust/NSIS 实现漂移，避免只验证 HTTP 启动而漏掉员工、插件或额度未就绪 | `92be9d0` | `test_go_claw_maintenance_contract.py`；合同脚本直接通过 | `GO-CLAW-运行时序与维护规则.zh.md` |
 
+## 2026-09-03 · 算力充值功能开发（默认关闭）
+
+| 改动 | 原因 | commit | 验证 | 关联文档 |
+| --- | --- | --- | --- | --- |
+| 冻结 ￥1–￥100,000、￥1=500万展示算力、1分=750 NewAPI 单位的整数合同；新增 OpenAPI、事件 Schema、PostgreSQL 账本 SQL 和服务条款模板 | 防止人民币、展示算力与 NewAPI 内部单位混用，并为支付/退款/审计建立可机器验证边界 | 待本变更提交 | OpenAPI/JSON Schema/PostgreSQL parser 合同 | `contracts/compute-recharge/*`、算力充值设计与实施计划 |
+| 新增默认关闭的 Billing Service 骨架、存量 challenge/proof enrollment、本机凭据隐藏代理、侧边栏充值页、本地微信二维码和额度即时刷新事件 | 让 v2.0.1/v2.1.1 存量用户未来可无感开通，同时保证计费故障不影响原产品能力 | 待本变更提交 | 金额/账本/幂等/凭据隔离/兼容/前端合同测试；生产模式在耐久仓储完成前 fail closed | `GO-CLAW-运行时序与维护规则.zh.md` |
+
 ## 2026-09-01 · v2.1.1 新盘额度与媒体工具 P0
 
 | 改动 | 原因 | commit | 验证 | 关联文档 |
@@ -201,4 +208,5 @@
 | `GO-CLAW-在线更新签名密钥运维.zh.md` | 更新签名密钥的保管、发布前检查、恢复与轮换规则 |
 | `GO-CLAW-v2.1.1-Windows在线更新调试交接.zh.md` | 未解决的 v2.0.1 → v2.1.1 Windows 在线更新事故接手、取证和验收入口 |
 | `superpowers/specs/*`、`plans/*` | 设计规格与实施计划（带状态标记） |
+| `contracts/compute-recharge/*` | 算力充值 API、事件、账本与服务条款合同 |
 | 工作区 `GO-CLAW-debug计划.md`、`GO-CLAW-修改计划.md` | 现场排查原始记录（快照，不再更新） |

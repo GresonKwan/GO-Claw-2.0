@@ -1,0 +1,224 @@
+openapi: 3.1.0
+info:
+  title: GO CLAW Legacy Billing Enrollment Contract
+  version: 1.0.0-draft
+  license:
+    name: Proprietary
+    identifier: LicenseRef-GO-CLAW-Proprietary
+  description: |
+    Proof-of-possession enrollment used after an existing v2.0.1/v2.1.1
+    portable instance updates to a billing-capable release. The flow reuses
+    the existing instance-to-NewAPI-user binding and never creates or changes
+    a NewAPI account. The shared provisioning HMAC is not an authorization
+    credential for this API.
+servers:
+  - url: https://goclaw.host:8443
+    description: GO CLAW provisioning origin.
+security: []
+paths:
+  /go-claw/provision/billing/challenges:
+    post:
+      operationId: createLegacyBillingEnrollmentChallenge
+      summary: Create a short-lived proof-of-possession challenge.
+      description: |
+        This endpoint must not reveal whether an instance exists. Unknown and
+        known instance IDs receive the same response shape and similar timing.
+        Apply per-IP and per-instance rate limits.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateChallengeRequest"
+      responses:
+        "201":
+          description: A single-use challenge valid for five minutes.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EnrollmentChallenge"
+        "429":
+          $ref: "#/components/responses/Problem"
+        default:
+          $ref: "#/components/responses/Problem"
+
+  /go-claw/provision/billing/enrollments:
+    post:
+      operationId: completeLegacyBillingEnrollment
+      summary: Bind billing to the existing NewAPI user after proof verification.
+      description: |
+        Proof is lowercase hex HMAC-SHA256 keyed by the existing NewAPI
+        sub-token over the exact UTF-8 canonical string documented by the
+        challenge response. Invalid proof, unknown instance, missing binding,
+        or binding conflicts return the same public authorization error.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CompleteEnrollmentRequest"
+      responses:
+        "200":
+          description: Existing account was recovered or a unique account was enrolled.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BillingEnrollmentResult"
+        "403":
+          description: Generic proof or binding failure without enumeration detail.
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "409":
+          description: Challenge was consumed or expired; request a fresh challenge.
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "429":
+          $ref: "#/components/responses/Problem"
+        default:
+          $ref: "#/components/responses/Problem"
+
+components:
+  responses:
+    Problem:
+      description: Normalized error that never includes credentials or mapping details.
+      content:
+        application/problem+json:
+          schema:
+            $ref: "#/components/schemas/Problem"
+
+  schemas:
+    CreateChallengeRequest:
+      type: object
+      additionalProperties: false
+      required: [instanceId, requestNonce, clientVersion]
+      properties:
+        instanceId:
+          type: string
+          format: uuid
+        requestNonce:
+          type: string
+          minLength: 22
+          maxLength: 64
+          pattern: "^[A-Za-z0-9_-]+$"
+          description: Client-generated random base64url value; at least 128 bits entropy.
+        clientVersion:
+          type: string
+          minLength: 1
+          maxLength: 32
+        bootstrapSignal:
+          type: [string, "null"]
+          maxLength: 128
+          description: Optional legacy shared-HMAC signal used only for risk scoring.
+
+    EnrollmentChallenge:
+      type: object
+      additionalProperties: false
+      required: [schemaVersion, challengeId, nonce, expiresAt, canonicalFormat]
+      properties:
+        schemaVersion:
+          type: integer
+          const: 1
+        challengeId:
+          type: string
+          format: uuid
+        nonce:
+          type: string
+          minLength: 43
+          maxLength: 43
+          pattern: "^[A-Za-z0-9_-]+$"
+          description: Thirty-two random bytes encoded as unpadded base64url.
+        expiresAt:
+          type: string
+          format: date-time
+        canonicalFormat:
+          type: string
+          const: "goclaw-billing-enrollment-v1\\n{instanceId}\\n{challengeId}\\n{nonce}\\n{expiresAt}"
+
+    CompleteEnrollmentRequest:
+      type: object
+      additionalProperties: false
+      required: [instanceId, challengeId, proof]
+      properties:
+        instanceId:
+          type: string
+          format: uuid
+        challengeId:
+          type: string
+          format: uuid
+        proof:
+          type: string
+          minLength: 64
+          maxLength: 64
+          pattern: "^[a-f0-9]{64}$"
+
+    BillingEnrollmentResult:
+      type: object
+      additionalProperties: false
+      required: [schemaVersion, billing]
+      properties:
+        schemaVersion:
+          type: integer
+          const: 2
+        billing:
+          $ref: "#/components/schemas/BillingProfile"
+
+    BillingProfile:
+      type: object
+      additionalProperties: false
+      required: [schemaVersion, accountId, baseUrl, accessToken, tokenVersion, issuedAt]
+      properties:
+        schemaVersion:
+          type: integer
+          const: 1
+        accountId:
+          type: string
+          format: uuid
+        baseUrl:
+          type: string
+          format: uri
+          const: "https://goclaw.host:8443/go-claw/billing"
+        accessToken:
+          type: string
+          minLength: 48
+          maxLength: 256
+          pattern: "^gcb_live_[A-Za-z0-9_-]+$"
+          x-sensitive: true
+          description: Returned only to the local backend and never exposed to browser JavaScript.
+        tokenVersion:
+          type: integer
+          minimum: 1
+        issuedAt:
+          type: string
+          format: date-time
+
+    Problem:
+      type: object
+      additionalProperties: false
+      required: [type, title, status, code, traceId]
+      properties:
+        type:
+          type: string
+          format: uri-reference
+        title:
+          type: string
+          maxLength: 200
+        status:
+          type: integer
+          minimum: 400
+          maximum: 599
+        code:
+          type: string
+          enum:
+            - ENROLLMENT_RATE_LIMITED
+            - ENROLLMENT_PROOF_INVALID
+            - ENROLLMENT_CHALLENGE_INVALID
+            - ENROLLMENT_TEMPORARILY_UNAVAILABLE
+            - INTERNAL_ERROR
+        traceId:
+          type: string
+          minLength: 8
+          maxLength: 64

@@ -56,6 +56,7 @@ sequenceDiagram
 代码锚点：`src/qwenpaw/app/_app.py::lifespan`、
 `src/qwenpaw/app/go_claw_presets.py::ensure_go_claw_presets`、
 `src/qwenpaw/app/go_claw_provision.py::provision_go_claw_credentials`、
+`src/qwenpaw/app/go_claw_billing.py::ensure_billing_enrollment`、
 `src/qwenpaw/plugins/loader.py::PluginLoader.load_all_plugins`。
 
 ```mermaid
@@ -64,6 +65,7 @@ sequenceDiagram
     participant Backend
     participant Presets
     participant Provisioning
+    participant Billing
     participant Providers
     participant Agents
     participant Plugins
@@ -74,6 +76,8 @@ sequenceDiagram
     Backend->>Provisioning: POST instance request
     Provisioning-->>Backend: Per-instance credentials
     Backend->>Providers: Import credentials
+    Backend--)Billing: Start optional legacy enrollment task
+    Note over Backend,Billing: Failure disables recharge only and never blocks readiness
     Backend->>Providers: Reconcile model tiers
     Backend-->>WebUI: HTTP service ready
     Backend->>Plugins: Load channel plugins
@@ -96,6 +100,12 @@ sequenceDiagram
 
 Provisioning 失败按代码约定不阻断进程启动，并在下次启动重试；因此“程序打开了”不能作为
 额度和模型已经可用的证据。
+
+Billing enrollment 只能在既有 credentials 导入后异步启动。它必须复用
+`data/instance.id` 和现有 NewAPI 子 token 完成 challenge/proof，且只允许原子写入
+`data/.go-claw-billing.json`；不得新建或覆盖 NewAPI 用户、token、quota、员工配置或聊天数据。
+enrollment、Billing Service 或微信支付不可用时，充值页显示初始化/维护状态，其他产品就绪条件
+保持不变。浏览器只访问本机 `/api/console/recharge/*`，billing access token 永远由本机后端代持。
 
 ## 4. Windows 在线更新成功事务
 
@@ -200,6 +210,8 @@ sequenceDiagram
 
 - 修改上述顺序时，同一变更必须更新本文和
   `scripts/verify/go_claw_maintenance_contract.py`，并补充相应单元/合同测试。
+- 算力充值默认由 `GO_CLAW_RECHARGE_ENABLED=false` 关闭；关闭建单不得停止 challenge、已付款
+  入账、额度 outbox、退款和对账恢复。生产 PostgreSQL/微信配置不完整时必须 fail closed。
 - Full ZIP、在线更新包和热修复包是三个独立交付物，不能用其中一个的成功替代另一个验收。
 - Full ZIP 必须 provisioning-only；静态 `credentials.json`、签名私钥和构建预检 key 不得入包。
 - 正式 Windows 构建必须验证员工、媒体工具、三档模型、媒体插件和实例额度合同。

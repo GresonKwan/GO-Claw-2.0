@@ -181,6 +181,7 @@ def validate_contract(
             "_run_agent_profile_startup_migrations()",
             "await provision_go_claw_credentials()",
             "await import_go_claw_batch_credentials(provider_manager)",
+            "ensure_billing_enrollment(),",
             "ensure_go_claw_model_tiers(provider_manager)",
             'logger.info(\n        f"Server ready in',
             "async def _background_startup",

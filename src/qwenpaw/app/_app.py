@@ -47,8 +47,9 @@ from .migration import (
     migrate_legacy_skills_to_skill_pool,
     migrate_legacy_workspace_to_default_agent,
 )
-from .go_claw_presets import ensure_go_claw_presets
+from .go_claw_billing import ensure_billing_enrollment
 from .go_claw_credentials import import_go_claw_batch_credentials
+from .go_claw_presets import ensure_go_claw_presets
 from .go_claw_product import ensure_go_claw_model_tiers
 from .go_claw_provision import provision_go_claw_credentials
 from .routers import create_agent_scoped_router
@@ -159,6 +160,13 @@ async def lifespan(  # pylint: disable=too-many-statements,too-many-branches
     # pick it up within the same startup. Never blocks startup.
     await provision_go_claw_credentials()
     await import_go_claw_batch_credentials(provider_manager)
+    # Billing enrollment is optional and intentionally detached from the
+    # critical startup path. It reuses the imported legacy credential and
+    # may fail without affecting any existing product capability.
+    app.state.billing_enrollment_task = asyncio.create_task(
+        ensure_billing_enrollment(),
+        name="go-claw-billing-enrollment",
+    )
     ensure_go_claw_model_tiers(provider_manager)
     schedule_update_checks()
     local_model_manager = LocalModelManager.get_instance()
@@ -517,6 +525,12 @@ async def lifespan(  # pylint: disable=too-many-statements,too-many-branches
     try:
         yield
     finally:
+        billing_task = getattr(app.state, "billing_enrollment_task", None)
+        if billing_task is not None and not billing_task.done():
+            billing_task.cancel()
+            with suppress(asyncio.CancelledError):
+                await billing_task
+
         # Cancel background startup if still in progress
         if not _bg_task.done():
             _bg_task.cancel()

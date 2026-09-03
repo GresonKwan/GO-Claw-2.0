@@ -144,6 +144,16 @@ schema-1 `credentials.json` 原子写入产品盘并导入文字、媒体 provid
   加载、启用；
 - 在线更新 payload 不包含 `GO-CLAW-Config`，因此不覆盖客户已有 provisioning 配置或实例凭据。
 
+### 5.1 算力充值开发分支状态（尚未生产启用）
+
+`codex/compute-recharge` 已按冻结合同落地本地凭据隔离、存量实例 challenge/proof enrollment、
+同源充值代理、整数金额域模型、幂等订单骨架和前端入口。功能开关默认关闭；开发骨架在耐久
+PostgreSQL 仓储、微信 Native 商户配置、回调入账故障注入和 staging 对账完成前拒绝生产模式
+启动。此状态不表示线上充值已经可用，也不授权修改生产更新源、公开 Release 或服务器配置。
+
+存量迁移只允许新增 `data/.go-claw-billing.json`，并复用已有 `instance_id → newapi_user_id`；
+失败只影响充值入口，聊天记录、员工、模型、原 token/quota、额度条和在线更新不得变化。
+
 共享 HMAC 会随 Full ZIP 分发，可以被提取，不能作为强身份凭证。这是 v2.1.1 明确接受的
 限制；通过每实例低额度、模型白名单和服务端幂等控制影响面。本轮不实施 schema 2、激活码、
 ticket DB 或客户 ZIP sealing。

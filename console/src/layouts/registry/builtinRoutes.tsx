@@ -52,6 +52,9 @@ const PluginManagerPage = lazyImportWithRetry(
   "../../pages/Settings/PluginManager",
 );
 const AppCenterPage = lazyImportWithRetry("../../pages/AppCenter");
+const ComputeRechargePage = lazyImportWithRetry(
+  "../../pages/Settings/ComputeRecharge",
+);
 
 /**
  * "/" lands here. Waits for useSyncCodingMode to populate the store before
@@ -92,6 +95,11 @@ export const BUILTIN_ROUTES: Route[] = [
   { id: "core.acp", path: "/acp", component: ACPPage },
   { id: "core.acp-alias", path: "/ACP", component: ACPRedirect },
   { id: "core.agents", path: "/agents", component: AgentsPage },
+  {
+    id: "core.compute-recharge",
+    path: "/compute-recharge",
+    component: ComputeRechargePage,
+  },
   {
     id: "core.environments",
     path: "/environments",

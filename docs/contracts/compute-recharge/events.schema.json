@@ -1,0 +1,242 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://goclaw.host/contracts/compute-recharge/events.schema.json",
+  "title": "GO CLAW Compute Recharge Events",
+  "description": "Versioned internal outbox/inbox event contract. Money, customer display compute units, and raw NewAPI quota units are distinct integer fields.",
+  "oneOf": [
+    { "$ref": "#/$defs/paymentVerified" },
+    { "$ref": "#/$defs/quotaAdjustmentRequested" },
+    { "$ref": "#/$defs/quotaAdjustmentApplied" },
+    { "$ref": "#/$defs/quotaAdjustmentReviewRequired" },
+    { "$ref": "#/$defs/refundRequested" },
+    { "$ref": "#/$defs/refundCompleted" }
+  ],
+  "$defs": {
+    "eventEnvelope": {
+      "type": "object",
+      "required": [
+        "eventId",
+        "eventType",
+        "eventVersion",
+        "aggregateId",
+        "correlationId",
+        "occurredAt",
+        "producer",
+        "data"
+      ],
+      "properties": {
+        "eventId": { "type": "string", "format": "uuid" },
+        "eventType": { "type": "string", "minLength": 1, "maxLength": 96 },
+        "eventVersion": { "type": "integer", "const": 1 },
+        "aggregateId": { "type": "string", "format": "uuid" },
+        "correlationId": { "type": "string", "format": "uuid" },
+        "causationId": { "type": ["string", "null"], "format": "uuid" },
+        "occurredAt": { "type": "string", "format": "date-time" },
+        "producer": { "type": "string", "const": "go-claw-billing" },
+        "data": { "type": "object" }
+      }
+    },
+    "paymentVerified": {
+      "allOf": [
+        { "$ref": "#/$defs/eventEnvelope" },
+        {
+          "type": "object",
+          "properties": {
+            "eventType": { "const": "payment.verified" },
+            "data": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "orderId",
+                "accountId",
+                "outTradeNo",
+                "wechatTransactionId",
+                "amountFen",
+                "currency",
+                "displayComputeUnits",
+                "newapiQuotaUnits",
+                "pricingVersion",
+                "paidAt"
+              ],
+              "properties": {
+                "orderId": { "type": "string", "format": "uuid" },
+                "accountId": { "type": "string", "format": "uuid" },
+                "outTradeNo": {
+                  "type": "string",
+                  "minLength": 6,
+                  "maxLength": 32,
+                  "pattern": "^[A-Za-z0-9_\\-|*]+$"
+                },
+                "wechatTransactionId": { "type": "string", "minLength": 1, "maxLength": 32 },
+                "amountFen": { "type": "integer", "minimum": 1 },
+                "currency": { "const": "CNY" },
+                "displayComputeUnits": { "type": "integer", "minimum": 1 },
+                "newapiQuotaUnits": { "type": "integer", "minimum": 1 },
+                "pricingVersion": { "type": "string", "minLength": 1, "maxLength": 32 },
+                "paidAt": { "type": "string", "format": "date-time" }
+              }
+            }
+          }
+        }
+      ]
+    },
+    "quotaAdjustmentRequested": {
+      "allOf": [
+        { "$ref": "#/$defs/eventEnvelope" },
+        {
+          "type": "object",
+          "properties": {
+            "eventType": { "const": "quota.adjustment.requested" },
+            "data": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "adjustmentId",
+                "orderId",
+                "accountId",
+                "newapiUserId",
+                "direction",
+                "newapiQuotaUnits"
+              ],
+              "properties": {
+                "adjustmentId": { "type": "string", "format": "uuid" },
+                "orderId": { "type": "string", "format": "uuid" },
+                "accountId": { "type": "string", "format": "uuid" },
+                "newapiUserId": { "type": "integer", "minimum": 1 },
+                "direction": { "enum": ["CREDIT", "DEBIT"] },
+                "newapiQuotaUnits": { "type": "integer", "minimum": 1 },
+                "reversalOfAdjustmentId": { "type": ["string", "null"], "format": "uuid" }
+              }
+            }
+          }
+        }
+      ]
+    },
+    "quotaAdjustmentApplied": {
+      "allOf": [
+        { "$ref": "#/$defs/eventEnvelope" },
+        {
+          "type": "object",
+          "properties": {
+            "eventType": { "const": "quota.adjustment.applied" },
+            "data": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["adjustmentId", "orderId", "newapiUserId", "direction", "newapiQuotaUnits", "appliedAt"],
+              "properties": {
+                "adjustmentId": { "type": "string", "format": "uuid" },
+                "orderId": { "type": "string", "format": "uuid" },
+                "newapiUserId": { "type": "integer", "minimum": 1 },
+                "direction": { "enum": ["CREDIT", "DEBIT"] },
+                "newapiQuotaUnits": { "type": "integer", "minimum": 1 },
+                "appliedAt": { "type": "string", "format": "date-time" },
+                "evidenceHash": { "type": "string", "pattern": "^[a-f0-9]{64}$" }
+              }
+            }
+          }
+        }
+      ]
+    },
+    "quotaAdjustmentReviewRequired": {
+      "allOf": [
+        { "$ref": "#/$defs/eventEnvelope" },
+        {
+          "type": "object",
+          "properties": {
+            "eventType": { "const": "quota.adjustment.review_required" },
+            "data": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["adjustmentId", "orderId", "attemptId", "reasonCode", "lastAttemptAt"],
+              "properties": {
+                "adjustmentId": { "type": "string", "format": "uuid" },
+                "orderId": { "type": "string", "format": "uuid" },
+                "attemptId": { "type": "string", "format": "uuid" },
+                "reasonCode": {
+                  "enum": [
+                    "DOWNSTREAM_TIMEOUT_AFTER_SEND",
+                    "DOWNSTREAM_EOF_AFTER_SEND",
+                    "WORKER_CRASH_RECOVERY",
+                    "BALANCE_EVIDENCE_CONFLICT",
+                    "MANUAL_REVIEW"
+                  ]
+                },
+                "lastAttemptAt": { "type": "string", "format": "date-time" }
+              }
+            }
+          }
+        }
+      ]
+    },
+    "refundRequested": {
+      "allOf": [
+        { "$ref": "#/$defs/eventEnvelope" },
+        {
+          "type": "object",
+          "properties": {
+            "eventType": { "const": "refund.requested" },
+            "data": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "refundId",
+                "orderId",
+                "outRefundNo",
+                "amountFen",
+                "displayComputeUnits",
+                "newapiQuotaUnits",
+                "reason",
+                "requestedBy"
+              ],
+              "properties": {
+                "refundId": { "type": "string", "format": "uuid" },
+                "orderId": { "type": "string", "format": "uuid" },
+                "outRefundNo": { "type": "string", "minLength": 6, "maxLength": 64 },
+                "amountFen": { "type": "integer", "minimum": 1 },
+                "displayComputeUnits": { "type": "integer", "minimum": 1 },
+                "newapiQuotaUnits": { "type": "integer", "minimum": 1 },
+                "reason": { "type": "string", "minLength": 3, "maxLength": 500 },
+                "requestedBy": { "type": "string", "minLength": 1, "maxLength": 128 }
+              }
+            }
+          }
+        }
+      ]
+    },
+    "refundCompleted": {
+      "allOf": [
+        { "$ref": "#/$defs/eventEnvelope" },
+        {
+          "type": "object",
+          "properties": {
+            "eventType": { "const": "refund.completed" },
+            "data": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "refundId",
+                "orderId",
+                "outRefundNo",
+                "wechatRefundId",
+                "amountFen",
+                "displayComputeUnits",
+                "newapiQuotaUnits",
+                "completedAt"
+              ],
+              "properties": {
+                "refundId": { "type": "string", "format": "uuid" },
+                "orderId": { "type": "string", "format": "uuid" },
+                "outRefundNo": { "type": "string", "minLength": 6, "maxLength": 64 },
+                "wechatRefundId": { "type": "string", "minLength": 1, "maxLength": 32 },
+                "amountFen": { "type": "integer", "minimum": 1 },
+                "displayComputeUnits": { "type": "integer", "minimum": 1 },
+                "newapiQuotaUnits": { "type": "integer", "minimum": 1 },
+                "completedAt": { "type": "string", "format": "date-time" }
+              }
+            }
+          }
+        }
+      ]
+    }
+  }
+}
