@@ -9,9 +9,12 @@ export interface RechargeConfig {
   minAmountFen: 100;
   maxAmountFen: 10000000;
   amountStepFen: 1;
-  dailyLimitFen: number | null;
+  dailyLimitFen: 10000000;
   presetsFen: [1000, 5000, 10000, 20000];
   termsVersion: string;
+  refundMode: "CUSTOMER_SERVICE";
+  customerServiceUrl: string | null;
+  invoicesEnabled: false;
 }
 
 export interface RechargeBalance {

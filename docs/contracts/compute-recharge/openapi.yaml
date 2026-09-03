@@ -376,6 +376,8 @@ components:
         - dailyLimitFen
         - presetsFen
         - termsVersion
+        - refundMode
+        - invoicesEnabled
       properties:
         enabled:
           type: boolean
@@ -403,9 +405,9 @@ components:
           const: 1
           description: Recharge amounts may use CNY fen, corresponding to at most two decimal places.
         dailyLimitFen:
-          type: [integer, "null"]
-          minimum: 10000000
-          description: Null until a separate daily risk limit is approved.
+          type: integer
+          const: 10000000
+          description: Approved per-account Beijing-calendar-day cumulative limit.
         presetsFen:
           type: array
           const: [1000, 5000, 10000, 20000]
@@ -415,6 +417,13 @@ components:
           type: string
           minLength: 1
           maxLength: 64
+        refundMode:
+          const: CUSTOMER_SERVICE
+        customerServiceUrl:
+          type: [string, "null"]
+          format: uri
+        invoicesEnabled:
+          const: false
 
     Balance:
       type: object

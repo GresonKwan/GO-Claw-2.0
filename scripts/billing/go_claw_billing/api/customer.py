@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import inspect
 from datetime import UTC, datetime
 from typing import Annotated
 from uuid import UUID
@@ -10,7 +11,7 @@ from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request, R
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from pydantic import BaseModel, ConfigDict, Field
 
-from ..application.order_service import IdempotencyConflict
+from ..application.order_service import DailyLimitExceeded, IdempotencyConflict
 from ..domain.money import (
     DISPLAY_UNITS_PER_FEN,
     MAX_AMOUNT_FEN,
@@ -30,13 +31,15 @@ class CreateOrder(BaseModel):
     )
 
 
-def account_id(
+async def account_id(
     request: Request,
     credential: Annotated[HTTPAuthorizationCredentials | None, Depends(bearer)],
 ) -> UUID:
     if credential is None:
         raise HTTPException(401, detail={"code": "UNAUTHORIZED"})
     result = request.app.state.accounts.authenticate(credential.credentials)
+    if inspect.isawaitable(result):
+        result = await result
     if result is None:
         raise HTTPException(401, detail={"code": "UNAUTHORIZED"})
     return result
@@ -56,9 +59,12 @@ async def config(
         "minAmountFen": MIN_AMOUNT_FEN,
         "maxAmountFen": MAX_AMOUNT_FEN,
         "amountStepFen": 1,
-        "dailyLimitFen": None,
+        "dailyLimitFen": settings.daily_limit_fen,
         "presetsFen": list(PRESETS_FEN),
         "termsVersion": request.app.state.orders.active_terms_version,
+        "refundMode": "CUSTOMER_SERVICE",
+        "customerServiceUrl": settings.customer_service_url,
+        "invoicesEnabled": settings.invoices_enabled,
     }
 
 
@@ -101,6 +107,8 @@ async def create_order(
         )
     except IdempotencyConflict as exc:
         raise HTTPException(409, detail={"code": "IDEMPOTENCY_CONFLICT"}) from exc
+    except DailyLimitExceeded as exc:
+        raise HTTPException(409, detail={"code": "DAILY_LIMIT_EXCEEDED"}) from exc
     response.headers["Idempotency-Replayed"] = "true" if replayed else "false"
     if replayed:
         response.status_code = 200

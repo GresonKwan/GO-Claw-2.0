@@ -17,6 +17,10 @@ class IdempotencyConflict(RuntimeError):
     pass
 
 
+class DailyLimitExceeded(RuntimeError):
+    pass
+
+
 class Orders(Protocol):
     async def create_idempotent(
         self,

@@ -1,4 +1,5 @@
-import { Button, Card, InputNumber, Space, Typography } from "antd";
+import { Button, Card, Checkbox, InputNumber, Space, Typography } from "antd";
+import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import type { RechargeConfig } from "../../../../api/modules/recharge";
 import styles from "../index.module.less";
@@ -21,6 +22,7 @@ export function AmountCard({
   onSubmit,
 }: Props) {
   const { t } = useTranslation();
+  const [accepted, setAccepted] = useState(false);
   return (
     <Card className={styles.card} title={t("computeRecharge.chooseAmount")}>
       <Space wrap className={styles.presets}>
@@ -46,7 +48,7 @@ export function AmountCard({
         <Button
           type="primary"
           loading={submitting}
-          disabled={disabled}
+          disabled={disabled || !accepted}
           onClick={onSubmit}
         >
           {t("computeRecharge.pay")}
@@ -57,6 +59,21 @@ export function AmountCard({
           units: (amountFen * config.computeUnitsPerFen).toLocaleString(),
         })}
       </Typography.Text>
+      <div className={styles.termsRow}>
+        <Checkbox
+          checked={accepted}
+          onChange={(event) => setAccepted(event.target.checked)}
+        >
+          {t("computeRecharge.acceptTerms", { version: config.termsVersion })}
+        </Checkbox>
+      </div>
+      <Typography.Paragraph type="secondary">
+        {t("computeRecharge.dailyLimit", {
+          amount: (config.dailyLimitFen / 100).toLocaleString(),
+        })}
+        {" · "}
+        {t("computeRecharge.refundAndInvoice")}
+      </Typography.Paragraph>
     </Card>
   );
 }

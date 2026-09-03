@@ -13,6 +13,10 @@ MAPPING = {
     "audit_hmac_key": "GO_CLAW_BILLING_AUDIT_HMAC_KEY",
     "code_url_key": "GO_CLAW_BILLING_CODE_URL_ENCRYPTION_KEY",
     "internal_token": "GO_CLAW_BILLING_INTERNAL_ENROLLMENT_TOKEN",
+    "newapi_admin_token": "GO_CLAW_BILLING_NEWAPI_ADMIN_TOKEN",
+    "wechat_merchant_private_key": "GO_CLAW_BILLING_WECHAT_MERCHANT_PRIVATE_KEY_PEM",
+    "wechat_api_v3_key": "GO_CLAW_BILLING_WECHAT_API_V3_KEY",
+    "wechat_verification_public_key": "GO_CLAW_BILLING_WECHAT_VERIFICATION_PUBLIC_KEY_PEM",
 }
 
 
@@ -46,6 +50,9 @@ def main() -> None:
 if __name__ == "__main__":
     try:
         main()
-    except Exception as exc:  # secret values are never included in messages
-        print(f"billing credential bootstrap failed: {type(exc).__name__}", file=sys.stderr)
+    except Exception as exc:  # noqa: BLE001 - redact all secret bootstrap failures
+        print(
+            f"billing credential bootstrap failed: {type(exc).__name__}",
+            file=sys.stderr,
+        )
         raise SystemExit(1) from None

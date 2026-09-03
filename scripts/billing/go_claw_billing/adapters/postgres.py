@@ -42,7 +42,10 @@ class Postgres:
                 connection.cursor() as cursor,
             ):
                 await cursor.execute(
-                    "SELECT to_regclass('public.payment_order') IS NOT NULL",
+                    """
+                    SELECT to_regclass('public.payment_order') IS NOT NULL
+                       AND COALESCE((SELECT max(version) FROM billing_schema_version), 0) >= 2
+                    """,
                 )
                 row = await cursor.fetchone()
                 return bool(row and row[0])
