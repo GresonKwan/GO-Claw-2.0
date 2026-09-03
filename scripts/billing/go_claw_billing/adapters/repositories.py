@@ -799,7 +799,12 @@ class PaymentCommitterRepository:
                             (confirmation.event_id,),
                         )
                         return False
-                    if order["payment_state"] not in {"CREATED", "QR_READY", "EXPIRED"}:
+                    if order["payment_state"] not in {
+                        "CREATED",
+                        "QR_READY",
+                        "EXPIRED",
+                        "PAYMENT_REVIEW_REQUIRED",
+                    }:
                         raise ValueError("order cannot transition to paid")
                     await cursor.execute(
                         """
@@ -818,7 +823,7 @@ class PaymentCommitterRepository:
                             adjustment_id,order_id,account_id,newapi_user_id,
                             direction,newapi_quota_units,state
                         ) VALUES (%s,%s,%s,%s,'CREDIT',%s,'QUEUED')
-                        ON CONFLICT (order_id,direction) DO NOTHING
+                        ON CONFLICT (order_id) WHERE direction='CREDIT' DO NOTHING
                         """,
                         (
                             adjustment_id,

@@ -45,6 +45,26 @@ Run migrations explicitly (never from application startup):
   --dsn-file /etc/go-claw-billing/credentials/database_dsn
 ```
 
+## Operator payment recovery
+
+If a callback or quota commit fails after the customer has paid, do not reset
+the order state and do not ask the customer to pay again. Query the exact order
+from WeChat first; the command is read-only unless `--commit` is present and
+prints only non-sensitive verification fields:
+
+```bash
+/opt/go-claw-billing/.venv/bin/python \
+  /opt/go-claw-billing/operator_recover_payment.py \
+  00000000-0000-0000-0000-000000000000
+```
+
+Only after the result reports `signedResponseVerified=true`,
+`tradeState=SUCCESS`, and the expected amount may an operator append
+`--commit`. The database transition accepts `PAYMENT_REVIEW_REQUIRED` only
+through the same signed confirmation path. Replaying the command must report
+one credit adjustment and one PAYMENT journal; it must never create a second
+credit.
+
 ## Customer-service refund entry
 
 There is intentionally no customer refund button or desktop route. A customer
