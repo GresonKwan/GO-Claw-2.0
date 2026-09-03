@@ -204,13 +204,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         if resolved.environment != "development" and (
             database is None or not await database.ready()
         ):
-            return JSONResponse(503, {"ok": False})
-        return JSONResponse(200, {"ok": True})
+            return JSONResponse({"ok": False}, status_code=503)
+        return JSONResponse({"ok": True}, status_code=200)
 
     app.include_router(customer.router)
     app.include_router(webhooks.router)
     app.include_router(admin.router)
     return app
-
-
-app = create_app()
