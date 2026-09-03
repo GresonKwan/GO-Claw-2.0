@@ -11,6 +11,9 @@ import tomllib
 from pathlib import Path
 
 import pytest
+from packaging.version import Version
+
+from qwenpaw.__version__ import __version__
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[3]
 
@@ -210,6 +213,19 @@ MEDIA_PLUGIN_CONTRACTS = {
         "tool_source": "wan27_tool.py",
     },
 }
+
+
+def test_media_plugins_accept_the_current_go_claw_release() -> None:
+    current = Version(__version__)
+    for relative_path in MEDIA_PLUGIN_CONTRACTS:
+        manifest = json.loads(
+            (REPOSITORY_ROOT / relative_path / "plugin.json").read_text(
+                encoding="utf-8",
+            ),
+        )
+        constraint = manifest["qwenpaw_version"]
+        assert Version(constraint["min"]) <= current
+        assert current < Version(constraint["max"])
 
 
 def _read_customer_text(relative_path: str) -> str:

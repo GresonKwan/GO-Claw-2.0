@@ -145,6 +145,28 @@
 | staging 启动器先结束旧单实例，再注入 v2.1.1 endpoint 并从绝对路径启动 EXE | 旧托盘实例保留生产 endpoint，导致第二次启动被单实例转发后仍只看到 v2.1.0 | `77f7916e` | `test_portable_staging_launcher.py` + 更新脚本合同共 13 例；仅验证启动合同 |
 | 建立 Windows 新机在线更新事故交接，记录分支/提交/CI/staging/运行时合同、未决假设和失败后最小取证流程 | 完整 staging 包再次实机失败，必须消除聊天上下文依赖并区分 probe 通过与真实更新失败 | `e5877f87` | 路径/URL/提交/CI/服务器 SHA 只读复核；Markdown 与仓库合同检查 | `docs/GO-CLAW-v2.1.1-Windows在线更新调试交接.zh.md` |
 
+## 2026-09-02 · 维护规则、运行时序与仓库边界
+
+| 改动 | 原因 | commit | 验证 | 关联文档 |
+| --- | --- | --- | --- | --- |
+| 新增根级维护规则，固定干净样本、按首个失败 stage 单点修复、便携盘安全、发布门禁和 GO CLAW 唯一可写仓库 | 将连续调试中形成的有效做法变成后续执行者默认规则，并阻止误向 QwenPaw 源仓库写入 | `92be9d0` | 维护合同、pre-commit、正式 Windows 构建门禁 | `AGENTS.md`、`GO-CLAW-运行时序与维护规则.zh.md` |
+| 固化启动、产品就绪、更新成功、完整回滚和不完整回滚五张 Mermaid 时序图，并以可执行合同检查真实代码顺序 | 防止文档顺序与 Python/Rust/NSIS 实现漂移，避免只验证 HTTP 启动而漏掉员工、插件或额度未就绪 | `92be9d0` | `test_go_claw_maintenance_contract.py`；合同脚本直接通过 | `GO-CLAW-运行时序与维护规则.zh.md` |
+
+## 2026-09-03 · 算力充值功能开发（默认关闭）
+
+| 改动 | 原因 | commit | 验证 | 关联文档 |
+| --- | --- | --- | --- | --- |
+| 冻结 ￥1–￥100,000、￥1=500万展示算力、1分=750 NewAPI 单位的整数合同；新增 OpenAPI、事件 Schema、PostgreSQL 账本 SQL 和服务条款模板 | 防止人民币、展示算力与 NewAPI 内部单位混用，并为支付/退款/审计建立可机器验证边界 | 待本变更提交 | OpenAPI/JSON Schema/PostgreSQL parser 合同 | `contracts/compute-recharge/*`、算力充值设计与实施计划 |
+| 新增默认关闭的 Billing Service 骨架、存量 challenge/proof enrollment、本机凭据隐藏代理、侧边栏充值页、本地微信二维码和额度即时刷新事件 | 让 v2.0.1/v2.1.1 存量用户未来可无感开通，同时保证计费故障不影响原产品能力 | 待本变更提交 | 金额/账本/幂等/凭据隔离/兼容/前端合同测试；生产模式在耐久仓储完成前 fail closed | `GO-CLAW-运行时序与维护规则.zh.md` |
+
+## 2026-09-01 · v2.1.1 新盘额度与媒体工具 P0
+
+| 改动 | 原因 | commit | 验证 | 关联文档 |
+| --- | --- | --- | --- | --- |
+| 捆绑图片/视频插件版本提升并允许 v2.1.1 host；启动时原子升级旧 manifest；恢复预置员工和缺失 workspace；迁移遇到不可读旧 profile 时跳过并交由内置恢复流程重建 | 正式 v2.1.1 中旧插件兼容上限为 2.1.0，两个员工 workspace 还可能损坏或缺失；旧 profile 损坏不得中断后续恢复 | `5bec4dc`、`0b7ded0`、`250843d`、`fb50f05`、`512ba07` | 插件/员工单测；G、F 盘 `/api/plugins` 均确认两个插件 loaded/enabled，五个员工 running；完整 Tests run `33497130435` 通过 | `GO-CLAW-项目事实与发布基线.zh.md` |
+| Main Full ZIP 从静态 `credentials.json` 改为唯一 `provision.json`；manifest 升级 schema 3；打包和发布 verifier 禁止混装/静态凭据并校验 provisioning 哈希 | 新空盘没有 `instance.id`，额度接口不可用；共享静态 token 也违背每实例额度合同 | `565cd13` | 打包、Full ZIP、发布合同、桌面额度验证共 54 项针对性测试 | `go-claw-auto-provisioning.zh.md` |
+| Windows portable CI 新增 `/api/console/quota` 运行门禁；构建期七模型 key 只做预检，不再写入客户包；临时 provisioning 源在组包后清理 | 旧 CI 只验证文件结构和应用启动，无法发现新盘缺额度条 | `565cd13` | 54 项针对性测试通过；最终代码头 `512ba07` 的 Windows Full run `33497201586` 成功，artifact ID `9797474948`，额度/媒体插件/五员工/三档模型门禁均 PASS | `GO-CLAW-项目事实与发布基线.zh.md` |
+
 ## 2026-08-26 · v2.1 四计划现场 review 与事实基线
 
 | 改动 | 原因 | commit | 验证 | 关联文档 |
@@ -168,6 +190,7 @@
 | 08-26 | 在 8443 Nginx server 增加 `/updates/` 静态 location，配置备份为 `newapi-8443.conf.before-updates-20260826`，`nginx -t`/reload 通过；生产软链尚未切换 | 为后续原子发布更新资产建立独立静态入口 |
 | 08-28 | 发布 GitHub Release `v2.1.0`（固定 `f6732aa`，仅四个在线更新资产）；服务器落盘 `/srv/go-claw-updates/releases/2.1.0`，完成 Actions digest、SHA-256、Ed25519 验证后原子切换 `updates -> releases/2.1.0`；公网 manifest 200，更新文件 Range/MZ/长度合同通过 | 开放已安装 v2.0.1 到 v2.1.0 的线上更新检查与下载链；真实 Windows 安装/重启/数据保留验收由用户完成 |
 | 08-31 | 新增隔离 `/updates-staging/2.1.1/`，部署 run `33369481282` 的完整更新包、manifest 和测试启动器；生产软链保持 `releases/2.1.0-a9ab44b`；用户完整包实测仍失败，事故保持开放 | 在不影响生产的前提下复现 v2.1.1；实际失败说明 CI 小型 probe 不能作为发布结论 |
+| 09-01 | 在当天新拷贝的 G、F 空产品盘分别复现额度条缺失和媒体工具不可用；每块盘先备份旧凭据 marker/插件 manifest，再补入受信 provisioning 配置并提升插件兼容范围；重启后额度接口 200、媒体插件加载、五个员工运行。F 盘备份位于 `F:\backups\P0-local-repair-20260901-171414` | 立即恢复现场产品盘，同时保留可回滚证据；生产更新源未修改 |
 | 08-25 | deepseek-v4-flash 不可用三层修复：渠道 #1 models 名单补名 + `abilities` 表补路由行 + `options.ModelRatio` 补定价 0.25 + `model_mapping` 映射到 deepseek-v4-flash-0731（上游只认带日期型号）；实测 chat completion 200 | 模型选择器调用必 503 |
 | 08-25 | provisioning 服务器 `CHAT_MODEL_ID` 由 qwen3.7-plus 改为 `deepseek-v4-flash` 并重启；服务端 quota 语义更新已部署 | 交付模型与白名单对齐 / 充值语义 |
 
@@ -180,8 +203,10 @@
 | 本文件 | 已发生变更的唯一历史记录 |
 | `GO-CLAW-项目事实与发布基线.zh.md` | 当前代码、生产部署、GitHub/CI、签名和发布门禁的权威基线 |
 | `GO-CLAW-文档规范.zh.md` | 文档编写与维护规则 |
+| `GO-CLAW-运行时序与维护规则.zh.md` | 启动、产品就绪、更新和回滚顺序的唯一人类可读合同 |
 | `go-claw-auto-provisioning.zh.md` | 开通/计费专题（持续更新） |
 | `GO-CLAW-在线更新签名密钥运维.zh.md` | 更新签名密钥的保管、发布前检查、恢复与轮换规则 |
 | `GO-CLAW-v2.1.1-Windows在线更新调试交接.zh.md` | 未解决的 v2.0.1 → v2.1.1 Windows 在线更新事故接手、取证和验收入口 |
 | `superpowers/specs/*`、`plans/*` | 设计规格与实施计划（带状态标记） |
+| `contracts/compute-recharge/*` | 算力充值 API、事件、账本与服务条款合同 |
 | 工作区 `GO-CLAW-debug计划.md`、`GO-CLAW-修改计划.md` | 现场排查原始记录（快照，不再更新） |

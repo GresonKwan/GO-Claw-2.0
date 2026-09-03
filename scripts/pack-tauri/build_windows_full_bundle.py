@@ -16,12 +16,12 @@ from pathlib import Path
 
 OUTPUT_NAME = "GO-CLAW-Windows-x64-Full.zip"
 ROOT_STEM = "GO-CLAW-Windows-x64-Full-{version}"
-EXPECTED_API_URL = "https://goclaw.host:8443/v1"
+EXPECTED_PROVISION_URL = "https://goclaw.host:8443/go-claw/provision"
 WEBVIEW2_NAME = "MicrosoftEdgeWebView2RuntimeInstallerX64.exe"
 REQUIRED_PORTABLE_PATHS = (
     "GO-CLAW-Portable.exe",
     "binaries",
-    "GO-CLAW-Config/credentials.json",
+    "GO-CLAW-Config/provision.json",
     "GO-CLAW-Config/credentials.example.json",
     "GO-CLAW-Config/update-pubkey.txt",
     "LICENSE",
@@ -66,9 +66,16 @@ def _validate_portable_tree(portable: Path) -> None:
         if not candidate.exists():
             raise FileNotFoundError(f"missing portable asset: {relative}")
     credentials = list(portable.rglob("credentials.json"))
-    if len(credentials) != 1:
+    if credentials:
         raise ValueError(
-            "portable stage must contain exactly one credentials.json",
+            "portable stage must not contain credentials.json",
+        )
+    provisions = list(portable.rglob("provision.json"))
+    expected_provision = portable / "GO-CLAW-Config/provision.json"
+    if provisions != [expected_provision]:
+        raise ValueError(
+            "portable stage must contain exactly one canonical "
+            "GO-CLAW-Config/provision.json",
         )
     for path in portable.rglob("*"):
         if path.is_symlink():
@@ -78,6 +85,8 @@ def _validate_portable_tree(portable: Path) -> None:
         relative = path.relative_to(portable).as_posix()
         relative_parts = path.relative_to(portable).parts
         if relative_parts and relative_parts[0].casefold() == "binaries":
+            continue
+        if relative == "GO-CLAW-Config/provision.json":
             continue
         folded = relative.casefold()
         forbidden = (
@@ -92,64 +101,21 @@ def _validate_portable_tree(portable: Path) -> None:
             raise ValueError(f"forbidden delivery material: {relative}")
 
 
-def _validate_credentials(path: Path) -> None:
+def _validate_provision(path: Path) -> None:
     try:
-        payload = json.loads(path.read_text(encoding="utf-8"))
-        llm = payload["llm"]
-        media = payload["dashscope"]
-        values = (
-            payload["schemaVersion"],
-            llm["modelId"],
-            llm["baseUrl"],
-            llm["apiKey"],
-            media["compatibleBaseUrl"],
-            media["apiKey"],
-        )
+        payload = json.loads(path.read_text(encoding="utf-8-sig"))
+        url = payload["provisionUrl"]
+        secret = payload["hmacSecret"]
     except (json.JSONDecodeError, KeyError, TypeError) as exc:
-        raise ValueError("credentials.json is structurally invalid") from exc
-
-    def walk_keys(value: object) -> list[str]:
-        if isinstance(value, dict):
-            return [str(key) for key in value] + [
-                nested
-                for child in value.values()
-                for nested in walk_keys(child)
-            ]
-        if isinstance(value, list):
-            return [nested for child in value for nested in walk_keys(child)]
-        return []
-
-    if any(
-        marker in key.casefold()
-        for key in walk_keys(payload)
-        for marker in (
-            "hmac",
-            "enrollment",
-            "ticket",
-            "privatekey",
-            "private_key",
-        )
-    ):
-        raise ValueError("forbidden field in credentials.json")
-    schema, model_id, llm_url, llm_key, media_url, media_key = values
-    keys = (llm_key, media_key)
+        raise ValueError("provision.json is structurally invalid") from exc
     if (
-        schema != 1
-        or model_id != "deepseek-v4-flash-0731"
-        or llm_url != EXPECTED_API_URL
-        or media_url != EXPECTED_API_URL
-        or llm_key != media_key
-        or any(
-            not isinstance(key, str)
-            or not key.startswith("sk-")
-            or len(key) < 20
-            or any(char.isspace() for char in key)
-            for key in keys
-        )
+        set(payload) != {"provisionUrl", "hmacSecret"}
+        or url != EXPECTED_PROVISION_URL
+        or not isinstance(secret, str)
+        or len(secret) < 16
+        or any(char.isspace() for char in secret)
     ):
-        raise ValueError(
-            "credentials.json does not match the GO CLAW delivery contract",
-        )
+        raise ValueError("provision.json does not match the delivery contract")
 
 
 def _read_pubkey(config_path: Path) -> bytes:
@@ -236,7 +202,8 @@ def build_full_bundle(
     pubkey_path = _require_regular(pubkey_config, "updater public key config")
     start_path = _require_regular(start_here, "START-HERE instructions")
     _validate_portable_tree(portable)
-    _validate_credentials(portable / "GO-CLAW-Config/credentials.json")
+    provision_path = portable / "GO-CLAW-Config/provision.json"
+    _validate_provision(provision_path)
     tracked_pubkey = _read_pubkey(pubkey_path)
     staged_pubkey = (
         portable / "GO-CLAW-Config/update-pubkey.txt"
@@ -270,14 +237,15 @@ def build_full_bundle(
             for path in payload_files
         ]
         manifest = {
-            "schemaVersion": 2,
+            "schemaVersion": 3,
             "product": "GO CLAW",
             "version": version,
             "platform": "windows-x86_64",
             "createdAt": created_at,
             "sourceCommit": source_commit,
             "confidential": True,
-            "containsCredentials": True,
+            "containsCredentials": False,
+            "containsProvisioningConfig": True,
             "containsEnrollmentTicket": False,
             "webView2": {
                 "distribution": "evergreen-standalone-x64",
@@ -285,6 +253,7 @@ def build_full_bundle(
                 "sha256": _sha256_file(webview),
             },
             "updaterPublicKeySha256": _sha256_bytes(staged_pubkey),
+            "provisioningConfigSha256": _sha256_file(provision_path),
             "files": file_entries,
         }
         (root / "MANIFEST.json").write_text(

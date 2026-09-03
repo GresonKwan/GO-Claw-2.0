@@ -1,0 +1,64 @@
+.container {
+  min-height: 100%;
+  padding: 0 24px 32px;
+}
+
+.content {
+  max-width: 1180px;
+  margin: 0 auto;
+}
+
+.fullWidth {
+  width: 100%;
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: minmax(260px, 0.8fr) minmax(360px, 1.2fr);
+  gap: 16px;
+}
+
+.card {
+  height: 100%;
+}
+
+.presets {
+  margin-bottom: 16px;
+}
+
+.amountRow {
+  display: flex;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.termsRow {
+  margin-top: 16px;
+}
+
+.amountRow :global(.ant-input-number-group-wrapper) {
+  flex: 1;
+}
+
+.qrArea {
+  display: flex;
+  min-height: 320px;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+}
+
+@media (max-width: 760px) {
+  .container {
+    padding: 0 12px 24px;
+  }
+
+  .grid {
+    grid-template-columns: 1fr;
+  }
+
+  .amountRow {
+    flex-direction: column;
+  }
+}

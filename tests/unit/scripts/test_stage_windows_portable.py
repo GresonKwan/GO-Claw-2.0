@@ -109,6 +109,20 @@ def _write_batch_credentials(
     return path
 
 
+def _write_provision_config(tmp_path: Path) -> Path:
+    path = tmp_path / "provision.json"
+    path.write_text(
+        json.dumps(
+            {
+                "provisionUrl": ("https://goclaw.host:8443/go-claw/provision"),
+                "hmacSecret": "unit-test-provision-secret",
+            },
+        ),
+        encoding="utf-8",
+    )
+    return path
+
+
 def test_stage_portable_layout_manifest_zip_and_checksum(tmp_path):
     exe = tmp_path / "target" / "release" / "qwenpaw-desktop.exe"
     binaries = tmp_path / "binaries"
@@ -209,6 +223,90 @@ def test_stage_includes_explicit_batch_credentials(tmp_path):
     )
 
 
+def test_stage_includes_explicit_provision_config(tmp_path):
+    exe = tmp_path / "qwenpaw-desktop.exe"
+    exe.write_bytes(b"MZ-test")
+    binaries = tmp_path / "binaries"
+    _write_runtime_layout(binaries)
+    license_file = tmp_path / "LICENSE"
+    readme_file = tmp_path / "README.txt"
+    license_file.write_text("license", encoding="utf-8")
+    readme_file.write_text("readme", encoding="utf-8")
+    example = _write_credentials_example(tmp_path)
+    provision = _write_provision_config(tmp_path)
+
+    output = stage_portable(
+        version="2.1.1",
+        exe=exe,
+        binaries=binaries,
+        dist=tmp_path / "dist",
+        license_file=license_file,
+        readme_file=readme_file,
+        credentials_example_file=example,
+        provision_file=provision,
+    )
+
+    delivered = output.stage_dir / "GO-CLAW-Config/provision.json"
+    assert delivered.read_text(encoding="utf-8") == provision.read_text(
+        encoding="utf-8",
+    )
+    assert not (output.stage_dir / "GO-CLAW-Config/credentials.json").exists()
+
+
+def test_stage_rejects_credentials_and_provision_together(tmp_path):
+    exe = tmp_path / "qwenpaw-desktop.exe"
+    exe.write_bytes(b"MZ-test")
+    binaries = tmp_path / "binaries"
+    _write_runtime_layout(binaries)
+    license_file = tmp_path / "LICENSE"
+    readme_file = tmp_path / "README.txt"
+    license_file.write_text("license", encoding="utf-8")
+    readme_file.write_text("readme", encoding="utf-8")
+
+    with pytest.raises(ValueError, match="credentials.*provision"):
+        stage_portable(
+            version="2.1.1",
+            exe=exe,
+            binaries=binaries,
+            dist=tmp_path / "dist",
+            license_file=license_file,
+            readme_file=readme_file,
+            credentials_example_file=_write_credentials_example(tmp_path),
+            credentials_file=_write_batch_credentials(tmp_path),
+            provision_file=_write_provision_config(tmp_path),
+        )
+
+
+@pytest.mark.parametrize(
+    "payload",
+    (
+        {
+            "provisionUrl": "https://example.invalid/go-claw/provision",
+            "hmacSecret": "unit-test-provision-secret",
+        },
+        {
+            "provisionUrl": "https://goclaw.host:8443/go-claw/provision",
+            "hmacSecret": "short",
+        },
+        {
+            "provisionUrl": "https://goclaw.host:8443/go-claw/provision",
+            "hmacSecret": "unit test provision secret",
+        },
+        {
+            "provisionUrl": "https://goclaw.host:8443/go-claw/provision",
+            "hmacSecret": "unit-test-provision-secret",
+            "unexpected": True,
+        },
+    ),
+)
+def test_stage_rejects_noncanonical_provision_config(tmp_path, payload):
+    provision = tmp_path / "provision.json"
+    provision.write_text(json.dumps(payload), encoding="utf-8")
+
+    with pytest.raises(ValueError, match="Provisioning config"):
+        MODULE._validate_provision_file(provision)
+
+
 def test_stage_rejects_truncated_dashscope_credentials(tmp_path):
     exe = tmp_path / "qwenpaw-desktop.exe"
     exe.write_bytes(b"MZ-test")
@@ -240,19 +338,25 @@ def test_stage_rejects_truncated_dashscope_credentials(tmp_path):
     assert not expected_zip.exists()
 
 
-def test_windows_workflow_materializes_batch_credentials_from_secrets():
+def test_windows_workflow_materializes_provisioning_from_secrets():
     workflow = (
         Path(__file__).parents[3] / ".github/workflows/desktop-build.yml"
     ).read_text(encoding="utf-8")
     assert "GO_CLAW_LLM_API_KEY" not in workflow
     assert "GO_CLAW_DASHSCOPE_API_KEY" in workflow
-    assert "GO_CLAW_PROVISION_URL" not in workflow
-    assert "GO_CLAW_PROVISION_HMAC_SECRET" not in workflow
-    assert '"$configDir/credentials.json"' in workflow
+    assert "GO_CLAW_PROVISION_URL" in workflow
+    assert "GO_CLAW_PROVISION_HMAC_SECRET" in workflow
+    assert '"$configDir/provision.json"' in workflow
+    assert (
+        '[IO.File]::WriteAllText(\n            "$configDir/credentials.json"'
+        not in workflow
+    )
+    assert (
+        'throw "credentials.json must not be staged with provisioning"'
+        in workflow
+    )
     assert "Invoke-RestMethod" in workflow
-    assert "TrimEnd('/'))/models\"" in workflow
-    assert 'baseUrl = "https://goclaw.host:8443/v1"' in workflow
-    assert 'compatibleBaseUrl = "https://goclaw.host:8443/v1"' in workflow
+    assert '"https://goclaw.host:8443/v1/models"' in workflow
     for model_id in (
         "deepseek-v4-flash-0731",
         "qwen3.7-plus",

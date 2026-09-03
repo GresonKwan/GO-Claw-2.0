@@ -1,65 +1,71 @@
 # GO CLAW 自动开通与 New API 凭据交付
 
-> 当前代码实现：schema 1（2026-08-26 复核）。
+> 当前代码实现：schema 1（2026-09-01 复核）。
 >
-> **v2.1 发布边界：** 本页记录已存在的 HMAC 自动开通机制，供历史客户和运维查阅。
-> v2.1 Main Build 不改造它、不依赖它：正式 Full ZIP 直接携带用户已接受的低额度
-> `credentials.json`，不携带 `provision.json`、共享 HMAC、激活码或 enrollment ticket。
+> **v2.1.1 正式交付边界：** Main Full ZIP 只携带 `provision.json`，不得携带静态
+> `credentials.json`。每块新盘首次启动时按 `instance.id` 换取独立的低额度 New API
+> 凭据。在线更新包不包含 `GO-CLAW-Config`，不会覆盖已有实例的凭据。
 
-## 1. 历史自动开通现状
+## 1. 正式自动开通链路
 
-已存在的 Portable schema-1 链路是：
+Portable schema-1 链路是：
 
 ```text
 客户首次启动
-  → 生成 data/instance.id
+  → 生成并持久化 data/instance.id
   → 使用 provision.json 中的共享 HMAC 调用 POST /go-claw/provision
-  → 服务端创建/查询 New API 子用户和 token
-  → 客户写入 GO-CLAW-Config/credentials.json
+  → 服务端按 instance.id 创建或查询 New API 子用户和 token
+  → 客户原子写入 GO-CLAW-Config/credentials.json
   → 批次凭据导入逻辑配置文字和媒体 provider
+  → GET /api/console/quota 返回该实例的额度
 ```
 
 关键文件和服务：
 
 - 客户端：`src/qwenpaw/app/go_claw_provision.py`；
 - 凭据导入：`src/qwenpaw/app/go_claw_credentials.py`；
+- 额度代理：`src/qwenpaw/app/routers/quota.py`；
 - 服务端代码：`/opt/go-claw-provisioning/provision_server.py`；
 - systemd：`go-claw-provision.service`，监听 `127.0.0.1:9100`；
 - 公网入口：`https://goclaw.host:8443/go-claw/provision`。
 
-共享 HMAC 可以从客户包中提取，不是强身份凭据。这是历史机制的已知局限，不在 v2.1 中通过新激活系统扩建。
+共享 HMAC 会随客户包分发，可以被提取，不能作为强身份凭证。v2.1.1 接受这个已知局限，
+通过每实例低额度、服务端幂等和模型白名单限制影响面；本版本不扩建激活码、ticket DB 或
+客户 ZIP sealing。后续若引入强授权，必须升级 schema，不能把共享 HMAC 描述为设备身份。
 
-## 2. v2.1 Main Build 凭据合同
+## 2. v2.1.1 Main Build 合同
 
-v2.1 沿用已实现的 `credentials.json` schema 1 和一次性导入 marker。Main Build 只使用
-已存在的 GitHub Secret `GO_CLAW_DASHSCOPE_API_KEY`，将同一个低额度 New API key
-写入文字和媒体凭据字段：
+GitHub Actions 只在构建时读取三个既有 Secret：
+
+- `GO_CLAW_PROVISION_URL`：必须精确等于
+  `https://goclaw.host:8443/go-claw/provision`；
+- `GO_CLAW_PROVISION_HMAC_SECRET`：生成 Full ZIP 内的 `provision.json`；
+- `GO_CLAW_DASHSCOPE_API_KEY`：只用于构建期七模型预检，不进入 Full ZIP。
+
+Full ZIP 内的配置形状固定为：
 
 ```json
 {
-  "schemaVersion": 1,
-  "batchId": "go-claw-main-<github-run-id>",
-  "llm": {
-    "providerId": "deepseek",
-    "modelId": "deepseek-v4-flash-0731",
-    "baseUrl": "https://goclaw.host:8443/v1",
-    "apiKey": "<GO_CLAW_DASHSCOPE_API_KEY>"
-  },
-  "dashscope": {
-    "compatibleBaseUrl": "https://goclaw.host:8443/v1",
-    "apiKey": "<GO_CLAW_DASHSCOPE_API_KEY>"
-  }
+  "provisionUrl": "https://goclaw.host:8443/go-claw/provision",
+  "hmacSecret": "<GO_CLAW_PROVISION_HMAC_SECRET>"
 }
 ```
 
-规则：
+构建和发布 verifier 必须同时执行以下 fail-closed 规则：
 
-- 不新增 `GO_CLAW_LLM_API_KEY`；
-- 不新增 `GO_CLAW_CI_TEST_API_KEY`；
-- desktop-build 不生成 `provision.json`；
-- Full ZIP 中必须有且只有一份 `Portable/GO-CLAW-Config/credentials.json`；
-- 在线更新 payload 不包含 `GO-CLAW-Config`，不覆盖客户已导入的 key；
-- 验证脚本可检查 JSON schema、URL 和 key 形式，但不得输出 key 或完整 JSON。
+- `Portable/GO-CLAW-Config/provision.json` 有且只有一份，字段只能是
+  `provisionUrl` 和 `hmacSecret`；
+- Full ZIP 中任何位置都不得出现 `credentials.json`；
+- `MANIFEST.json` 使用 schema 3，明确记录 `containsCredentials=false`、
+  `containsProvisioningConfig=true` 和 provisioning 配置 SHA-256；
+- 便携包首次启动验证必须通过 `/api/console/quota`，并确认捆绑媒体插件已加载启用；
+- 构建完成后清除工作区中的临时 `provision.json`，日志不得输出 Secret 或完整 JSON；
+- 在线更新 payload 继续使用程序文件白名单，不包含 `GO-CLAW-Config`、`data`、`secrets`、
+  `logs`、`cache`、`backups` 或 `updates`。
+
+不得同时打包 `credentials.json` 和 `provision.json`。客户端发现现成
+`credentials.json` 会跳过 provisioning，这种混装会让所有新盘继续共用静态 token，且
+没有 `instance.id`，额度接口会返回未开通。
 
 ## 3. 文字模型
 
@@ -75,14 +81,14 @@ v2.1 沿用已实现的 `credentials.json` schema 1 和一次性导入 marker。
 
 ## 4. 媒体链路
 
-`src/qwenpaw/plugins/dashscope_credentials.py::resolve_media_api` 已根据 endpoint host 选择协议：
+`src/qwenpaw/plugins/dashscope_credentials.py::resolve_media_api` 根据 endpoint host 选择协议：
 
 | 凭据 endpoint host | 协议 | 图片 | 视频 |
 | --- | --- | --- | --- |
 | `*.aliyuncs.com` | DashScope 原生 SDK | 保留历史行为 | 保留历史行为 |
 | 其他（GO CLAW New API） | OpenAI 兼容 | `POST /v1/images/generations` | `POST /v1/video/generations` + `GET .../{task_id}` |
 
-v2.1 保留上表已工作路径、请求体和响应解析，只替换插件内部默认模型：
+v2.1.1 的插件兼容范围必须包含 host `2.1.1`，五个媒体工具的内部模型为：
 
 | 能力 | 默认模型 |
 | --- | --- |
@@ -91,14 +97,43 @@ v2.1 保留上表已工作路径、请求体和响应解析，只替换插件内
 | 图生视频 | `happyhorse-1.1-i2v` |
 | 参考图视频 | `happyhorse-1.1-r2v` |
 
-生产 New API 渠道 1 `阿里百炼_TokenPlan_1` 继续承载文字兼容协议。经用户后续明确授权，
-2026-08-26 新增了仅包含上述四个媒体模型的渠道 3 `阿里百炼_TokenPlan_媒体`。
-v2.1 不修改 New API 镜像，不部署私有 adapter patch，不修改媒体公开 endpoint，不自动回退旧模型或历史百炼直连渠道。
+生产 New API 渠道 1 `阿里百炼_TokenPlan_1` 承载文字兼容协议；渠道 3
+`阿里百炼_TokenPlan_媒体` 仅承载四个媒体模型。客户端不修改公开 endpoint，不自动回退旧模型。
 
-## 5. 安全与运维边界
+## 5. 2026-09-01 P0 回归与预防
 
-- [x] 本地 `credentials.json` / `provision.json` / `.env` / `provision.db` 被 `.gitignore` 覆盖。
+旧 Main Full ZIP 只携带一份静态 `credentials.json`，没有 `provision.json`。在当天新拷贝的
+G、F 产品盘上均复现出以下同根现象：
+
+- 左下角额度条缺失，因为没有 `data/instance.id`，额度接口不能识别实例；
+- 两个媒体插件 manifest 的 host 上限仍为 `2.1.0`，在 v2.1.1 上被判为不兼容；
+- 对话因此看不到生图、生视频工具。
+
+两块盘的现场修复均保留备份后补入 provisioning 配置、提升媒体插件兼容范围并重新启动；
+额度接口、两个媒体插件、五个员工随后恢复。正式构建通过以下门禁避免复发：
+
+1. 打包阶段拒绝静态凭据与 provisioning 混装；
+2. Full ZIP verifier 校验 schema 3 和 provisioning 文件哈希；
+3. 桌面运行验证硬性请求额度接口；
+4. 插件运行验证硬性确认图片和视频插件均 `loaded=true`、`enabled=true`；
+5. 媒体插件升级使用原子写入，避免旧盘残留旧 manifest。
+
+本 P0 是“新盘完整包交付”问题，不等同于 v2.0.1 → v2.1.1 在线更新事务事故；后者仍按
+`GO-CLAW-v2.1.1-Windows在线更新调试交接.zh.md` 的门禁独立处理。
+
+## 6. 安全与运维检查
+
+- [x] 本地 `credentials.json`、`provision.json`、`.env`、`provision.db` 被 `.gitignore` 覆盖。
 - [x] 客户凭据不是 New API 管理员令牌。
-- [x] 用户已接受低额度 API key 保存在客户本地 Full ZIP 中。
-- [ ] v2.1 Main ZIP 不包含 `provision.json`/共享 HMAC/ticket/签名私钥。
-- [ ] 在线更新包继续使用白名单 payload，不包含或覆盖客户本地凭据。
+- [x] Full ZIP 不携带静态 New API key 或签名私钥。
+- [x] Full ZIP 携带的共享 HMAC 被明确记录为可提取、非强身份凭证。
+- [x] `GO_CLAW_DASHSCOPE_API_KEY` 只用于构建期模型预检，不写入客户包。
+- [x] 在线更新包使用白名单 payload，不包含或覆盖客户本地凭据和 provisioning 配置。
+- [x] 正式 Windows CI 已在代码头 `512ba07debd7ec027461f9a84fc06937dc40f9fe` 完成：Tests
+  run [`33497130435`](https://github.com/GresonKwan/GO-Claw-2.0/actions/runs/33497130435)
+  与 Windows Full run
+  [`33497201586`](https://github.com/GresonKwan/GO-Claw-2.0/actions/runs/33497201586)
+  均成功；Full ZIP artifact `GO-CLAW-Windows-x64-Full-2.1.1`（ID `9797474948`）digest 为
+  `sha256:c88d734a7e1c3e2499c5819cb88918789100fb61a5c79df21816e5c1acbefe66`。
+- [x] 上述成功仅证明“新盘完整包交付”构建合同，不代表该构建已发布，也不关闭
+  v2.0.1 → v2.1.1 在线更新事务事故。

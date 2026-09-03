@@ -22,7 +22,12 @@ const HIDDEN = [
   "core.models",
 ];
 
-const KEPT = ["core.inbox", "core.cron-jobs", "core.skills"];
+const KEPT = [
+  "core.inbox",
+  "core.cron-jobs",
+  "core.skills",
+  "core.compute-recharge",
+];
 
 describe("GO CLAW customer menu", () => {
   it("hides over-technical and low-frequency entries", () => {
@@ -41,5 +46,12 @@ describe("GO CLAW customer menu", () => {
       expect(item, `${id} missing from menu`).toBeDefined();
       expect(item?.visible?.() ?? true, `${id} should stay visible`).toBe(true);
     }
+  });
+
+  it("places compute recharge first in settings", () => {
+    const item = BUILTIN_MENU.find((i) => i.id === "core.compute-recharge");
+    expect(item?.location).toBe("primary.settings");
+    expect(item?.parentId).toBe("core.settings-group");
+    expect(item?.order).toBe(5);
   });
 });

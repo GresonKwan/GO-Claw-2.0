@@ -21,7 +21,9 @@ import re
 import secrets
 import sqlite3
 import time
+import uuid
 from contextlib import closing
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 import httpx
@@ -64,6 +66,12 @@ TOKEN_MODEL_LIMITS = [
     for item in os.environ.get("TOKEN_MODEL_LIMITS", "").split(",")
     if item.strip()
 ]
+BILLING_INTERNAL_URL = os.environ.get("BILLING_INTERNAL_URL", "").rstrip("/")
+BILLING_INTERNAL_TOKEN = os.environ.get("BILLING_INTERNAL_TOKEN", "")
+BILLING_CHALLENGE_TTL_SECONDS = 300
+BILLING_ENROLL_RATE_LIMIT_PER_IP_PER_HOUR = int(
+    os.environ.get("BILLING_ENROLL_RATE_LIMIT_PER_IP_PER_HOUR", "30"),
+)
 
 _INSTANCE_ID_RE = re.compile(
     r"^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-"
@@ -92,6 +100,17 @@ CREATE TABLE IF NOT EXISTS request_log (
     ip TEXT NOT NULL,
     ts INTEGER NOT NULL
 );
+CREATE TABLE IF NOT EXISTS billing_enrollment_challenge (
+    challenge_id TEXT PRIMARY KEY,
+    instance_id TEXT NOT NULL,
+    nonce TEXT NOT NULL,
+    expires_at TEXT NOT NULL,
+    consumed INTEGER NOT NULL DEFAULT 0,
+    client_ip TEXT NOT NULL,
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS billing_challenge_instance_idx
+    ON billing_enrollment_challenge(instance_id, created_at);
 """
 
 
@@ -127,6 +146,41 @@ def get_provision(instance_id: str) -> sqlite3.Row | None:
             "SELECT * FROM provisions WHERE instance_id = ?",
             (instance_id,),
         ).fetchone()
+
+
+def _resolve_legacy_token(token_fingerprint: str) -> tuple[int, str] | None:
+    """Resolve one active legacy token without accepting a client user ID."""
+    if not NEWAPI_DB_PATH:
+        return None
+    matches: list[tuple[int, str]] = []
+    try:
+        with closing(
+            sqlite3.connect(
+                f"file:{NEWAPI_DB_PATH}?mode=ro",
+                uri=True,
+                timeout=5,
+            ),
+        ) as conn:
+            rows = conn.execute(
+                "SELECT user_id, key FROM tokens"
+                " WHERE status = 1 AND deleted_at IS NULL",
+            )
+            for user_id, stored_key in rows:
+                raw_key = str(stored_key or "")
+                candidates = (
+                    (raw_key, raw_key[3:])
+                    if raw_key.startswith("sk-")
+                    else (raw_key, "sk-" + raw_key)
+                )
+                for candidate in candidates:
+                    digest = hashlib.sha256(candidate.encode()).hexdigest()
+                    if hmac.compare_digest(digest, token_fingerprint):
+                        matches.append((int(user_id), candidate))
+                        break
+    except (OSError, sqlite3.Error, TypeError, ValueError):
+        logger.warning("legacy billing identity lookup failed")
+        return None
+    return matches[0] if len(matches) == 1 and matches[0][0] > 0 else None
 
 
 def insert_pending(
@@ -371,6 +425,33 @@ class ProvisionRequest(BaseModel):
     sign: str = Field(min_length=64, max_length=64)
 
 
+class BillingChallengeRequest(BaseModel):
+    instanceId: str = Field(min_length=36, max_length=36)
+    requestNonce: str = Field(
+        min_length=22,
+        max_length=64,
+        pattern=r"^[A-Za-z0-9_-]+$",
+    )
+    clientVersion: str = Field(min_length=1, max_length=32)
+    bootstrapSignal: str | None = Field(default=None, max_length=128)
+
+
+class BillingEnrollmentRequest(BaseModel):
+    instanceId: str = Field(min_length=36, max_length=36)
+    challengeId: str = Field(min_length=36, max_length=36)
+    proof: str = Field(
+        min_length=64,
+        max_length=64,
+        pattern=r"^[a-f0-9]{64}$",
+    )
+    tokenFingerprint: str | None = Field(
+        default=None,
+        min_length=64,
+        max_length=64,
+        pattern=r"^[a-f0-9]{64}$",
+    )
+
+
 app = FastAPI(title="GO CLAW Provisioning", docs_url=None, redoc_url=None)
 
 
@@ -390,6 +471,10 @@ def _startup() -> None:
             "provisioning server misconfigured, missing: "
             + ", ".join(missing),
         )
+    if bool(BILLING_INTERNAL_URL) != bool(BILLING_INTERNAL_TOKEN):
+        raise RuntimeError(
+            "BILLING_INTERNAL_URL and BILLING_INTERNAL_TOKEN must be configured together",
+        )
     if not NEWAPI_DB_PATH:
         logger.warning(
             "NEWAPI_DB_PATH is empty: user quota will NOT be written and "
@@ -408,6 +493,140 @@ def _error(status: int, code: str) -> JSONResponse:
         status_code=status,
         content={"success": False, "error": code},
     )
+
+
+_billing_enroll_hits: dict[str, list[float]] = {}
+
+
+def _billing_enroll_rate_limited(client_ip: str) -> bool:
+    now = time.time()
+    hits = [
+        item
+        for item in _billing_enroll_hits.get(client_ip, [])
+        if now - item < 3600
+    ]
+    if len(hits) >= BILLING_ENROLL_RATE_LIMIT_PER_IP_PER_HOUR:
+        return True
+    hits.append(now)
+    _billing_enroll_hits[client_ip] = hits
+    if len(_billing_enroll_hits) > 10_000:
+        _billing_enroll_hits.clear()
+    return False
+
+
+def _iso_z(value: datetime) -> str:
+    return value.astimezone(UTC).isoformat().replace("+00:00", "Z")
+
+
+@app.post("/go-claw/provision/billing/challenges", status_code=201)
+def create_billing_challenge(
+    body: BillingChallengeRequest,
+    request: Request,
+) -> JSONResponse:
+    if not _INSTANCE_ID_RE.match(body.instanceId):
+        return _error(400, "invalid_request")
+    client_ip = request.client.host if request.client else "unknown"
+    if _billing_enroll_rate_limited(client_ip):
+        return _error(429, "ENROLLMENT_RATE_LIMITED")
+    challenge_id = str(uuid.uuid4())
+    nonce = secrets.token_urlsafe(32)
+    expires_at = _iso_z(
+        datetime.now(UTC) + timedelta(seconds=BILLING_CHALLENGE_TTL_SECONDS),
+    )
+    with closing(_connect()) as conn:
+        conn.execute(
+            "INSERT INTO billing_enrollment_challenge"
+            " (challenge_id, instance_id, nonce, expires_at, client_ip)"
+            " VALUES (?, ?, ?, ?, ?)",
+            (challenge_id, body.instanceId, nonce, expires_at, client_ip),
+        )
+        conn.commit()
+    # Known and unknown instances intentionally receive the same shape.
+    return JSONResponse(
+        status_code=201,
+        content={
+            "schemaVersion": 1,
+            "challengeId": challenge_id,
+            "nonce": nonce,
+            "expiresAt": expires_at,
+            "canonicalFormat": "goclaw-billing-enrollment-v1\\n{instanceId}\\n{challengeId}\\n{nonce}\\n{expiresAt}",
+        },
+    )
+
+
+@app.post("/go-claw/provision/billing/enrollments")
+def complete_billing_enrollment(body: BillingEnrollmentRequest) -> JSONResponse:
+    if not BILLING_INTERNAL_URL or not BILLING_INTERNAL_TOKEN:
+        return _error(503, "ENROLLMENT_TEMPORARILY_UNAVAILABLE")
+    now = datetime.now(UTC)
+    with closing(_connect()) as conn:
+        conn.execute("BEGIN IMMEDIATE")
+        challenge = conn.execute(
+            "SELECT * FROM billing_enrollment_challenge"
+            " WHERE challenge_id = ? AND instance_id = ?",
+            (body.challengeId, body.instanceId),
+        ).fetchone()
+        if challenge is None or challenge["consumed"]:
+            conn.rollback()
+            return _error(409, "ENROLLMENT_CHALLENGE_INVALID")
+        try:
+            expires_at = datetime.fromisoformat(
+                challenge["expires_at"].replace("Z", "+00:00"),
+            )
+        except ValueError:
+            conn.rollback()
+            return _error(409, "ENROLLMENT_CHALLENGE_INVALID")
+        row = conn.execute(
+            "SELECT * FROM provisions"
+            " WHERE instance_id = ? AND status = 'done'",
+            (body.instanceId,),
+        ).fetchone()
+        resolved_api_key = row["api_key"] if row is not None else None
+        resolved_user_id = row["newapi_user_id"] if row is not None else None
+        if row is None and body.tokenFingerprint:
+            legacy_identity = _resolve_legacy_token(body.tokenFingerprint)
+            if legacy_identity is not None:
+                resolved_user_id, resolved_api_key = legacy_identity
+        canonical = (
+            "goclaw-billing-enrollment-v1\n"
+            f"{body.instanceId}\n{body.challengeId}\n"
+            f"{challenge['nonce']}\n{challenge['expires_at']}"
+        )
+        expected = (
+            hmac.new(
+                resolved_api_key.encode(),
+                canonical.encode(),
+                hashlib.sha256,
+            ).hexdigest()
+            if resolved_api_key and resolved_user_id
+            else secrets.token_hex(32)
+        )
+        if expires_at <= now or not hmac.compare_digest(expected, body.proof):
+            conn.rollback()
+            return _error(403, "ENROLLMENT_PROOF_INVALID")
+        conn.execute(
+            "UPDATE billing_enrollment_challenge SET consumed = 1"
+            " WHERE challenge_id = ? AND consumed = 0",
+            (body.challengeId,),
+        )
+        conn.commit()
+    try:
+        response = httpx.post(
+            f"{BILLING_INTERNAL_URL}/internal/enrollments",
+            headers={"Authorization": f"Bearer {BILLING_INTERNAL_TOKEN}"},
+            json={
+                "instanceId": body.instanceId,
+                "newapiUserId": int(resolved_user_id),
+            },
+            timeout=10,
+        )
+        response.raise_for_status()
+        result = response.json()
+        if not isinstance(result, dict) or result.get("schemaVersion") != 2:
+            raise ValueError("invalid billing enrollment response")
+    except (httpx.HTTPError, ValueError, TypeError):
+        return _error(503, "ENROLLMENT_TEMPORARILY_UNAVAILABLE")
+    return JSONResponse(content=result)
 
 
 @app.post("/api/provision")

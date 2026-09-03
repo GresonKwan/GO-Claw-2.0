@@ -1,0 +1,738 @@
+openapi: 3.1.0
+info:
+  title: GO CLAW Compute Recharge API Contract
+  version: 1.0.0-draft
+  license:
+    name: Proprietary
+    identifier: LicenseRef-GO-CLAW-Proprietary
+  description: |
+    Contract template for the GO CLAW Billing Service. The desktop React UI
+    calls equivalent same-origin routes under /api/console/recharge through
+    the local FastAPI proxy. The billing access token must never be returned
+    to browser JavaScript. Customer APIs expose product display compute units
+    (￥1 = 5,000,000); raw NewAPI quota units remain server-internal.
+servers:
+  - url: https://goclaw.host:8443/go-claw/billing
+    description: GO CLAW controlled Billing Service origin.
+tags:
+  - name: Customer
+    description: Per-instance customer recharge operations.
+  - name: Webhook
+    description: Signed WeChat Pay callbacks; never called by the desktop.
+  - name: Admin
+    description: Restricted operator workflows; never exposed by the desktop proxy.
+security:
+  - BillingBearer: []
+paths:
+  /v1/config:
+    get:
+      tags: [Customer]
+      operationId: getRechargeConfig
+      summary: Get the active pricing and UI limits.
+      responses:
+        "200":
+          description: Active recharge configuration.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RechargeConfig"
+        "401":
+          $ref: "#/components/responses/Problem"
+        default:
+          $ref: "#/components/responses/Problem"
+
+  /v1/balance:
+    get:
+      tags: [Customer]
+      operationId: getRechargeBalance
+      summary: Get the bound NewAPI account balance summary.
+      responses:
+        "200":
+          description: Current balance.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Balance"
+        "401":
+          $ref: "#/components/responses/Problem"
+        default:
+          $ref: "#/components/responses/Problem"
+
+  /v1/orders:
+    post:
+      tags: [Customer]
+      operationId: createRechargeOrder
+      summary: Idempotently create one WeChat Native payment order.
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateOrderRequest"
+      responses:
+        "201":
+          description: A new order was created.
+          headers:
+            Idempotency-Replayed:
+              $ref: "#/components/headers/IdempotencyReplayed"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RechargeOrder"
+        "200":
+          description: The previous result for the same idempotency key.
+          headers:
+            Idempotency-Replayed:
+              $ref: "#/components/headers/IdempotencyReplayed"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RechargeOrder"
+        "409":
+          description: The idempotency key was reused with a different body.
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        default:
+          $ref: "#/components/responses/Problem"
+    get:
+      tags: [Customer]
+      operationId: listRechargeOrders
+      summary: List recharge orders for the authenticated billing account.
+      parameters:
+        - $ref: "#/components/parameters/Cursor"
+        - $ref: "#/components/parameters/PageSize"
+      responses:
+        "200":
+          description: A cursor-paginated order list.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RechargeOrderPage"
+        "401":
+          $ref: "#/components/responses/Problem"
+        default:
+          $ref: "#/components/responses/Problem"
+
+  /v1/orders/{order_id}:
+    get:
+      tags: [Customer]
+      operationId: getRechargeOrder
+      summary: Get payment and quota-credit state for one owned order.
+      parameters:
+        - $ref: "#/components/parameters/OrderId"
+      responses:
+        "200":
+          description: Order state.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RechargeOrder"
+        "404":
+          description: The order does not exist or belongs to another account.
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        default:
+          $ref: "#/components/responses/Problem"
+
+  /v1/orders/{order_id}/close:
+    post:
+      tags: [Customer]
+      operationId: closeRechargeOrder
+      summary: Request closure of an unpaid order after server-side payment query.
+      parameters:
+        - $ref: "#/components/parameters/OrderId"
+        - $ref: "#/components/parameters/IdempotencyKey"
+      responses:
+        "200":
+          description: Current order state after the close attempt.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RechargeOrder"
+        "409":
+          description: A paid order cannot be closed.
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        default:
+          $ref: "#/components/responses/Problem"
+
+  /v1/ledger:
+    get:
+      tags: [Customer]
+      operationId: listCustomerLedger
+      summary: List customer-visible immutable recharge ledger entries.
+      parameters:
+        - $ref: "#/components/parameters/Cursor"
+        - $ref: "#/components/parameters/PageSize"
+      responses:
+        "200":
+          description: A cursor-paginated ledger list.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LedgerPage"
+        "401":
+          $ref: "#/components/responses/Problem"
+        default:
+          $ref: "#/components/responses/Problem"
+
+  /internal/admin/refunds:
+    post:
+      tags: [Admin]
+      operationId: requestRechargeRefund
+      summary: Request a reviewed refund; never exposed by the desktop proxy.
+      security:
+        - AdminBearer: []
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateRefundRequest"
+      responses:
+        "202":
+          description: Refund workflow accepted.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Refund"
+        "401":
+          $ref: "#/components/responses/Problem"
+        default:
+          $ref: "#/components/responses/Problem"
+
+  /webhooks/wechatpay/transactions:
+    post:
+      tags: [Webhook]
+      operationId: receiveWeChatTransactionNotification
+      summary: Receive a signed and encrypted WeChat Pay transaction notification.
+      description: |
+        The implementation must verify the signature over the exact raw request
+        body before decrypting the resource. No BillingBearer is accepted here.
+      security: []
+      parameters:
+        - $ref: "#/components/parameters/WechatpayTimestamp"
+        - $ref: "#/components/parameters/WechatpayNonce"
+        - $ref: "#/components/parameters/WechatpaySerial"
+        - $ref: "#/components/parameters/WechatpaySignature"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/WeChatEncryptedNotification"
+      responses:
+        "204":
+          description: Verified notification committed or duplicate acknowledged.
+        "400":
+          description: Invalid body or business-field mismatch.
+        "401":
+          description: Signature verification failed.
+        "500":
+          description: The notification was not durably committed; WeChat may retry.
+
+  /webhooks/wechatpay/refunds:
+    post:
+      tags: [Webhook]
+      operationId: receiveWeChatRefundNotification
+      summary: Receive a signed and encrypted WeChat Pay refund notification.
+      security: []
+      parameters:
+        - $ref: "#/components/parameters/WechatpayTimestamp"
+        - $ref: "#/components/parameters/WechatpayNonce"
+        - $ref: "#/components/parameters/WechatpaySerial"
+        - $ref: "#/components/parameters/WechatpaySignature"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/WeChatEncryptedNotification"
+      responses:
+        "204":
+          description: Verified notification committed or duplicate acknowledged.
+        "400":
+          description: Invalid body or business-field mismatch.
+        "401":
+          description: Signature verification failed.
+        "500":
+          description: The notification was not durably committed; WeChat may retry.
+
+components:
+  securitySchemes:
+    BillingBearer:
+      type: http
+      scheme: bearer
+      bearerFormat: gcb_live opaque token
+      description: Per-instance, revocable billing credential. Stored only by local FastAPI.
+    AdminBearer:
+      type: http
+      scheme: bearer
+      bearerFormat: short-lived operator token
+
+  parameters:
+    IdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      required: true
+      schema:
+        type: string
+        minLength: 16
+        maxLength: 64
+        pattern: "^[A-Za-z0-9_-]+$"
+      description: Client-generated random key. Reuse requires an identical request body.
+    Cursor:
+      name: cursor
+      in: query
+      required: false
+      schema:
+        type: string
+        maxLength: 256
+    PageSize:
+      name: page_size
+      in: query
+      required: false
+      schema:
+        type: integer
+        minimum: 1
+        maximum: 100
+        default: 20
+    OrderId:
+      name: order_id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    WechatpayTimestamp:
+      name: Wechatpay-Timestamp
+      in: header
+      required: true
+      schema:
+        type: string
+        pattern: "^[0-9]{10,13}$"
+    WechatpayNonce:
+      name: Wechatpay-Nonce
+      in: header
+      required: true
+      schema:
+        type: string
+        minLength: 1
+        maxLength: 64
+    WechatpaySerial:
+      name: Wechatpay-Serial
+      in: header
+      required: true
+      schema:
+        type: string
+        minLength: 1
+        maxLength: 128
+    WechatpaySignature:
+      name: Wechatpay-Signature
+      in: header
+      required: true
+      schema:
+        type: string
+        minLength: 1
+        maxLength: 1024
+
+  headers:
+    IdempotencyReplayed:
+      description: True when a stored response was returned for an existing key.
+      schema:
+        type: boolean
+
+  responses:
+    Problem:
+      description: A normalized error without upstream secrets.
+      content:
+        application/problem+json:
+          schema:
+            $ref: "#/components/schemas/Problem"
+
+  schemas:
+    RechargeConfig:
+      type: object
+      additionalProperties: false
+      required:
+        - enabled
+        - currency
+        - pricingVersion
+        - computeUnitsPerFen
+        - displayRate
+        - minAmountFen
+        - maxAmountFen
+        - amountStepFen
+        - dailyLimitFen
+        - presetsFen
+        - termsVersion
+        - refundMode
+        - invoicesEnabled
+      properties:
+        enabled:
+          type: boolean
+        currency:
+          const: CNY
+        pricingVersion:
+          type: string
+          minLength: 1
+          maxLength: 32
+        computeUnitsPerFen:
+          type: integer
+          const: 50000
+          description: Customer-visible display compute units per CNY fen.
+        displayRate:
+          type: string
+          const: "￥1对应500万算力"
+        minAmountFen:
+          type: integer
+          const: 100
+        maxAmountFen:
+          type: integer
+          const: 10000000
+        amountStepFen:
+          type: integer
+          const: 1
+          description: Recharge amounts may use CNY fen, corresponding to at most two decimal places.
+        dailyLimitFen:
+          type: integer
+          const: 10000000
+          description: Approved per-account Beijing-calendar-day cumulative limit.
+        presetsFen:
+          type: array
+          const: [1000, 5000, 10000, 20000]
+          items:
+            type: integer
+        termsVersion:
+          type: string
+          minLength: 1
+          maxLength: 64
+        refundMode:
+          const: CUSTOMER_SERVICE
+        customerServiceUrl:
+          type: [string, "null"]
+          format: uri
+        invoicesEnabled:
+          const: false
+
+    Balance:
+      type: object
+      additionalProperties: false
+      required: [grantedComputeUnits, remainingComputeUnits, percent, observedAt]
+      properties:
+        grantedComputeUnits:
+          type: integer
+          minimum: 0
+          description: Customer-visible units; derived with checked integer arithmetic.
+        remainingComputeUnits:
+          type: integer
+          minimum: 0
+          description: floor(raw NewAPI remaining quota units multiplied by 200 divided by 3).
+        percent:
+          type: integer
+          minimum: 0
+          maximum: 100
+        observedAt:
+          type: string
+          format: date-time
+
+    CreateOrderRequest:
+      type: object
+      additionalProperties: false
+      required: [amountFen, acceptedTermsVersion]
+      properties:
+        amountFen:
+          type: integer
+          minimum: 100
+          maximum: 10000000
+          description: CNY fen from ￥1 through ￥100,000 inclusive.
+        acceptedTermsVersion:
+          type: string
+          minLength: 1
+          maxLength: 64
+
+    RechargeOrder:
+      type: object
+      additionalProperties: false
+      required:
+        - orderId
+        - merchantOrderNo
+        - amountFen
+        - amountCny
+        - computeUnits
+        - pricingVersion
+        - status
+        - expiresAt
+        - createdAt
+        - updatedAt
+      properties:
+        orderId:
+          type: string
+          format: uuid
+        merchantOrderNo:
+          type: string
+          minLength: 6
+          maxLength: 32
+          pattern: "^[A-Za-z0-9_\\-|*]+$"
+        amountFen:
+          type: integer
+          minimum: 1
+        amountCny:
+          type: string
+          pattern: "^[0-9]+\\.[0-9]{2}$"
+        computeUnits:
+          type: integer
+          minimum: 1
+          description: Customer-visible display units snapshotted when the order was created.
+        pricingVersion:
+          type: string
+        status:
+          $ref: "#/components/schemas/CustomerOrderStatus"
+        codeUrl:
+          type: [string, "null"]
+          pattern: "^weixin://"
+          description: Present only while the order is payable. Never auto-open this URL.
+        expiresAt:
+          type: string
+          format: date-time
+        paidAt:
+          type: [string, "null"]
+          format: date-time
+        creditedAt:
+          type: [string, "null"]
+          format: date-time
+        refundedAt:
+          type: [string, "null"]
+          format: date-time
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    CustomerOrderStatus:
+      type: string
+      enum:
+        - PENDING_PAYMENT
+        - CREDITING
+        - SUCCEEDED
+        - EXPIRED
+        - CLOSED
+        - REVIEW_REQUIRED
+        - REFUNDING
+        - REFUNDED
+
+    RechargeOrderPage:
+      type: object
+      additionalProperties: false
+      required: [items]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/RechargeOrder"
+        nextCursor:
+          type: [string, "null"]
+
+    LedgerEntry:
+      type: object
+      additionalProperties: false
+      required:
+        - entryId
+        - orderId
+        - kind
+        - amountFen
+        - computeUnits
+        - occurredAt
+      properties:
+        entryId:
+          type: string
+          format: uuid
+        orderId:
+          type: string
+          format: uuid
+        kind:
+          type: string
+          enum: [PAYMENT, QUOTA_CREDIT, QUOTA_REVERSAL, REFUND]
+        amountFen:
+          type: integer
+          minimum: 0
+        computeUnits:
+          type: integer
+          minimum: 0
+          description: Customer-visible display units; never a raw NewAPI quota value.
+        occurredAt:
+          type: string
+          format: date-time
+        reversalOf:
+          type: [string, "null"]
+          format: uuid
+
+    LedgerPage:
+      type: object
+      additionalProperties: false
+      required: [items]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/LedgerEntry"
+        nextCursor:
+          type: [string, "null"]
+
+    CreateRefundRequest:
+      type: object
+      additionalProperties: false
+      required: [orderId, amountFen, reason, evidenceRefs]
+      properties:
+        orderId:
+          type: string
+          format: uuid
+        amountFen:
+          type: integer
+          minimum: 1
+        reason:
+          type: string
+          minLength: 3
+          maxLength: 500
+        evidenceRefs:
+          type: array
+          minItems: 1
+          maxItems: 20
+          items:
+            type: string
+            minLength: 1
+            maxLength: 256
+
+    Refund:
+      type: object
+      additionalProperties: false
+      required:
+        - refundId
+        - orderId
+        - merchantRefundNo
+        - amountFen
+        - displayComputeUnits
+        - newapiQuotaUnits
+        - status
+        - createdAt
+      properties:
+        refundId:
+          type: string
+          format: uuid
+        orderId:
+          type: string
+          format: uuid
+        merchantRefundNo:
+          type: string
+          minLength: 6
+          maxLength: 64
+        amountFen:
+          type: integer
+          minimum: 1
+        displayComputeUnits:
+          type: integer
+          minimum: 1
+        newapiQuotaUnits:
+          type: integer
+          minimum: 1
+        status:
+          type: string
+          enum:
+            - REQUESTED
+            - QUOTA_REVERSING
+            - WECHAT_PROCESSING
+            - REFUNDED
+            - REVIEW_REQUIRED
+        createdAt:
+          type: string
+          format: date-time
+
+    WeChatEncryptedNotification:
+      type: object
+      additionalProperties: false
+      required: [id, create_time, event_type, resource_type, resource, summary]
+      properties:
+        id:
+          type: string
+          minLength: 1
+          maxLength: 36
+        create_time:
+          type: string
+          format: date-time
+        event_type:
+          type: string
+          minLength: 1
+          maxLength: 64
+        resource_type:
+          type: string
+          minLength: 1
+          maxLength: 64
+        resource:
+          type: object
+          additionalProperties: false
+          required: [algorithm, ciphertext, nonce, associated_data]
+          properties:
+            algorithm:
+              const: AEAD_AES_256_GCM
+            ciphertext:
+              type: string
+              minLength: 1
+            nonce:
+              type: string
+              minLength: 1
+              maxLength: 64
+            associated_data:
+              type: string
+              maxLength: 256
+        summary:
+          type: string
+          maxLength: 256
+
+    Problem:
+      type: object
+      additionalProperties: false
+      required: [type, title, status, code, traceId]
+      properties:
+        type:
+          type: string
+          format: uri-reference
+        title:
+          type: string
+        status:
+          type: integer
+          minimum: 400
+          maximum: 599
+        code:
+          type: string
+          enum:
+            - INVALID_REQUEST
+            - UNAUTHORIZED
+            - RATE_LIMITED
+            - RECHARGE_DISABLED
+            - AMOUNT_OUT_OF_RANGE
+            - DAILY_LIMIT_EXCEEDED
+            - TERMS_VERSION_MISMATCH
+            - IDEMPOTENCY_CONFLICT
+            - ORDER_NOT_FOUND
+            - ORDER_NOT_PAYABLE
+            - UPSTREAM_UNAVAILABLE
+            - REVIEW_REQUIRED
+        detail:
+          type: string
+          maxLength: 500
+        traceId:
+          type: string
+          minLength: 8
+          maxLength: 64

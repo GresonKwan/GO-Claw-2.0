@@ -239,6 +239,15 @@ export const BUILTIN_MENU: MenuItem[] = [
     order: 10,
   },
   {
+    id: "core.compute-recharge",
+    location: "primary.settings",
+    parentId: "core.settings-group",
+    label: navLabel("nav.computeRecharge", "Compute Recharge"),
+    icon: SparkDataLine,
+    route: "core.compute-recharge",
+    order: 5,
+  },
+  {
     id: "core.models",
     visible: customerVisible("core.models"),
     location: "primary.settings",

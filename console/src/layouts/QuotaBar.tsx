@@ -26,9 +26,11 @@ export function QuotaBar({ collapsed = false }: { collapsed?: boolean }) {
     void refresh();
     const timer = setInterval(() => void refresh(), POLL_INTERVAL_MS);
     window.addEventListener("focus", refresh);
+    window.addEventListener("go-claw:quota-updated", refresh);
     return () => {
       clearInterval(timer);
       window.removeEventListener("focus", refresh);
+      window.removeEventListener("go-claw:quota-updated", refresh);
     };
   }, [refresh]);
 

@@ -8,6 +8,8 @@ import shutil
 import uuid
 from pathlib import Path
 
+from packaging.version import InvalidVersion, Version
+
 from qwenpaw.config.utils import get_plugins_dir
 from qwenpaw.plugins.architecture import PluginManifest
 from qwenpaw.plugins.paths import (
@@ -337,6 +339,65 @@ def _copy_plugin_atomically(
         _remove_temp_path(temp_path)
 
 
+def _plugin_version(manifest_path: Path, plugin_id: str) -> Version:
+    manifest = _read_required_manifest(manifest_path, plugin_id)
+    try:
+        return Version(manifest.version)
+    except InvalidVersion as exc:
+        raise RuntimeError(
+            f"Invalid version for bundled plugin {plugin_id!r} at "
+            f"{manifest_path}: {manifest.version!r}",
+        ) from exc
+
+
+def _upgrade_plugin_atomically(
+    source: Path,
+    target: Path,
+    plugin_id: str,
+) -> Path:
+    """Replace an older canonical bundled plugin with rollback safety."""
+    temp_path = target.parent / (
+        f".{target.name}{PLUGIN_INSTALL_WORKDIR_MARKER}-{uuid.uuid4().hex}"
+    )
+    backup_path = target.parent / (
+        f".{target.name}{PLUGIN_INSTALL_WORKDIR_MARKER}-backup-"
+        f"{uuid.uuid4().hex}"
+    )
+    published = False
+
+    try:
+        shutil.copytree(
+            source,
+            temp_path,
+            ignore=shutil.ignore_patterns(
+                "._*",
+                ".DS_Store",
+                "__pycache__",
+                "*.pyc",
+                "*.pyo",
+            ),
+        )
+        _validate_canonical_manifest(temp_path, plugin_id, role="staged")
+
+        target.replace(backup_path)
+        try:
+            temp_path.replace(target)
+            published = True
+            return _validate_canonical_manifest(
+                target,
+                plugin_id,
+                role="target",
+            )
+        except Exception:
+            _remove_temp_path(target)
+            backup_path.replace(target)
+            raise
+    finally:
+        _remove_temp_path(temp_path)
+        if published:
+            _remove_temp_path(backup_path)
+
+
 def install_go_claw_bundled_plugins() -> list[Path]:
     """Install missing media plugins and return manifests in ID order."""
     source_root = _get_bundled_plugins_root()
@@ -369,6 +430,18 @@ def install_go_claw_bundled_plugins() -> list[Path]:
 
         existing_manifest = installed.get(plugin_id)
         if existing_manifest is not None:
+            source_manifest = sources[plugin_id] / "plugin.json"
+            if (
+                existing_manifest.parent == canonical_target
+                and _plugin_version(source_manifest, plugin_id)
+                > _plugin_version(existing_manifest, plugin_id)
+            ):
+                existing_manifest = _upgrade_plugin_atomically(
+                    sources[plugin_id],
+                    canonical_target,
+                    plugin_id,
+                )
+                installed[plugin_id] = existing_manifest
             manifests.append(existing_manifest)
             continue
 
