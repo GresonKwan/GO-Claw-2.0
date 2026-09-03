@@ -3,7 +3,6 @@ import os
 from uuid import uuid4
 
 import pytest
-
 from go_claw_billing.adapters.postgres import Postgres
 from go_claw_billing.adapters.repositories import (
     LedgerRepository,

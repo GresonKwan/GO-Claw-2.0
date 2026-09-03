@@ -15,8 +15,6 @@ import os
 from pathlib import Path
 from uuid import UUID
 
-from psycopg.rows import dict_row
-
 from go_claw_billing.adapters.postgres import Postgres
 from go_claw_billing.adapters.repositories import (
     LedgerRepository,
@@ -27,6 +25,7 @@ from go_claw_billing.application.payment_recovery import (
     confirmation_from_signed_query,
 )
 from go_claw_billing.config import Settings
+from psycopg.rows import dict_row
 
 DEFAULT_ENV_FILE = Path("/etc/go-claw-billing/non-secret.env")
 DEFAULT_CREDENTIAL_DIR = Path("/etc/go-claw-billing/credentials")
