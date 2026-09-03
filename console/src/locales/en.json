@@ -128,8 +128,6 @@
     "pay": "Pay with WeChat",
     "willReceive": "You will receive {{units}} compute units",
     "acceptTerms": "I have read and agree to the compute recharge terms ({{version}})",
-    "dailyLimit": "Daily cumulative limit per account: CN¥{{amount}}",
-    "refundAndInvoice": "Refunds are handled by customer service; online invoicing is not currently available",
     "rateHint": "Amounts and compute credits are calculated with exact integers.",
     "disabled": "New orders are temporarily disabled. Existing orders will continue processing.",
     "createFailed": "The payment order could not be created. Please retry.",

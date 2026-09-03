@@ -34,6 +34,20 @@ export default function ComputeRechargePage() {
   const [unavailable, setUnavailable] = useState(false);
   const mounted = useRef(true);
 
+  const refreshBalanceAndLedger = useCallback(async () => {
+    try {
+      const [activeBalance, activeLedger] = await Promise.all([
+        rechargeApi.balance(),
+        rechargeApi.ledger(),
+      ]);
+      if (!mounted.current) return;
+      setBalance(activeBalance);
+      setLedger(activeLedger.items);
+    } catch {
+      // Keep the last known values; the next focus or quota event retries.
+    }
+  }, []);
+
   const load = useCallback(async () => {
     setLoading(true);
     try {
@@ -63,6 +77,21 @@ export default function ComputeRechargePage() {
   }, [load]);
 
   useEffect(() => {
+    const refresh = () => void refreshBalanceAndLedger();
+    const refreshWhenVisible = () => {
+      if (document.visibilityState === "visible") refresh();
+    };
+    window.addEventListener("go-claw:quota-updated", refresh);
+    window.addEventListener("focus", refresh);
+    document.addEventListener("visibilitychange", refreshWhenVisible);
+    return () => {
+      window.removeEventListener("go-claw:quota-updated", refresh);
+      window.removeEventListener("focus", refresh);
+      document.removeEventListener("visibilitychange", refreshWhenVisible);
+    };
+  }, [refreshBalanceAndLedger]);
+
+  useEffect(() => {
     if (
       !order ||
       ["SUCCEEDED", "EXPIRED", "CLOSED", "REVIEW_REQUIRED"].includes(
@@ -80,7 +109,6 @@ export default function ComputeRechargePage() {
           setOrder(next);
           if (next.status === "SUCCEEDED") {
             window.dispatchEvent(new Event("go-claw:quota-updated"));
-            void load();
           }
         })
         .catch(() => undefined);
@@ -89,7 +117,7 @@ export default function ComputeRechargePage() {
       cancelled = true;
       window.clearInterval(timer);
     };
-  }, [load, order]);
+  }, [order]);
 
   const submit = async () => {
     if (!config || submitting) return;

@@ -38,8 +38,8 @@ export function AmountCard({
           addonBefore="￥"
           min={config.minAmountFen / 100}
           max={config.maxAmountFen / 100}
-          precision={2}
-          step={0.01}
+          precision={0}
+          step={1}
           value={amountFen / 100}
           onChange={(value) =>
             onAmountChange(Math.round(Number(value ?? 0) * 100))
@@ -67,13 +67,6 @@ export function AmountCard({
           {t("computeRecharge.acceptTerms", { version: config.termsVersion })}
         </Checkbox>
       </div>
-      <Typography.Paragraph type="secondary">
-        {t("computeRecharge.dailyLimit", {
-          amount: (config.dailyLimitFen / 100).toLocaleString(),
-        })}
-        {" · "}
-        {t("computeRecharge.refundAndInvoice")}
-      </Typography.Paragraph>
     </Card>
   );
 }
