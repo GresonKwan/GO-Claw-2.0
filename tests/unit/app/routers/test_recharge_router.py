@@ -17,7 +17,7 @@ def _profile() -> BillingProfile:
         {
             "schemaVersion": 1,
             "accountId": str(uuid.uuid4()),
-            "baseUrl": "https://billing.example/go-claw/billing",
+            "baseUrl": "https://goclaw.host/go-claw/billing",
             "accessToken": "gcb_live_" + "x" * 56,
             "tokenVersion": 1,
             "issuedAt": "2026-09-03T08:00:00Z",
@@ -55,7 +55,10 @@ def test_create_forwards_only_allowed_body_and_server_credential(monkeypatch) ->
 
     class FakeClient(httpx.AsyncClient):
         def __init__(self, *args, **kwargs):
-            super().__init__(transport=httpx.MockTransport(handler))
+            super().__init__(
+                transport=httpx.MockTransport(handler),
+                base_url=kwargs["base_url"],
+            )
 
     monkeypatch.setattr(recharge, "load_billing_profile", _profile)
     monkeypatch.setattr(recharge.httpx, "AsyncClient", FakeClient)
@@ -66,7 +69,7 @@ def test_create_forwards_only_allowed_body_and_server_credential(monkeypatch) ->
             json={"amountFen": 100, "acceptedTermsVersion": "2026-09-03"},
         )
     assert response.status_code == 201
-    assert captured["url"].endswith("/go-claw/billing/v1/orders")
+    assert captured["url"] == "https://goclaw.host/go-claw/billing/v1/orders"
     assert captured["authorization"].startswith("Bearer gcb_live_")
     assert captured["idempotency"] == "a" * 24
     assert "accessToken" not in captured["body"]
@@ -86,3 +89,15 @@ def test_create_rejects_client_supplied_internal_units(monkeypatch) -> None:
             },
         )
     assert response.status_code == 422
+
+
+def test_profile_rejects_unapproved_billing_endpoint() -> None:
+    payload = _profile().model_dump(by_alias=True, mode="json")
+    payload["baseUrl"] = "https://goclaw.host.attacker.example/go-claw/billing"
+
+    try:
+        BillingProfile.model_validate(payload)
+    except ValueError as exc:
+        assert "approved endpoint" in str(exc)
+    else:
+        raise AssertionError("an unapproved billing endpoint was accepted")

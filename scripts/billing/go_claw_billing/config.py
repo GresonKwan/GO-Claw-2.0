@@ -28,7 +28,7 @@ class Settings(BaseSettings):
     code_url_encryption_key: SecretStr = Field(min_length=32)
     internal_enrollment_token: SecretStr = Field(min_length=32)
     admin_token: SecretStr | None = None
-    public_base_url: str = "https://goclaw.host:8443/go-claw/billing"
+    public_base_url: str = "https://goclaw.host/go-claw/billing"
     daily_limit_fen: int = Field(default=10_000_000, ge=10_000_000, le=10_000_000)
     terms_version: str = "2026-09-v1"
     merchant_display_name: str = "兆流智能"

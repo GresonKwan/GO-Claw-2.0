@@ -5,20 +5,31 @@ from __future__ import annotations
 import json
 import uuid
 from collections.abc import Mapping
+from enum import Enum
 from typing import Any
-from urllib.parse import urlencode
 
 import httpx
 from fastapi import APIRouter, Header, HTTPException, Query
 from pydantic import BaseModel, ConfigDict, Field
 
-from ..go_claw_billing import BillingProfile, load_billing_profile
+from ..go_claw_billing import (
+    APPROVED_BILLING_BASE_URL,
+    BillingProfile,
+    load_billing_profile,
+)
 
 router = APIRouter(prefix="/console/recharge", tags=["go-claw-recharge"])
 
 MAX_RESPONSE_BYTES = 1024 * 1024
 DEFAULT_TIMEOUT_SECONDS = 10
 CREATE_TIMEOUT_SECONDS = 20
+
+
+class _UpstreamRoute(str, Enum):
+    CONFIG = "/v1/config"
+    BALANCE = "/v1/balance"
+    ORDERS = "/v1/orders"
+    LEDGER = "/v1/ledger"
 
 
 class CreateOrderRequest(BaseModel):
@@ -48,13 +59,30 @@ def _profile() -> BillingProfile:
 
 async def _upstream(
     method: str,
-    path: str,
+    route: _UpstreamRoute,
     *,
     body: Mapping[str, Any] | None = None,
     idempotency_key: str | None = None,
+    order_id: uuid.UUID | None = None,
+    close_order: bool = False,
+    query: Mapping[str, str | int] | None = None,
     timeout: int = DEFAULT_TIMEOUT_SECONDS,
 ) -> Any:
     profile = _profile()
+    if order_id is not None and route is not _UpstreamRoute.ORDERS:
+        raise RuntimeError("order IDs are only valid for the orders route")
+    if close_order and order_id is None:
+        raise RuntimeError("closing an order requires an order ID")
+    if query is not None and route not in {
+        _UpstreamRoute.ORDERS,
+        _UpstreamRoute.LEDGER,
+    }:
+        raise RuntimeError("query parameters are not valid for this route")
+    request_path = route.value
+    if order_id is not None:
+        request_path += f"/{order_id}"
+    if close_order:
+        request_path += "/close"
     headers = {
         "Authorization": f"Bearer {profile.access_token}",
         "Accept": "application/json",
@@ -62,12 +90,16 @@ async def _upstream(
     if idempotency_key:
         headers["Idempotency-Key"] = idempotency_key
     try:
-        async with httpx.AsyncClient(timeout=timeout) as client:
+        async with httpx.AsyncClient(
+            timeout=timeout,
+            base_url=APPROVED_BILLING_BASE_URL,
+        ) as client:
             response = await client.request(
                 method,
-                f"{profile.base_url}{path}",
+                request_path,
                 headers=headers,
                 json=dict(body) if body is not None else None,
+                params=dict(query) if query is not None else None,
             )
     except httpx.TimeoutException as exc:
         raise _problem(
@@ -107,12 +139,12 @@ async def _upstream(
 
 @router.get("/config")
 async def get_recharge_config() -> Any:
-    return await _upstream("GET", "/v1/config")
+    return await _upstream("GET", _UpstreamRoute.CONFIG)
 
 
 @router.get("/balance")
 async def get_recharge_balance() -> Any:
-    return await _upstream("GET", "/v1/balance")
+    return await _upstream("GET", _UpstreamRoute.BALANCE)
 
 
 @router.post("/orders", status_code=201)
@@ -127,23 +159,27 @@ async def create_recharge_order(
 ) -> Any:
     return await _upstream(
         "POST",
-        "/v1/orders",
+        _UpstreamRoute.ORDERS,
         body=body.model_dump(by_alias=True),
         idempotency_key=idempotency_key,
         timeout=CREATE_TIMEOUT_SECONDS,
     )
 
 
-def _checked_order_id(order_id: str) -> str:
+def _checked_order_id(order_id: str) -> uuid.UUID:
     try:
-        return str(uuid.UUID(order_id))
+        return uuid.UUID(order_id)
     except ValueError as exc:
         raise _problem(404, "ORDER_NOT_FOUND", "order not found") from exc
 
 
 @router.get("/orders/{order_id}")
 async def get_recharge_order(order_id: str) -> Any:
-    return await _upstream("GET", f"/v1/orders/{_checked_order_id(order_id)}")
+    return await _upstream(
+        "GET",
+        _UpstreamRoute.ORDERS,
+        order_id=_checked_order_id(order_id),
+    )
 
 
 @router.post("/orders/{order_id}/close")
@@ -158,7 +194,9 @@ async def close_recharge_order(
 ) -> Any:
     return await _upstream(
         "POST",
-        f"/v1/orders/{_checked_order_id(order_id)}/close",
+        _UpstreamRoute.ORDERS,
+        order_id=_checked_order_id(order_id),
+        close_order=True,
         idempotency_key=idempotency_key,
     )
 
@@ -168,10 +206,10 @@ async def list_recharge_orders(
     cursor: str | None = Query(default=None, max_length=256),
     page_size: int = Query(default=20, ge=1, le=100),
 ) -> Any:
-    query = f"?page_size={page_size}"
+    query: dict[str, str | int] = {"page_size": page_size}
     if cursor:
-        query = "?" + urlencode({"page_size": page_size, "cursor": cursor})
-    return await _upstream("GET", f"/v1/orders{query}")
+        query["cursor"] = cursor
+    return await _upstream("GET", _UpstreamRoute.ORDERS, query=query)
 
 
 @router.get("/ledger")
@@ -179,7 +217,7 @@ async def list_recharge_ledger(
     cursor: str | None = Query(default=None, max_length=256),
     page_size: int = Query(default=20, ge=1, le=100),
 ) -> Any:
-    query = f"?page_size={page_size}"
+    query: dict[str, str | int] = {"page_size": page_size}
     if cursor:
-        query = "?" + urlencode({"page_size": page_size, "cursor": cursor})
-    return await _upstream("GET", f"/v1/ledger{query}")
+        query["cursor"] = cursor
+    return await _upstream("GET", _UpstreamRoute.LEDGER, query=query)

@@ -200,7 +200,7 @@ def test_legacy_billing_enrollment_proves_existing_token(
                 "billing": {
                     "schemaVersion": 1,
                     "accountId": str(uuid.uuid4()),
-                    "baseUrl": "https://billing.example/go-claw/billing",
+                    "baseUrl": "https://goclaw.host/go-claw/billing",
                     "accessToken": "gcb_live_" + "x" * 56,
                     "tokenVersion": 1,
                     "issuedAt": "2026-09-03T08:00:00Z",

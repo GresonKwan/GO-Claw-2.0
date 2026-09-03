@@ -38,6 +38,7 @@ logger = logging.getLogger(__name__)
 BILLING_PROFILE_FILENAME = ".go-claw-billing.json"
 CLIENT_VERSION = "2.1.1"
 REQUEST_TIMEOUT_SECONDS = 10
+APPROVED_BILLING_BASE_URL = "https://goclaw.host/go-claw/billing"
 
 HttpPost = Callable[[str, dict[str, Any]], Awaitable[dict[str, Any]]]
 
@@ -73,7 +74,10 @@ class BillingProfile(_StrictModel):
             raise ValueError("billing base URL must use HTTPS")
         if parsed.username or parsed.password or parsed.query or parsed.fragment:
             raise ValueError("billing base URL contains forbidden components")
-        return value.rstrip("/")
+        normalized = value.rstrip("/")
+        if normalized != APPROVED_BILLING_BASE_URL:
+            raise ValueError("billing base URL is not an approved endpoint")
+        return normalized
 
 
 class EnrollmentChallenge(_StrictModel):

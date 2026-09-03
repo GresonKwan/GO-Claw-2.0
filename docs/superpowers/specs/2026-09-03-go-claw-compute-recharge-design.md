@@ -162,7 +162,7 @@ provisioning 响应升级为 envelope schema 2，但原有 `credentials.json` �
   "billing": {
     "schemaVersion": 1,
     "accountId": "018f...",
-    "baseUrl": "https://goclaw.host:8443/go-claw/billing",
+    "baseUrl": "https://goclaw.host/go-claw/billing",
     "accessToken": "gcb_live_...",
     "issuedAt": "2026-09-03T00:00:00Z"
   }

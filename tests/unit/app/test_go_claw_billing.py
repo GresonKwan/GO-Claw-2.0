@@ -92,7 +92,7 @@ async def test_legacy_enrollment_uses_existing_subtoken_and_writes_profile(
             "billing": {
                 "schemaVersion": 1,
                 "accountId": account_id,
-                "baseUrl": "https://billing.example/go-claw/billing",
+                "baseUrl": "https://goclaw.host/go-claw/billing",
                 "accessToken": ACCESS_TOKEN,
                 "tokenVersion": 1,
                 "issuedAt": "2026-09-03T08:00:00Z",
@@ -142,7 +142,7 @@ async def test_existing_profile_is_idempotent(portable: Path) -> None:
             {
                 "schemaVersion": 1,
                 "accountId": str(uuid.uuid4()),
-                "baseUrl": "https://billing.example/go-claw/billing",
+                "baseUrl": "https://goclaw.host/go-claw/billing",
                 "accessToken": ACCESS_TOKEN,
                 "tokenVersion": 1,
                 "issuedAt": "2026-09-03T08:00:00Z",
