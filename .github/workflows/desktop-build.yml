@@ -697,6 +697,7 @@ jobs:
           # into the manifest directory, but keep them out of this small hotfix
           # artifact: only the Bridge and top-level metadata are republished.
           $publishedManifest = Get-Content -LiteralPath $manifest -Raw | ConvertFrom-Json
+          $payloadCommit = [string]$publishedManifest.buildCommit
           foreach ($component in $publishedManifest.components) {
             $archiveName = [IO.Path]::GetFileName(([Uri]$component.archiveUrl).AbsolutePath)
             gh release download "v$version" --repo $env:GITHUB_REPOSITORY --pattern $archiveName --output (Join-Path $work $archiveName)
@@ -729,7 +730,7 @@ jobs:
             --version $version `
             --setup $setup `
             --base-url $baseUrl `
-            --build-commit $commit `
+            --build-commit $payloadCommit `
             --notes "GO CLAW $version (updater exit hotfix)" `
             --output (Join-Path $work "latest.json")
           if ($LASTEXITCODE -ne 0) { throw "legacy manifest generation failed" }
