@@ -66,6 +66,20 @@ def test_publish_requires_exact_credential_free_windows_assets():
     assert "Refusing to replace an existing release asset" in attach_step
 
 
+def test_publish_can_attach_artifacts_from_an_explicit_successful_build_run():
+    workflow = (ROOT / ".github/workflows/desktop-publish.yml").read_text(
+        encoding="utf-8",
+    )
+    header = workflow.split("permissions:", 1)[0]
+    assert "workflow_dispatch:" in header
+    assert "build_run_id:" in header
+    assert "run-id: ${{ inputs.build_run_id || github.run_id }}" in workflow
+    assert "github-token: ${{ secrets.GITHUB_TOKEN }}" in workflow
+    assert "actions: read" in workflow
+    assert "Desktop Build run ${BUILD_RUN_ID} is not successful" in workflow
+    assert "Desktop Build run SHA does not match" in workflow
+
+
 def test_desktop_oss_publish_and_promote_fail_closed_to_go_claw_destination():
     for relative in (
         ".github/workflows/desktop-publish.yml",

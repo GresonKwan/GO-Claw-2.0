@@ -29,8 +29,34 @@ on:
         type: boolean
         required: false
         default: false
+      build_run_id:
+        description: "Desktop Build run containing the signed artifacts (empty = current run)"
+        type: string
+        required: false
+        default: ""
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Target draft release tag to attach assets to"
+        type: string
+        required: true
+      ref:
+        description: "Git ref/SHA to checkout for the packaging scripts"
+        type: string
+        required: false
+        default: ""
+      dry_run:
+        description: "Skip the production OSS upload"
+        type: boolean
+        required: false
+        default: true
+      build_run_id:
+        description: "Successful Desktop Build run containing the signed artifacts"
+        type: string
+        required: true
 
 permissions:
+  actions: read
   contents: read
 
 jobs:
@@ -38,10 +64,37 @@ jobs:
   upload-release:
     runs-on: ubuntu-latest
     permissions:
+      actions: read
       contents: write
     steps:
+      - name: Validate explicit Desktop Build run
+        if: ${{ inputs.build_run_id != '' }}
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          BUILD_RUN_ID: ${{ inputs.build_run_id }}
+          EXPECTED_SHA: ${{ inputs.ref }}
+        run: |
+          set -euo pipefail
+          metadata="$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${BUILD_RUN_ID}")"
+          [ "$(jq -r '.conclusion' <<<"$metadata")" = "success" ] || {
+            echo "::error::Desktop Build run ${BUILD_RUN_ID} is not successful"
+            exit 1
+          }
+          [ "$(jq -r '.name' <<<"$metadata")" = "Desktop Build (reusable)" ] || {
+            echo "::error::Run ${BUILD_RUN_ID} is not the Desktop Build workflow"
+            exit 1
+          }
+          if [ -n "$EXPECTED_SHA" ] && [ "$(jq -r '.head_sha' <<<"$metadata")" != "$EXPECTED_SHA" ]; then
+            echo "::error::Desktop Build run SHA does not match the requested release SHA"
+            exit 1
+          fi
+
       - name: Download all artifacts
         uses: actions/download-artifact@v4
+        with:
+          repository: ${{ github.repository }}
+          run-id: ${{ inputs.build_run_id || github.run_id }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Attach signed GO CLAW Windows assets to the draft release
         env:
@@ -133,8 +186,27 @@ jobs:
         id: version
         uses: ./.github/actions/get-version
 
+      - name: Validate explicit Desktop Build run
+        if: ${{ inputs.build_run_id != '' }}
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          BUILD_RUN_ID: ${{ inputs.build_run_id }}
+          EXPECTED_SHA: ${{ inputs.ref }}
+        run: |
+          set -euo pipefail
+          metadata="$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${BUILD_RUN_ID}")"
+          [ "$(jq -r '.conclusion' <<<"$metadata")" = "success" ] || exit 1
+          [ "$(jq -r '.name' <<<"$metadata")" = "Desktop Build (reusable)" ] || exit 1
+          if [ -n "$EXPECTED_SHA" ] && [ "$(jq -r '.head_sha' <<<"$metadata")" != "$EXPECTED_SHA" ]; then
+            exit 1
+          fi
+
       - name: Download all artifacts
         uses: actions/download-artifact@v4
+        with:
+          repository: ${{ github.repository }}
+          run-id: ${{ inputs.build_run_id || github.run_id }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Validate GO CLAW-owned OSS destination
         shell: bash
