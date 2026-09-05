@@ -30,12 +30,18 @@ on:
         type: boolean
         required: false
         default: false
+      bridge_only:
+        description: "Build only a signed legacy Bridge revision against the published component payload"
+        type: boolean
+        required: false
+        default: false
 
 permissions:
   contents: read
 
 jobs:
   build-tauri-windows:
+    if: ${{ !inputs.bridge_only }}
     runs-on: windows-latest
     timeout-minutes: 120
     steps:
@@ -504,7 +510,7 @@ jobs:
           if-no-files-found: error
 
   build-tauri-macos:
-    if: ${{ inputs.windows_only != true }}
+    if: ${{ inputs.windows_only != true && !inputs.bridge_only }}
     runs-on: macos-14
     timeout-minutes: 60
     steps:
@@ -620,3 +626,158 @@ jobs:
             dist/QwenPaw-Tauri-*-macOS.app.tar.gz
             dist/QwenPaw-Tauri-*-macOS.app.tar.gz.sig
             dist/tauri-darwin-*-updater.json
+
+  build-bridge-hotfix:
+    if: ${{ inputs.bridge_only }}
+    runs-on: windows-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref || github.ref }}
+
+      - name: Get version
+        id: version
+        uses: ./.github/actions/get-version
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+          cache-dependency-path: console/package-lock.json
+
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Rust cache
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: console/src-tauri
+
+      - name: Install NSIS
+        uses: negrutiu/nsis-install@v2
+
+      - name: Install packaging dependencies
+        shell: pwsh
+        run: |
+          npm --prefix console ci
+          python -m pip install packaging cryptography
+
+      - name: Build signed Bridge revision
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        run: |
+          $ErrorActionPreference = "Stop"
+          $version = "${{ steps.version.outputs.version }}"
+          $commit = (git rev-parse HEAD).Trim()
+          $baseUrl = "https://github.com/$env:GITHUB_REPOSITORY/releases/download/v$version"
+          $work = Join-Path $env:RUNNER_TEMP "go-claw-bridge-hotfix"
+          $output = Join-Path $work "output"
+          New-Item -ItemType Directory -Force -Path $output | Out-Null
+
+          foreach ($name in @("windows-release-v2.json", "windows-release-v2.json.sig", "SHA256SUMS.txt")) {
+            gh release download "v$version" --repo $env:GITHUB_REPOSITORY --pattern $name --output (Join-Path $work $name)
+            if ($LASTEXITCODE -ne 0) { throw "Unable to download published $name" }
+          }
+          $manifest = Join-Path $work "windows-release-v2.json"
+          $manifestHash = (Get-FileHash $manifest -Algorithm SHA256).Hash.ToLowerInvariant()
+
+          cargo build --manifest-path console/src-tauri/Cargo.toml --release --bin go-claw-update-engine
+          if ($LASTEXITCODE -ne 0) { throw "standalone update engine build failed" }
+          $engine = (Resolve-Path "console/src-tauri/target/release/go-claw-update-engine.exe").Path
+          Copy-Item "console/src-tauri/nsis/go-claw-update-bridge.nsi" (Join-Path $work "bridge.nsi")
+          Push-Location $work
+          try {
+            makensis /INPUTCHARSET UTF8 `
+              "/DGO_CLAW_VERSION=$version" `
+              "/DGO_CLAW_INDEX_URL=$baseUrl/release-index-v2.json" `
+              "/DGO_CLAW_TARGET_MANIFEST=$manifestHash" `
+              "/DGO_CLAW_ENGINE=$engine" `
+              "bridge.nsi"
+            if ($LASTEXITCODE -ne 0) { throw "Bridge makensis failed" }
+          } finally { Pop-Location }
+          ./scripts/verify/test_portable_update_bridge.ps1 -NsisScript "console/src-tauri/nsis/go-claw-update-bridge.nsi"
+
+          $setup = Join-Path $work "GO-CLAW-Update-$version-setup.exe"
+          npm --prefix console exec -- tauri signer sign $setup
+          if ($LASTEXITCODE -ne 0 -or -not (Test-Path "$setup.sig")) { throw "Bridge signing failed" }
+          python scripts/pack-tauri/build_go_claw_update_manifest.py `
+            --version $version `
+            --setup $setup `
+            --base-url $baseUrl `
+            --build-commit $commit `
+            --notes "GO CLAW $version (updater exit hotfix)" `
+            --output (Join-Path $work "latest.json")
+          if ($LASTEXITCODE -ne 0) { throw "legacy manifest generation failed" }
+
+          $config = Get-Content "console/src-tauri/tauri.conf.json" -Raw | ConvertFrom-Json
+          [IO.File]::WriteAllText((Join-Path $work "updater.pub"), $config.plugins.updater.pubkey, [Text.ASCIIEncoding]::new())
+          python scripts/pack-tauri/build_release_index_v2.py `
+            --manifest $manifest `
+            --manifest-url "$baseUrl/windows-release-v2.json" `
+            --bridge $setup `
+            --bridge-url "$baseUrl/$([IO.Path]::GetFileName($setup))" `
+            --pubkey-file (Join-Path $work "updater.pub") `
+            --legacy-latest (Join-Path $work "latest.json") `
+            --output (Join-Path $work "release-index-v2.json") `
+            --trusted-host github.com
+          if ($LASTEXITCODE -ne 0) { throw "release index assembly failed" }
+          npm --prefix console exec -- tauri signer sign (Join-Path $work "release-index-v2.json")
+          if ($LASTEXITCODE -ne 0) { throw "release index signing failed" }
+          python scripts/pack-tauri/build_release_catalog_v2.py `
+            --release (Join-Path $work "release-index-v2.json") "$baseUrl/release-index-v2.json" `
+            --pubkey-file (Join-Path $work "updater.pub") `
+            --trusted-host github.com `
+            --output (Join-Path $work "release-catalog-v2.json")
+          if ($LASTEXITCODE -ne 0) { throw "release catalog assembly failed" }
+          npm --prefix console exec -- tauri signer sign (Join-Path $work "release-catalog-v2.json")
+          if ($LASTEXITCODE -ne 0) { throw "release catalog signing failed" }
+
+          $publishFiles = @(
+            $setup,
+            "$setup.sig",
+            (Join-Path $work "latest.json"),
+            (Join-Path $work "release-index-v2.json"),
+            (Join-Path $work "release-index-v2.json.sig"),
+            (Join-Path $work "release-catalog-v2.json"),
+            (Join-Path $work "release-catalog-v2.json.sig")
+          )
+          Copy-Item -LiteralPath $publishFiles -Destination $output
+
+          $sumPath = Join-Path $work "SHA256SUMS.txt"
+          $sumLines = [Collections.Generic.List[string]](Get-Content -LiteralPath $sumPath)
+          foreach ($file in Get-ChildItem -LiteralPath $output -File) {
+            $replacement = "{0}  {1}" -f (Get-FileHash $file.FullName -Algorithm SHA256).Hash.ToLowerInvariant(), $file.Name
+            $found = $false
+            for ($index = 0; $index -lt $sumLines.Count; $index++) {
+              if ($sumLines[$index] -match ("  " + [regex]::Escape($file.Name) + "$")) {
+                $sumLines[$index] = $replacement
+                $found = $true
+                break
+              }
+            }
+            if (-not $found) { throw "Published checksum entry missing: $($file.Name)" }
+          }
+          [IO.File]::WriteAllLines((Join-Path $output "SHA256SUMS.txt"), $sumLines, [Text.UTF8Encoding]::new($false))
+          [IO.File]::WriteAllText(
+            (Join-Path $output "BRIDGE-HOTFIX.json"),
+            (@{ version=$version; wrapperCommit=$commit; payloadManifestSha256=$manifestHash } | ConvertTo-Json),
+            [Text.UTF8Encoding]::new($false)
+          )
+
+      - name: Upload signed Bridge revision
+        uses: actions/upload-artifact@v4
+        with:
+          name: go-claw-bridge-hotfix-${{ steps.version.outputs.version }}
+          path: ${{ runner.temp }}/go-claw-bridge-hotfix/output/*
+          if-no-files-found: error
