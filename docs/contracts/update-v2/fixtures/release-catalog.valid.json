@@ -1,0 +1,36 @@
+{
+  "schemaVersion": 2,
+  "releases": [
+    {
+      "indexUrl": "https://goclaw.host/releases/v2.1.2/release-index-v2.json",
+      "release": {
+        "schemaVersion": 2,
+        "version": "2.1.2",
+        "buildCommit": "0123456789abcdef0123456789abcdef01234567",
+        "platform": "windows-x86_64",
+        "channel": "staging",
+        "minUpdaterVersion": "2.0.1",
+        "componentDigests": [
+          {
+            "id": "desktop-shell",
+            "contentDigest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "archiveBytes": 1024
+          }
+        ],
+        "fullBytes": 1024,
+        "releaseManifest": {
+          "url": "https://goclaw.host/releases/v2.1.2/windows-release-v2.json",
+          "sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+          "signature": "placeholder-not-for-release",
+          "sizeBytes": 2048
+        },
+        "legacyBridge": {
+          "url": "https://goclaw.host/releases/v2.1.2/GO-CLAW-Update-2.1.2-setup.exe",
+          "sha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+          "signature": "placeholder-not-for-release",
+          "sizeBytes": 4096
+        }
+      }
+    }
+  ]
+}

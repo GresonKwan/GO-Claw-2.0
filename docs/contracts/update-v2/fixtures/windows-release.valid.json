@@ -1,0 +1,32 @@
+{
+  "schemaVersion": 2,
+  "version": "2.1.2",
+  "buildCommit": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+  "platform": "windows-x86_64",
+  "channel": "staging",
+  "minUpdaterVersion": "2.1.2",
+  "files": [
+    {
+      "relativePath": "binaries/core.exe",
+      "component": "backend-core",
+      "mount": "slot",
+      "sizeBytes": 1,
+      "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    }
+  ],
+  "components": [
+    {
+      "id": "backend-core",
+      "archiveUrl": "https://goclaw.host:8443/updates-staging/2.1.2/core.zip",
+      "archiveBytes": 200,
+      "unpackedBytes": 1,
+      "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "signature": "fixture-not-a-real-signature",
+      "contentDigest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    }
+  ],
+  "deleteFiles": [],
+  "minFreeBytes": 1000,
+  "readinessVersion": 1,
+  "entrypointId": "go-claw-portable-v1"
+}

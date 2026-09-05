@@ -1,312 +1,80 @@
-import { Layout, Space, Badge, Tooltip, Popover, message } from "antd";
-import ThemeToggleButton from "../components/ThemeToggleButton";
+import { Layout, Space, Modal, message } from "antd";
+import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { Button, Modal } from "@agentscope-ai/design";
-import styles from "./index.module.less";
-import api from "../api";
-import { openExternalLink } from "../utils/openExternalLink";
-import { ExternalMarkdownLink } from "../components/Markdown/externalLinkComponents";
-import {
-  getReleaseNotesUrl,
-  PYPI_URL,
-  ONE_HOUR_MS,
-  UPDATE_MD,
-  isStableVersion,
-  compareVersions,
-} from "./constants";
-import { useTheme } from "../contexts/ThemeContext";
-import { useState, useEffect, useRef } from "react";
 import { invoke } from "@tauri-apps/api/core";
-import { Slot } from "../plugins/registry/Slot";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
+import ThemeToggleButton from "../components/ThemeToggleButton";
+import { ExternalMarkdownLink } from "../components/Markdown/externalLinkComponents";
+import { useTheme } from "../contexts/ThemeContext";
 import { useDesktopUpdate } from "../contexts/DesktopUpdateContext";
 import { isDesktopApp } from "../tauri/backendRuntime";
-import {
-  CopyOutlined,
-  CheckOutlined,
-  TagOutlined,
-  SyncOutlined,
-  CheckCircleOutlined,
-  ExclamationCircleOutlined,
-} from "@ant-design/icons";
-
-const { Header: AntHeader } = Layout;
-
-// ── Code block with copy button ───────────────────────────────────────────
-function UpdateCodeBlock({ code }: { code: string }) {
-  const [copied, setCopied] = useState(false);
-  const handleCopy = () => {
-    navigator.clipboard.writeText(code).then(() => {
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
-    });
-  };
-  return (
-    <div className={styles.codeBlock}>
-      <code className={styles.codeBlockInner}>{code}</code>
-      <button
-        className={`${styles.copyBtn} ${
-          copied ? styles.copyBtnCopied : styles.copyBtnDefault
-        }`}
-        onClick={handleCopy}
-        title="Copy"
-      >
-        {copied ? <CheckOutlined /> : <CopyOutlined />}
-      </button>
-    </div>
-  );
-}
+import { Slot } from "../plugins/registry/Slot";
+import api from "../api";
+import { UpdateSection } from "./UpdateSection";
+import styles from "./index.module.less";
 
 export default function Header() {
-  const { t, i18n } = useTranslation();
+  const { t } = useTranslation();
   const { isDark } = useTheme();
-  const desktop = useDesktopUpdate();
-  const onDesktop = isDesktopApp();
-  const [version, setVersion] = useState<string>("");
-  const [latestVersion, setLatestVersion] = useState<string>("");
-  const [updateModalOpen, setUpdateModalOpen] = useState(false);
-  const logoClicksRef = useRef<number[]>([]);
-
+  const update = useDesktopUpdate();
+  const [version, setVersion] = useState("");
+  const [open, setOpen] = useState(false);
+  const clicks = useRef<number[]>([]);
   useEffect(() => {
+    let active = true;
     api
       .getVersion()
-      .then((res) => setVersion(res?.version ?? ""))
+      .then((result) => {
+        if (active) setVersion(result?.version ?? "");
+      })
       .catch(() => {});
+    return () => {
+      active = false;
+    };
   }, []);
-
-  // Hidden gesture: 8 rapid clicks on the logo within 3 seconds toggles DevTools
-  // in the Tauri desktop build. This keeps DevTools inaccessible via the default
-  // context menu or keyboard shortcuts while still allowing support/debugging.
   const handleLogoClick = () => {
-    if (!onDesktop) return;
+    if (!isDesktopApp()) return;
     const now = Date.now();
-    const windowStart = now - 3000;
-    logoClicksRef.current = logoClicksRef.current.filter(
-      (time) => time > windowStart,
-    );
-    logoClicksRef.current.push(now);
-    if (logoClicksRef.current.length >= 8) {
-      logoClicksRef.current = [];
+    clicks.current = [
+      ...clicks.current.filter((time) => now - time <= 3000),
+      now,
+    ];
+    if (clicks.current.length >= 8) {
+      clicks.current = [];
       invoke("open_devtools")
         .then(() => message.success("DevTools opened"))
-        .catch((err: unknown) => {
-          const errMsg =
-            err instanceof Error
-              ? err.message
-              : typeof err === "string"
-              ? err
-              : JSON.stringify(err);
-          console.error("Failed to open DevTools:", errMsg);
-          message.error(`DevTools error: ${errMsg}`);
-        });
+        .catch(() => message.error("DevTools unavailable"));
     }
   };
-
-  // Web-only PyPI fallback: desktop path is owned by DesktopUpdateContext.
-  useEffect(() => {
-    if (onDesktop) return;
-
-    fetch(PYPI_URL)
-      .then((res) => res.json())
-      .then((data) => {
-        const releases = data?.releases ?? {};
-
-        const versionsWithTime = Object.entries(releases)
-          .filter(([v]) => isStableVersion(v))
-          .map(([v, files]) => {
-            const fileList = files as Array<{ upload_time_iso_8601?: string }>;
-            const latestUpload = fileList
-              .map((f) => f.upload_time_iso_8601)
-              .filter(Boolean)
-              .sort()
-              .pop();
-            return { version: v, uploadTime: latestUpload || "" };
-          });
-
-        versionsWithTime.sort((a, b) => {
-          const timeDiff =
-            new Date(b.uploadTime).getTime() - new Date(a.uploadTime).getTime();
-          return timeDiff !== 0
-            ? timeDiff
-            : compareVersions(b.version, a.version);
-        });
-
-        const versions = versionsWithTime.map((v) => v.version);
-        const latest = versions[0] ?? data?.info?.version ?? "";
-
-        const releaseTime = versionsWithTime.find((v) => v.version === latest)
-          ?.uploadTime;
-        const isOldEnough =
-          !!releaseTime &&
-          new Date(releaseTime) <= new Date(Date.now() - ONE_HOUR_MS);
-
-        if (isOldEnough) {
-          setLatestVersion(latest);
-        } else {
-          setLatestVersion("");
-        }
-      })
-      .catch(() => {});
-  }, [onDesktop]);
-
-  const hasUpdate = onDesktop
-    ? desktop.hasUpdate
-    : !!version &&
-      !!latestVersion &&
-      compareVersions(latestVersion, version) > 0;
-
-  const modalVersion = onDesktop ? desktop.version : latestVersion;
-  const updateMarkdown = onDesktop
-    ? desktop.body ||
-      t("sidebar.updateModal.desktopInstallHint", {
-        version: desktop.version,
-      })
-    : UPDATE_MD;
-
-  const handleOpenUpdateModal = () => {
-    setUpdateModalOpen(true);
-  };
-
-  const handleStartInstall = () => {
-    setUpdateModalOpen(false);
-    void desktop.startInstall();
-  };
-
-  const handleUpdateLater = () => {
-    setUpdateModalOpen(false);
-    void desktop.startBackgroundDownload();
-  };
-
-  const handleRestartNow = () => {
-    void desktop.installDownloaded();
-  };
-
-  const handleNavClick = (url: string) => {
-    openExternalLink(url);
-  };
-
-  // Background download/ready state for inline header indicator.
-  const isBackgroundActive =
-    onDesktop &&
-    desktop.isBackground &&
-    (desktop.phase === "checking" || desktop.phase === "downloading");
-  const isReady = onDesktop && desktop.phase === "downloaded";
-  const isApplyingDownloadedUpdate =
-    onDesktop && desktop.phase === "installing";
-  const isBackgroundFailed =
-    onDesktop && desktop.isBackground && desktop.phase === "failed";
-  const backgroundDownloadPercent =
-    isBackgroundActive && desktop.phase === "downloading" && desktop.total
-      ? Math.min(99, Math.round((desktop.downloaded / desktop.total) * 100))
-      : undefined;
-  const backgroundDownloadTitle =
-    backgroundDownloadPercent !== undefined
-      ? `${t(
-          `sidebar.updateModal.backgroundDownloading`,
-        )} ${backgroundDownloadPercent}%`
-      : t(`sidebar.updateModal.backgroundDownloading`);
-  const backgroundFailureTitle = desktop.error?.message
-    ? `${t(`sidebar.updateModal.backgroundFailed`)}: ${desktop.error.message}`
-    : t(`sidebar.updateModal.backgroundFailed`);
-
   return (
     <>
-      <AntHeader className={styles.header}>
-        <div className={styles.logoWrapper} onClick={handleLogoClick}>
-          {/*
-            Slot lets a plugin replace the brand logo (e.g. a per-agent
-            branding override). When no plugin registers a replacement —
-            or when the registered render returns null — the host default
-            <img> below paints.
-          */}
-          <Slot name="header.logo" kind="replace">
-            <img
-              data-testid="go-claw-header-logo"
-              src={
-                isDark
-                  ? "/go-claw-horizontal-white.svg"
-                  : "/go-claw-horizontal.svg"
-              }
-              alt="GO CLAW"
-              className={styles.logoImg}
-            />
-          </Slot>
+      <Layout.Header className={styles.header}>
+        <div className={styles.logoWrapper}>
+          <div onClick={handleLogoClick}>
+            <Slot name="header.logo" kind="replace">
+              <img
+                data-testid="go-claw-header-logo"
+                src={
+                  isDark
+                    ? "/go-claw-horizontal-white.svg"
+                    : "/go-claw-horizontal.svg"
+                }
+                alt="GO CLAW"
+                className={styles.logoImg}
+              />
+            </Slot>
+          </div>
           <div className={styles.logoDivider} />
           {version && (
-            <Badge
-              dot={!!hasUpdate && !isReady && !isBackgroundActive}
-              color="rgba(255, 157, 77, 1)"
-              offset={[4, 28]}
+            <button
+              type="button"
+              data-testid="update-version-trigger"
+              className={`${styles.versionBadge} ${styles.versionBadgeClickable}`}
+              onClick={() => setOpen(true)}
             >
-              <span
-                className={`${styles.versionBadge} ${
-                  hasUpdate || isReady
-                    ? styles.versionBadgeClickable
-                    : styles.versionBadgeDefault
-                }`}
-                onClick={() => {
-                  if (isReady) return; // handled by Popover
-                  if (hasUpdate) handleOpenUpdateModal();
-                }}
-              >
-                v{version}
-              </span>
-            </Badge>
-          )}
-          {isBackgroundActive && (
-            <Tooltip title={backgroundDownloadTitle}>
-              <SyncOutlined
-                spin
-                style={{
-                  marginLeft: 6,
-                  fontSize: 14,
-                  color: "rgba(255, 157, 77, 1)",
-                }}
-              />
-            </Tooltip>
-          )}
-          {isReady && (
-            <Popover
-              content={
-                <div style={{ textAlign: "center" }}>
-                  <p style={{ marginBottom: 12 }}>
-                    {t(`sidebar.updateModal.readyToInstallHint`, {
-                      version: desktop.version,
-                    })}
-                  </p>
-                  <Button
-                    type="primary"
-                    size="small"
-                    onClick={handleRestartNow}
-                    loading={isApplyingDownloadedUpdate}
-                  >
-                    {t(`sidebar.updateModal.restartNow`)}
-                  </Button>
-                </div>
-              }
-              title={t(`sidebar.updateModal.readyToInstall`)}
-              trigger="click"
-            >
-              <Tooltip title={t(`sidebar.updateModal.readyToInstall`)}>
-                <CheckCircleOutlined
-                  style={{ marginLeft: 6, fontSize: 14, color: "#52c41a" }}
-                />
-              </Tooltip>
-            </Popover>
-          )}
-          {isBackgroundFailed && (
-            <Tooltip title={backgroundFailureTitle}>
-              <ExclamationCircleOutlined
-                style={{
-                  marginLeft: 6,
-                  fontSize: 14,
-                  color: "#ff4d4f",
-                  cursor: "pointer",
-                }}
-                onClick={() => void desktop.startBackgroundDownload()}
-              />
-            </Tooltip>
+              v{version}
+            </button>
           )}
         </div>
         <Slot name="header.left" kind="fill" />
@@ -315,83 +83,26 @@ export default function Header() {
           <div className={styles.headerDivider} />
           <ThemeToggleButton />
         </Space>
-      </AntHeader>
-
+      </Layout.Header>
       <Modal
-        title={null}
-        open={updateModalOpen}
-        onCancel={() => setUpdateModalOpen(false)}
-        footer={[
-          <Button key="close" onClick={() => setUpdateModalOpen(false)}>
-            {t("common.close")}
-          </Button>,
-          onDesktop && desktop.supportsLaterInstall ? (
-            <Button key="later" onClick={handleUpdateLater}>
-              {t("sidebar.updateModal.updateLater")}
-            </Button>
-          ) : null,
-          onDesktop ? (
-            <Button
-              key="install"
-              type="primary"
-              className={styles.updateViewReleasesBtn}
-              onClick={handleStartInstall}
-            >
-              {t("sidebar.updateModal.installDesktopUpdate")}
-            </Button>
-          ) : (
-            <Button
-              key="releases"
-              type="primary"
-              className={styles.updateViewReleasesBtn}
-              onClick={() => handleNavClick(getReleaseNotesUrl(i18n.language))}
-            >
-              {t("sidebar.updateModal.viewReleases")}
-            </Button>
-          ),
-        ].filter(Boolean)}
-        width={960}
+        open={open}
+        onCancel={() => setOpen(false)}
+        footer={null}
+        title={t("updates.currentVersion") + " · GO CLAW"}
+        width={640}
         className={styles.updateModal}
       >
-        {/* Banner area */}
-        <div className={styles.updateModalBanner}>
-          <div className={styles.updateModalBannerLeft}>
-            <span className={styles.updateModalVersionTag}>
-              <TagOutlined />
-              Version {modalVersion || version}
-            </span>
-            <div className={styles.updateModalBannerTitle}>
-              {t("sidebar.updateModal.title", {
-                version: modalVersion || version,
-              })}
-            </div>
+        <UpdateSection />
+        {update.status?.latest?.notes && (
+          <div className={styles.updateModalBody}>
+            <ReactMarkdown
+              remarkPlugins={[remarkGfm]}
+              components={{ a: ExternalMarkdownLink }}
+            >
+              {update.status.latest.notes}
+            </ReactMarkdown>
           </div>
-        </div>
-
-        {/* Markdown content */}
-        <div className={styles.updateModalBody}>
-          <ReactMarkdown
-            remarkPlugins={[remarkGfm]}
-            components={{
-              a: ExternalMarkdownLink,
-              code({ node, className, children, ...props }: any) {
-                const match = /language-(\w+)/.exec(className || "");
-                const isBlock =
-                  node?.position?.start?.line !== node?.position?.end?.line ||
-                  match;
-                return isBlock ? (
-                  <UpdateCodeBlock code={String(children).replace(/\n$/, "")} />
-                ) : (
-                  <code className={styles.codeInline} {...props}>
-                    {children}
-                  </code>
-                );
-              },
-            }}
-          >
-            {updateMarkdown}
-          </ReactMarkdown>
-        </div>
+        )}
       </Modal>
     </>
   );

@@ -1,0 +1,24 @@
+{
+  "schemaVersion": 1,
+  "transactionId": "00000000-0000-4000-8000-000000000001",
+  "revision": 4,
+  "generation": 1,
+  "sourceVersion": "2.0.1",
+  "targetVersion": "2.1.2",
+  "fromSlot": "legacy",
+  "toSlot": "A",
+  "targetManifestSha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "enginePhase": "STAGED",
+  "completedStages": [
+    "target-verified"
+  ],
+  "oldShellSha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "newShellSha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "downloadedPackages": [
+    "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+  ],
+  "progressPercent": 90,
+  "installationStarted": false,
+  "failure": null,
+  "previousJournalSha256": null
+}

@@ -50,6 +50,8 @@ fn default_client_mode() -> ClientMode {
 #[derive(Clone, Debug)]
 pub(crate) struct PortableState {
     pub(crate) root: PathBuf,
+    pub(crate) program_root: PathBuf,
+    pub(crate) active_slot: Option<crate::update_engine::slots::ActiveSlot>,
     pub(crate) working_dir: PathBuf,
     pub(crate) secret_dir: PathBuf,
     pub(crate) backup_dir: PathBuf,
@@ -82,8 +84,17 @@ impl PortableState {
             ));
         }
 
+        // Keep lock failures in prepare's existing user-facing diagnostic.
+        // An unresolved pending transaction must never select a new slot.
+        let (program_root, active_slot) = if root.join("updates/installing.lock").exists() {
+            (root.to_path_buf(), None)
+        } else {
+            crate::update_engine::slots::resolve(root)?
+        };
         Ok(Some(Self {
             root: root.to_path_buf(),
+            program_root,
+            active_slot,
             working_dir: root.join("data"),
             secret_dir: root.join("secrets"),
             backup_dir: root.join("backups"),
@@ -115,6 +126,13 @@ impl PortableState {
                 update_lock.display()
             ));
         }
+        let (program_root, active_slot) = crate::update_engine::slots::resolve(&self.root)?;
+        if program_root != self.program_root
+            || active_slot.as_ref().map(|s| s.generation)
+                != self.active_slot.as_ref().map(|s| s.generation)
+        {
+            return Err("SLOT_CHANGED_DURING_STARTUP".into());
+        }
         for directory in [
             &self.working_dir,
             &self.secret_dir,
@@ -126,13 +144,10 @@ impl PortableState {
                 .map_err(|error| format!("cannot create {}: {error}", directory.display()))?;
         }
 
-        std::env::set_var("QWENPAW_PORTABLE", "1");
-        std::env::set_var("QWENPAW_WORKING_DIR", &self.working_dir);
-        std::env::set_var("QWENPAW_SECRET_DIR", &self.secret_dir);
-        std::env::set_var("QWENPAW_BACKUP_DIR", &self.backup_dir);
-        std::env::set_var("QWENPAW_DISABLE_KEYRING", "1");
-        std::env::set_var("PIP_CACHE_DIR", self.cache_dir.join("pip"));
-        std::env::set_var("UV_CACHE_DIR", self.cache_dir.join("uv"));
+        for (key, value) in crate::update_engine::slots::environment(&self.root, &self.program_root)
+        {
+            std::env::set_var(key, value);
+        }
         Ok(())
     }
 }
@@ -200,6 +215,8 @@ mod tests {
         let state = PortableState::detect_from_exe(&exe).unwrap().unwrap();
 
         assert_eq!(state.root, temp.path());
+        assert_eq!(state.program_root, temp.path());
+        assert!(state.active_slot.is_none());
         assert_eq!(state.working_dir, temp.path().join("data"));
         assert_eq!(state.secret_dir, temp.path().join("secrets"));
         assert_eq!(state.backup_dir, temp.path().join("backups"));
@@ -258,13 +275,28 @@ mod tests {
         )
         .unwrap();
         std::fs::create_dir(temp.path().join("updates")).unwrap();
-        std::fs::write(temp.path().join("updates/installing.lock"), b"2.1.1")
-            .unwrap();
+        std::fs::write(temp.path().join("updates/installing.lock"), b"2.1.1").unwrap();
 
         let state = PortableState::detect_from_exe(&exe).unwrap().unwrap();
         let error = state.prepare().unwrap_err();
 
         assert!(error.contains("未完成的在线更新"));
         assert!(error.contains("installing.lock"));
+    }
+
+    #[test]
+    fn invalid_slot_does_not_fall_back_or_create_data() {
+        let temp = tempfile::tempdir().unwrap();
+        std::fs::write(
+            temp.path().join(PORTABLE_MANIFEST),
+            br#"{"schemaVersion":1}"#,
+        )
+        .unwrap();
+        std::fs::create_dir(temp.path().join("runtime")).unwrap();
+        std::fs::write(temp.path().join("runtime/active-slot.json"), b"{}").unwrap();
+        let error =
+            PortableState::detect_from_exe(&temp.path().join("GO-CLAW-Portable.exe")).unwrap_err();
+        assert_eq!(error, "INVALID_SLOT_POINTER");
+        assert!(!temp.path().join("data").exists());
     }
 }

@@ -23,6 +23,17 @@ from qwenpaw.plugins.media_quota import media_quota
 
 logger = logging.getLogger(__name__)
 
+
+def _publish_local(path: Path) -> None:
+    """Register on v2.1.2 hosts; stay compatible with older hosts."""
+    try:
+        from qwenpaw.app.deliverables import register_published
+
+        register_published(path)
+    except ImportError:
+        return
+
+
 # Thread lock to protect dashscope global base_http_api_url setting
 _DASHSCOPE_LOCK = threading.Lock()
 
@@ -529,6 +540,7 @@ async def generate_image(
                     prefix,
                     timeout,
                 )
+                _publish_local(image_path)
                 saved_paths.append(str(image_path))
                 content_blocks.append(
                     DataBlock(
@@ -828,6 +840,7 @@ async def edit_image(
                     prefix,
                     timeout,
                 )
+                _publish_local(image_path)
                 saved_paths.append(str(image_path))
                 content_blocks.append(
                     DataBlock(

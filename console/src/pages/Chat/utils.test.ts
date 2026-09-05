@@ -161,6 +161,11 @@ describe("toStoredName", () => {
       "http://host/files/preview/%E4%B8%AD%E6%96%87.txt",
       "/中文.txt",
     ],
+    [
+      "decodes percent, hash and emoji exactly once",
+      "http://host/files/preview/C%3A/%E9%99%84%E4%BB%B6%20%23100%25252F%2B%F0%9F%98%80.png?token=x",
+      "C:/附件 #100%2F+😀.png",
+    ],
   ])("%s", (_: string, input: string, expected: string) => {
     expect(toStoredName(input)).toBe(expected);
   });

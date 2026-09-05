@@ -38,6 +38,8 @@ sequenceDiagram
     Portable->>Portable: Detect portable root
     Portable->>Portable: Validate portable.json
     Portable->>Portable: Reject installing.lock
+    Portable->>Portable: Verify signed active slot
+    Portable->>Portable: Keep shared data root
     Portable->>Client: Begin client readiness
     Portable->>Backend: Spawn absolute backend
     Backend-->>Portable: Publish port and health
@@ -50,6 +52,12 @@ sequenceDiagram
 
 不可变条件：`PortableState::prepare()` 必须早于客户端和后端启动；未完成更新锁存在时不得
 运行任何可能读取混合版本的后端。
+
+2026-09-05 开发接线：PortableState 保留独立 root/program_root；无 active-slot 指针继续 legacy，
+有指针必须验证固定公钥签名、清单摘要和版本，解析失败不退回旧 binaries。prepare 再次确认槽位
+未变化，才建立共享目录/环境；后端、Python、Node 从 program_root 定位，data/secrets/backups
+仍在产品根。安装锁错误仍优先阻断，尚不允许普通启动绕过锁。Bridge/协调器代码现已接线；这不代表
+真实签名大包和完整设备矩阵已经验收。
 
 ## 3. 后端启动与产品可用
 
@@ -73,11 +81,10 @@ sequenceDiagram
 
     Backend->>Presets: Migrate and repair profiles
     Presets-->>Backend: Profiles and manifests valid
-    Backend->>Provisioning: POST instance request
-    Provisioning-->>Backend: Per-instance credentials
+    Backend->>Provisioning: Preserve existing identity first
+    Provisioning-->>Backend: Reuse credentials or provision new copy
     Backend->>Providers: Import credentials
     Backend--)Billing: Start optional legacy enrollment task
-    Note over Backend,Billing: Failure disables recharge only and never blocks readiness
     Backend->>Providers: Reconcile model tiers
     Backend-->>WebUI: HTTP service ready
     Backend->>Plugins: Load channel plugins
@@ -101,11 +108,19 @@ sequenceDiagram
 Provisioning 失败按代码约定不阻断进程启动，并在下次启动重试；因此“程序打开了”不能作为
 额度和模型已经可用的证据。
 
+身份保留顺序固定为：已有导入 marker/交付凭据直接复用；需要 provisioning 时先读取既有
+`instance.id`，损坏/空白/链接原件必须保留并返回 `INSTANCE_ID_RECOVERY_REQUIRED`，不得静默
+生成新身份。身份缺失但已有 billing profile、legacy provider secrets、升级结果或槽位指针时，
+同样拒绝创建新账号。仅完全没有这些旧身份证据的新盘可以首次创建 ID。证据检查为固定路径，
+不递归扫描聊天、不增加远端审计。正常首启失败后重试继续使用已创建的 ID。
+
 Billing enrollment 只能在既有 credentials 导入后异步启动。它必须复用
 `data/instance.id` 和现有 NewAPI 子 token 完成 challenge/proof，且只允许原子写入
 `data/.go-claw-billing.json`；不得新建或覆盖 NewAPI 用户、token、quota、员工配置或聊天数据。
 enrollment、Billing Service 或微信支付不可用时，充值页显示初始化/维护状态，其他产品就绪条件
 保持不变。浏览器只访问本机 `/api/console/recharge/*`，billing access token 永远由本机后端代持。
+已有合法 billing profile 直接复用；损坏的 profile 保留原件并暂停 enrollment，不能覆盖原账户
+归属。身份无法证明时只是充值待恢复，不重置可用聊天、模型凭据或已有额度。
 
 ## 4. Windows 在线更新成功事务
 
@@ -192,6 +207,65 @@ sequenceDiagram
 此路径不得自动清锁、继续覆盖或让客户反复重试。先采集 `updates/install.log`、
 `updates/last-update-error.txt`、`updates/installing.lock`、版本文件、进程列表和白名单文件状态，
 再按首个失败 stage 做单点修复。
+
+## 6A. 组件事务与恢复（v2.1.2 开发代码）
+
+2026-09-05 后端接线顺序：启动时有界恢复交易/状态快照；`status` 和 SSE 只消费进程缓存。
+检查由独立引擎验签小目录；下载冻结版本/摘要并启动 staging，不自动安装。安装请求在本机认证及
+Host/Origin 通过后，先串行刷新 journal、核对目标与 STAGED，再启动独立引擎；重复请求不重复启动。
+引擎从当前程序资源复制到 `updates/engine/<sha256>`，验证复制摘要后运行，不占用要切换的槽位。
+点击按钮不清橙点，以引擎持久化 `installationStarted` 为准。SSE 每 15s 心跳；工作时观察 journal，
+空闲/等待安装降频，未改变状态不写盘。普通退出取消观察，不终止独立安装引擎；健康探测后端不另起
+更新检查。重启只在 OS guard 可独占时由 Rust 将遗留下载标为 INTERRUPTED；不凭 PID 清安装锁。
+历史目录只接受有界且已签名的 release catalog；不能降级到仅信任客户端 HTTPS URL 的旧安装路径。
+
+代码锚点：`update_engine/bootstrap.rs`、`recovery.rs`、`native.rs`、
+`src/qwenpaw/app/routers/update_readiness.py`。Bridge/产品按钮与 draft 发布构建已接线；legacy 客户端
+经 Bridge 进入同一独立引擎。完整签名构建和设备验收未完成前，生产仍使用既有时序。
+
+```mermaid
+sequenceDiagram
+    title GO CLAW component transaction and recovery
+    participant Engine
+    participant Backup
+    participant Runtime
+    participant Slot
+    participant Journal
+    Engine->>Engine: Verify signed target and source
+    Engine->>Backup: Snapshot fixed root files
+    Engine->>Journal: Lock and persist install start
+    Engine->>Runtime: Stop scoped source processes
+    Engine->>Slot: Move and verify inactive program tree
+    Engine->>Runtime: Replace root shell and docs
+    Engine->>Runtime: Start process-bound candidate probe
+    Runtime-->>Engine: Readiness receipt and stopped child
+    alt Healthy
+        Engine->>Slot: Publish active and last known good
+        Engine->>Journal: Commit version metadata
+    else Failed or interrupted
+        Engine->>Runtime: Stop candidate before restoring
+        Engine->>Backup: Restore shell pointer and metadata
+        Engine->>Runtime: Verify restored source or block
+    end
+    Engine->>Journal: Unlock only after complete result
+    Engine->>Runtime: Restart committed or restored shell
+```
+
+legacy 来源尚无 lastKnownGood，因此在候选进程完成健康检查并退出之前，**活动指针保持旧值或不存在**；
+候选由持锁引擎从指定槽位直接启动，普通壳仍受安装锁阻断。健康后才发布 active/lastKnownGood，避免
+提前把未经验证的首个 A 槽写成已知可用。中途失电统一完整恢复旧壳、原指针和版本 metadata。
+
+备份只含根 exe、两份文档、active-slot、version.txt、last-update.json；不复制或恢复 data/secrets/
+聊天/账本。替换旧的非活动槽时移入本交易的证据目录，不递归删除。备份先全部验证，再逐项原子恢复；
+失败保留锁并记 BLOCKED。恢复固定根文件后，受控启动来源程序再解锁：已有 A/B 来源使用绑定回执；
+legacy 来源没有新回执，使用受控进程映像/监听 PID 和公开版本 API，并确认探测进程退出。
+这不替代实机测试中按旧 API 读取聊天/附件和额度。OS 独占 guard 才是恢复所有权依据，不能因锁中
+PID 不存在而自行清锁。
+
+Windows probe 先校验进程映像和 TCP 监听 PID，再发送随机挑战；回执绑定交易、generation、清单摘要、
+PID、版本及员工/插件/实际媒体工具/额度。候选加入 kill-on-close Job；只对引擎自己的探测子进程兜底退出，
+用户原进程仅请求正常退出，超时阻断。充值只报告本地 profile configured/not_enrolled/unavailable，
+不是服务器可用证明，也不增加核心健康路径的远端开户、审计或充值请求。
 
 ## 7. 调试与热修复规则
 

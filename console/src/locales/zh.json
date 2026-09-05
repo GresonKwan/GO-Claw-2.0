@@ -493,6 +493,9 @@
     }
   },
   "skills": {
+    "marketBannerTitle": "从技能中获得专业能力",
+    "marketBannerDescription": "从11万个技能中，找到效率最优解",
+    "marketBannerBrowse": "浏览技能",
     "title": "技能",
     "description": "管理数字员工技能和能力。",
     "importHub": "通过URL上传",
@@ -3187,6 +3190,19 @@
     },
     "execute": "执行 {{tool}}",
     "executeDefault": "执行 工具"
+  },
+  "deliverables": {
+    "title": "交付产物",
+    "loading": "正在加载预览…",
+    "open": "打开",
+    "reveal": "在文件夹中显示",
+    "previewNamed": "预览 {{name}}",
+    "revealNamed": "在文件夹中显示 {{name}}",
+    "mediaRegion": "图片和视频交付产物",
+    "missing": "文件已移动或删除",
+    "openFailed": "无法打开该交付产物",
+    "collapse": "收起",
+    "showMore": "查看其余 {{count}} 项"
   },
   "preview": {
     "error": {

@@ -91,7 +91,7 @@ TAURI_ICON_BUILD_SCRIPTS = (
 )
 GO_CLAW_APP_ICON_SOURCE = "scripts/pack/assets/go-claw-app-icon-1024.png"
 GO_CLAW_TAURI_ICON_COMMAND = (
-    "npm exec -- tauri icon ../scripts/pack/assets/"
+    "tauri icon ../scripts/pack/assets/"
     "go-claw-app-icon-1024.png"
 )
 PACKAGING_CONSUMER_TOKEN_CONTRACTS: dict[
@@ -394,6 +394,24 @@ def test_tauri_debug_shortcut_uses_go_claw_display_name() -> None:
     assert any("GO CLAW (Debug).lnk" in line for line in shortcut_lines)
 
 
+def test_tauri_nsis_assets_do_not_depend_on_cargo_target_location() -> None:
+    nsis_hooks = _read_customer_text("console/src-tauri/nsis-hooks.nsh")
+
+    assert '!define GO_CLAW_NSIS_ASSET_DIR "${__FILEDIR__}\\nsis"' in nsis_hooks
+    assert '"..\\..\\..\\..\\nsis\\' not in nsis_hooks
+    assert nsis_hooks.count("${GO_CLAW_NSIS_ASSET_DIR}\\") == 4
+
+
+def test_frontend_test_commands_are_windows_compatible() -> None:
+    package = json.loads(_read_customer_text("console/package.json"))
+
+    for name in ("test:run", "test:coverage"):
+        command = package["scripts"][name]
+        assert not command.startswith("NODE_OPTIONS=")
+        assert command.startswith("node --max-old-space-size=4096 ")
+        assert "node_modules/vitest/vitest.mjs" in command
+
+
 def test_tauri_cargo_customer_metadata_uses_go_claw_repository() -> None:
     cargo = tomllib.loads(_read_customer_text("console/src-tauri/Cargo.toml"))
     package = cargo["package"]
@@ -525,10 +543,10 @@ def test_main_build_does_not_gate_on_runner_browser_observation() -> None:
     assert "desktop-browser-fallback.png" not in workflow
 
 
-def test_main_build_uses_v2_1_1_release_version() -> None:
+def test_main_build_uses_v2_1_2_release_version() -> None:
     version_file = _read_customer_text("src/qwenpaw/__version__.py")
 
-    assert '__version__ = "2.1.1"' in version_file
+    assert '__version__ = "2.1.2"' in version_file
 
 
 def test_zh_locale_does_not_contain_legacy_smart_agent_term() -> None:

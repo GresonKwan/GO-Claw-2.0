@@ -66,13 +66,44 @@ Write-Host ""
 Write-Host "== Step 0: Checking Prerequisites ==" -ForegroundColor Yellow
 $missing = @()
 
-# npm
-if (-not (Get-Command npm -ErrorAction SilentlyContinue)) {
+# Node/npm. Optional overrides let an isolated modern Node drive npm even when
+# an older system Node appears first on PATH.
+$NODE_BIN = if ($env:GO_CLAW_NODE_BIN) {
+    [System.IO.Path]::GetFullPath($env:GO_CLAW_NODE_BIN)
+} else {
+    (Get-Command node -ErrorAction SilentlyContinue).Source
+}
+$NPM_CLI = if ($env:GO_CLAW_NPM_CLI) {
+    [System.IO.Path]::GetFullPath($env:GO_CLAW_NPM_CLI)
+} else {
+    $npmCommand = Get-Command npm.cmd -ErrorAction SilentlyContinue
+    if (-not $npmCommand) { $npmCommand = Get-Command npm -ErrorAction SilentlyContinue }
+    if ($npmCommand) {
+        Join-Path (Split-Path -Parent $npmCommand.Source) "node_modules\npm\bin\npm-cli.js"
+    }
+}
+$NPM_CACHE = if ($env:GO_CLAW_NPM_CACHE) {
+    [System.IO.Path]::GetFullPath($env:GO_CLAW_NPM_CACHE)
+} elseif ($env:NPM_CONFIG_CACHE) {
+    [System.IO.Path]::GetFullPath($env:NPM_CONFIG_CACHE)
+} else {
+    Join-Path ([System.IO.Path]::GetTempPath()) "go-claw-npm-cache"
+}
+New-Item -ItemType Directory -Force -Path $NPM_CACHE | Out-Null
+$env:NPM_CONFIG_CACHE = $NPM_CACHE
+if (-not $NODE_BIN -or -not (Test-Path -LiteralPath $NODE_BIN -PathType Leaf) -or
+    -not $NPM_CLI -or -not (Test-Path -LiteralPath $NPM_CLI -PathType Leaf)) {
     Write-Host "  [MISSING] npm" -ForegroundColor Red
     Write-Host "    Install Node.js: https://nodejs.org/" -ForegroundColor Gray
     $missing += "npm"
 } else {
-    Write-Host "  [OK] npm ($(npm --version))" -ForegroundColor Green
+    # npm lifecycle commands resolve `node` through PATH. Keep postinstall
+    # tools such as esbuild on the same supported runtime that launched npm.
+    $NODE_DIR = Split-Path -Parent $NODE_BIN
+    $env:PATH = "$NODE_DIR;$env:PATH"
+    $nodeVersion = & $NODE_BIN --version
+    $npmVersion = & $NODE_BIN $NPM_CLI --version
+    Write-Host "  [OK] Node $nodeVersion / npm $npmVersion" -ForegroundColor Green
 }
 
 # rustc
@@ -132,7 +163,7 @@ $env:NODE_OPTIONS = "--max-old-space-size=8192"
 Write-Host "Node options: $env:NODE_OPTIONS"
 
 Write-Host "Installing frontend dependencies..."
-npm ci
+& $NODE_BIN $NPM_CLI ci
 if ($LASTEXITCODE -ne 0) {
     throw "npm ci failed"
 }
@@ -141,19 +172,19 @@ if (-not (Test-Path -LiteralPath $TAURI_ICON_SOURCE -PathType Leaf)) {
     throw "GO CLAW Tauri icon source not found: $TAURI_ICON_SOURCE"
 }
 Write-Host "Generating Tauri icons..."
-npm exec -- tauri icon ../scripts/pack/assets/go-claw-app-icon-1024.png
+& $NODE_BIN $NPM_CLI exec -- tauri icon ../scripts/pack/assets/go-claw-app-icon-1024.png
 if ($LASTEXITCODE -ne 0) {
     throw "Tauri icon generation failed"
 }
 
 Write-Host "Syncing Tauri version..."
-node ../scripts/pack-tauri/sync_tauri_version.mjs
+& $NODE_BIN ../scripts/pack-tauri/sync_tauri_version.mjs
 if ($LASTEXITCODE -ne 0) {
     throw "Tauri version sync failed"
 }
 
 Write-Host "Building console frontend..."
-npm run build:prod
+& $NODE_BIN $NPM_CLI run build:prod
 if ($LASTEXITCODE -ne 0) {
     throw "console frontend build failed"
 }
@@ -190,9 +221,24 @@ $env:CARGO_NET_OFFLINE = "true"
 Write-Host "Tauri Rust dependencies fetched; Cargo offline mode enabled" -ForegroundColor Green
 Write-Host ""
 
+# Step 2c: Package the independent transaction engine before building the shell.
+Write-Host "== Step 2c: Building Component Update Engine ==" -ForegroundColor Yellow
+cargo build --locked --release --bin go-claw-update-engine --manifest-path $TAURI_MANIFEST
+if ($LASTEXITCODE -ne 0) { throw "Component update engine build failed" }
+$TAURI_TARGET_DIR = if ($env:CARGO_TARGET_DIR) {
+    [System.IO.Path]::GetFullPath($env:CARGO_TARGET_DIR)
+} else {
+    Join-Path $REPO_ROOT "console\src-tauri\target"
+}
+$ENGINE_EXE = Join-Path $TAURI_TARGET_DIR "release\go-claw-update-engine.exe"
+if (-not (Test-Path -LiteralPath $ENGINE_EXE -PathType Leaf)) {
+    throw "Component update engine artifact is missing"
+}
+Copy-Item -LiteralPath $ENGINE_EXE -Destination (Join-Path $REPO_ROOT "console\src-tauri\binaries\go-claw-update-engine.exe")
+
 # Step 3: Build Tauri app
 Write-Host "== Step 3: Building Tauri App ==" -ForegroundColor Yellow
-$BUNDLE_DIR = Join-Path $REPO_ROOT "console\src-tauri\target\release\bundle"
+$BUNDLE_DIR = Join-Path $TAURI_TARGET_DIR "release\bundle"
 $NSIS_DIR = Join-Path $BUNDLE_DIR "nsis"
 if (Test-Path $NSIS_DIR) {
     Remove-Item -Recurse -Force $NSIS_DIR
@@ -200,8 +246,23 @@ if (Test-Path $NSIS_DIR) {
 
 Set-Location console
 
+Write-Host "Building Tauri bootstrap with the pinned Node runtime..."
+& $NODE_BIN $NPM_CLI run build:tauri-bootstrap
+if ($LASTEXITCODE -ne 0) {
+    throw "Tauri bootstrap build failed"
+}
+
+# The base Tauri config uses `npm` for interactive developer builds. On
+# Windows, an older system npm.cmd can invoke the node.exe beside itself and
+# bypass PATH, even though this release script is pinned to a supported Node.
+# Build the bootstrap explicitly above and disable only Tauri's duplicate hook
+# for these release invocations.
+$TAURI_PREBUILT_FRONTEND_CONFIG = '{"build":{"beforeBuildCommand":""}}'
+
 Write-Host "Building for Windows..."
-npm exec -- tauri build --config src-tauri/tauri.version.conf.json
+& $NODE_BIN $NPM_CLI exec -- tauri build `
+    --config src-tauri/tauri.version.conf.json `
+    --config $TAURI_PREBUILT_FRONTEND_CONFIG
 $tauriExit = $LASTEXITCODE
 
 if ($tauriExit -ne 0) {
@@ -216,18 +277,24 @@ Write-Host "Tauri app built" -ForegroundColor Green
 Write-Host ""
 Write-Host "== Step 4: Building Portable Flavor ==" -ForegroundColor Yellow
 Set-Location console
-npm exec -- tauri build --no-bundle `
+& $NODE_BIN $NPM_CLI exec -- tauri build --no-bundle `
     --config src-tauri/tauri.version.conf.json `
-    --config src-tauri/tauri.portable.conf.json
+    --config src-tauri/tauri.portable.conf.json `
+    --config $TAURI_PREBUILT_FRONTEND_CONFIG
 if ($LASTEXITCODE -ne 0) {
     throw "Portable Tauri build failed"
 }
 Set-Location $REPO_ROOT
 
-$PORTABLE_EXE = Join-Path $REPO_ROOT "console\src-tauri\target\release\qwenpaw-desktop.exe"
+$PORTABLE_EXE = Join-Path $TAURI_TARGET_DIR "release\qwenpaw-desktop.exe"
 $PORTABLE_BINARIES = Join-Path $REPO_ROOT "console\src-tauri\binaries"
 $PORTABLE_STAGER = Join-Path $REPO_ROOT "scripts\pack-tauri\stage_windows_portable.py"
-python $PORTABLE_STAGER `
+$BUILD_PYTHON = if ($env:GO_CLAW_BUILD_PYTHON) {
+    [System.IO.Path]::GetFullPath($env:GO_CLAW_BUILD_PYTHON)
+} else {
+    (Get-Command python -ErrorAction Stop).Source
+}
+& $BUILD_PYTHON $PORTABLE_STAGER `
     --version $VERSION `
     --exe $PORTABLE_EXE `
     --binaries $PORTABLE_BINARIES `

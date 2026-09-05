@@ -112,6 +112,7 @@ copaw = "qwenpaw.cli.main:cli"
 
 [project.optional-dependencies]
 test = [
+    "jsonschema>=4.23,<5",
     "pytest>=8.3.5",
     "pytest-asyncio>=0.23.0",
     "pytest-cov>=6.2.1",

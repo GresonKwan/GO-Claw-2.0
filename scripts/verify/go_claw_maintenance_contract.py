@@ -21,6 +21,7 @@ SEQUENCE_TITLES = (
     "title GO CLAW Windows update success",
     "title GO CLAW Windows update rollback success",
     "title GO CLAW Windows update rollback guard",
+    "title GO CLAW component transaction and recovery",
 )
 
 
@@ -132,7 +133,7 @@ def validate_contract(
         tokens=(RUNTIME_MARKER, *SEQUENCE_TITLES),
     )
     if runtime_doc.count("sequenceDiagram") != len(SEQUENCE_TITLES):
-        errors.append("canonical runtime document must contain five sequences")
+        errors.append("canonical runtime document sequence count mismatch")
 
     pr_template = _read(root, ".github/PULL_REQUEST_TEMPLATE.md", errors)
     _require_tokens(
@@ -192,6 +193,42 @@ def validate_contract(
     )
 
     tauri_text = _read(root, "console/src-tauri/src/lib.rs", errors)
+    provision_path = "src/qwenpaw/app/go_claw_provision.py"
+    provision_text = _read(root, provision_path, errors)
+    _require_order(
+        errors,
+        relative=provision_path,
+        text=provision_text,
+        anchor="async def _provision",
+        tokens=(
+            "if marker_path.exists() or marker_path.is_symlink():",
+            "if credentials_path.exists():",
+            "instance_id = _load_or_create_instance_id(",
+            "allow_create=not _has_existing_identity_evidence(root, working_dir)",
+            "payload = await http_post(",
+        ),
+    )
+    _require_tokens(
+        errors,
+        relative=provision_path,
+        text=provision_text,
+        tokens=(
+            "INSTANCE_ID_RECOVERY_REQUIRED",
+            "def _has_existing_identity_evidence",
+        ),
+    )
+    billing_path = "src/qwenpaw/app/go_claw_billing.py"
+    _require_order(
+        errors,
+        relative=billing_path,
+        text=_read(root, billing_path, errors),
+        anchor="async def _ensure_billing_enrollment",
+        tokens=(
+            "if load_billing_profile() is not None:",
+            "if profile_path.exists() or profile_path.is_symlink():",
+            "instance_id, newapi_subtoken = _load_legacy_identity",
+        ),
+    )
     _require_order(
         errors,
         relative="console/src-tauri/src/lib.rs",
@@ -204,6 +241,19 @@ def validate_contract(
         ),
     )
 
+    portable_path = "console/src-tauri/src/portable.rs"
+    _require_order(
+        errors,
+        relative=portable_path,
+        text=_read(root, portable_path, errors),
+        anchor="pub(crate) fn prepare",
+        tokens=(
+            "if update_lock.is_file()",
+            "crate::update_engine::slots::resolve(&self.root)",
+            "for directory in [",
+            "crate::update_engine::slots::environment",
+        ),
+    )
     updates_text = _read(root, "console/src-tauri/src/updates.rs", errors)
     _require_order(
         errors,
@@ -242,6 +292,65 @@ def validate_contract(
         ),
     )
 
+    engine_path = "console/src-tauri/src/update_engine/bootstrap.rs"
+    engine = _read(root, engine_path, errors)
+    _require_order(
+        errors,
+        relative=engine_path,
+        text=engine,
+        anchor="fn install_verified(",
+        tokens=(
+            "recovery::create(root, &backup, t)",
+            '"updates/installing.lock"',
+            "t.installation_started = true",
+            '"install-locked"',
+            "runtime.stop(root,",
+            '"slot-ready"',
+            '"root-files-ready"',
+            "runtime.healthy(",
+            '"candidate-healthy-stopped"',
+            '"runtime/active-slot.json"',
+            '"metadata-written"',
+            "t.engine_phase = Phase::Committed",
+            "unlock(root, t)",
+        ),
+    )
+    _require_order(
+        errors,
+        relative=engine_path,
+        text=engine,
+        anchor="fn rollback(",
+        tokens=(
+            "bound_lock(root, t)",
+            "t.engine_phase = Phase::RollingBack",
+            "runtime.stop(root,",
+            "recovery::restore(",
+            "runtime.restored(root, t, deadline)",
+            '"restore-complete"',
+            "t.engine_phase = Phase::RolledBack",
+            "unlock(root, t)",
+            "t.engine_phase = Phase::Blocked",
+        ),
+    )
+
+    coordinator_path = "src/qwenpaw/app/go_claw_component_updates.py"
+    coordinator = _read(root, coordinator_path, errors)
+    _require_order(
+        errors,
+        relative=coordinator_path,
+        text=coordinator,
+        anchor="async def install(self,",
+        tokens=(
+            "await self.initialize()",
+            "async with self._lock:",
+            "await self._refresh()",
+            'raise UpdateError("TARGET_CHANGED")',
+            'if transaction["enginePhase"] != "STAGED":',
+            "await self.engine.install(transaction)",
+            'self._install_id = transaction["transactionId"]',
+        ),
+    )
+
     if check_origin:
         origin = _origin_repository(root)
         if origin is None:
@@ -271,7 +380,7 @@ def main(argv: list[str] | None = None) -> int:
         json.dumps(
             {
                 "repository": APPROVED_REPOSITORY,
-                "runtimeOrders": 4,
+                "runtimeOrders": 10,
                 "sequenceDiagrams": len(SEQUENCE_TITLES),
                 "status": "ok",
             },

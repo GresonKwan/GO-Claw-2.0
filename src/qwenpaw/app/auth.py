@@ -15,6 +15,7 @@ Uses only Python stdlib (hashlib, hmac, secrets) to avoid adding new
 dependencies.  The password is stored as a salted SHA-256 hash in
 ``auth.json`` under ``SECRET_DIR``.
 """
+
 from __future__ import annotations
 
 import hashlib
@@ -56,6 +57,7 @@ _PUBLIC_PATHS: frozenset[str] = frozenset(
         "/api/auth/status",
         "/api/auth/register",
         "/api/desktop/shutdown",
+        "/api/desktop/update-readiness",  # Own engine-only challenge auth.
         "/api/version",
         "/api/settings/language",
         "/api/settings/upload-limit",
@@ -691,6 +693,22 @@ class AuthMiddleware(BaseHTTPMiddleware):
     """Middleware that checks Bearer token on protected routes."""
 
     async def dispatch(self, request: Request, call_next):
+        # Native image/video elements cannot attach Authorization headers.
+        # A short-lived, artifact-bound capability is the only alternate
+        # authentication accepted for these two read-only endpoints.
+        if (
+            request.method == "GET"
+            and request.url.path.startswith("/api/console/deliverables/")
+            and request.url.path.endswith(("/thumbnail", "/content"))
+        ):
+            from .deliverables.tickets import verify as verify_media_ticket
+
+            artifact_id = request.url.path.split("/")[-2]
+            if verify_media_ticket(
+                request.query_params.get("ticket"), artifact_id
+            ):
+                request.state.media_ticket_authenticated = True
+                return await call_next(request)
         if self._should_skip_auth(request):
             return await call_next(request)
 

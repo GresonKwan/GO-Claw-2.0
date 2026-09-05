@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
 """Console APIs: push messages, chat, and file upload for chat."""
+
 from __future__ import annotations
 
 import asyncio
@@ -8,6 +9,7 @@ import logging
 import re
 import time
 import uuid
+import unicodedata
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, AsyncGenerator, Dict, Optional, Union
@@ -32,7 +34,6 @@ from ..agent_context import get_agent_for_request
 from ..approvals.display import approval_display_fields
 from ..chats.title_generator import generate_and_update_title
 from ..utils import check_upload_size
-
 
 logger = logging.getLogger(__name__)
 
@@ -66,9 +67,29 @@ MAX_DEBUG_LOG_LINES = 1000
 
 
 def _safe_filename(name: str) -> str:
-    """Safe basename, alphanumeric/./-/_, max 200 chars."""
-    base = Path(name).name if name else "file"
-    return re.sub(r"[^\w.\-]", "_", base)[:200] or "file"
+    """Keep a readable Unicode basename while rejecting Windows separators."""
+    base = (name or "file").replace("\\", "/").rsplit("/", 1)[-1]
+    base = unicodedata.normalize("NFC", base)
+    base = re.sub(r'[<>:"/\\|?*\x00-\x1f]', "_", base).rstrip(" .")
+    return base[:200] or "file"
+
+
+def _validate_attachment_bytes(name: str, data: bytes) -> None:
+    """Reject empty or mislabeled common media without decoding its payload."""
+    if not data:
+        raise HTTPException(status_code=400, detail="EMPTY_ATTACHMENT")
+    suffix = Path(name).suffix.lower()
+    valid = {
+        ".png": data.startswith(b"\x89PNG\r\n\x1a\n"),
+        ".jpg": data.startswith(b"\xff\xd8\xff"),
+        ".jpeg": data.startswith(b"\xff\xd8\xff"),
+        ".webp": len(data) >= 12
+        and data.startswith(b"RIFF")
+        and data[8:12] == b"WEBP",
+        ".mp4": len(data) >= 12 and data[4:8] == b"ftyp",
+    }
+    if suffix in valid and not valid[suffix]:
+        raise HTTPException(status_code=415, detail="INVALID_MEDIA_BYTES")
 
 
 def _extract_placeholder_name(content_parts: list) -> tuple[str, str]:
@@ -346,6 +367,7 @@ async def post_console_upload(
     data = await file.read()
     check_upload_size(data)
     safe_name = _safe_filename(file.filename or "file")
+    _validate_attachment_bytes(safe_name, data)
     stored_name = f"{uuid.uuid4().hex}_{safe_name}"
 
     path = (media_dir / stored_name).resolve()

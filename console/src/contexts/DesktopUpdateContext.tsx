@@ -3,255 +3,199 @@ import {
   useCallback,
   useContext,
   useEffect,
-  useMemo,
   useRef,
   useState,
   type ReactNode,
 } from "react";
 import {
-  checkDesktopUpdate,
-  checkCachedUpdate,
-  downloadDesktopUpdate,
-  installDesktopUpdate,
-  installDownloadedUpdate,
-  onUpdateEvent,
-  type UpdateError,
-  type UpdateProgress,
-} from "../tauri/desktopUpdate";
-import { isDesktopApp } from "../tauri/backendRuntime";
-
-export type UpdatePhase =
-  | "idle"
-  | "checking"
-  | "downloading"
-  | "installing"
-  | "downloaded"
-  | "failed";
+  updatesApi,
+  watchUpdateStatus,
+  type UpdateStatus,
+} from "../api/modules/updates";
 
 interface ContextValue {
-  phase: UpdatePhase;
-  isBackground: boolean;
-  hasUpdate: boolean;
-  supportsLaterInstall: boolean;
-  version: string;
-  body: string;
-  downloaded: number;
-  total: number | null;
-  throughputBps: number;
-  error: UpdateError | null;
-  startInstall: () => Promise<void>;
-  startBackgroundDownload: () => Promise<void>;
-  installDownloaded: () => Promise<void>;
-  retry: () => Promise<void>;
-  dismissFailure: () => void;
+  status: UpdateStatus | null;
+  notifyAvailable: boolean;
+  actionPending: boolean;
+  error: string | null;
+  refresh: () => Promise<void>;
+  check: () => Promise<void>;
+  download: (target?: UpdateStatus) => Promise<void>;
+  install: (target?: UpdateStatus) => Promise<void>;
+  installVersion: (
+    version: string,
+    url: string,
+    signature: string,
+  ) => Promise<void>;
 }
-
-const DesktopUpdateContext = createContext<ContextValue | null>(null);
-
-const THROUGHPUT_WINDOW_MS = 5_000;
-
-function toErrorMessage(err: unknown): string {
-  if (typeof err === "string") return err;
-  if (err instanceof Error) return err.message;
-  return JSON.stringify(err);
-}
-
-export function DesktopUpdateProvider({ children }: { children: ReactNode }) {
-  const [phase, setPhase] = useState<UpdatePhase>("idle");
-  const [isBackground, setIsBackground] = useState(false);
-  const [hasUpdate, setHasUpdate] = useState(false);
-  const [supportsLaterInstall, setSupportsLaterInstall] = useState(false);
-  const [version, setVersion] = useState("");
-  const [body, setBody] = useState("");
-  const [downloaded, setDownloaded] = useState(0);
-  const [total, setTotal] = useState<number | null>(null);
-  const [throughputBps, setThroughputBps] = useState(0);
-  const [error, setError] = useState<UpdateError | null>(null);
-
-  const samplesRef = useRef<{ t: number; downloaded: number }[]>([]);
-
-  // Probe on mount: check remote update + check cached update on disk.
-  useEffect(() => {
-    if (!isDesktopApp()) return;
-    let cancelled = false;
-
-    // Check if there's a cached (already downloaded) update on disk.
-    checkCachedUpdate()
-      .then((cachedVersion) => {
-        if (cancelled || !cachedVersion) return;
-        setVersion(cachedVersion);
-        setHasUpdate(true);
-        setSupportsLaterInstall(true);
-        setPhase("downloaded");
-        setIsBackground(true);
-      })
-      .catch(() => {});
-
-    // Also check remote for new updates.
-    checkDesktopUpdate()
-      .then((info) => {
-        if (cancelled || !info) return;
-        setVersion((prev) => prev || info.version);
-        setBody(info.body?.trim() ?? "");
-        setHasUpdate(true);
-        setSupportsLaterInstall(Boolean(info.supportsLaterInstall));
-      })
-      .catch((err) => {
-        console.warn("[updates] desktop update check failed", err);
-      });
-
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
-  const handleProgress = useCallback((p: UpdateProgress) => {
-    const now = Date.now();
-    samplesRef.current.push({ t: now, downloaded: p.downloaded });
-    samplesRef.current = samplesRef.current.filter(
-      (s) => now - s.t <= THROUGHPUT_WINDOW_MS,
-    );
-    const oldest = samplesRef.current[0];
-    const dt = oldest ? (now - oldest.t) / 1000 : 0;
-    const dBytes = oldest ? p.downloaded - oldest.downloaded : 0;
-    setPhase("downloading");
-    setDownloaded(p.downloaded);
-    setTotal(p.total ?? null);
-    setThroughputBps(dt > 0 ? Math.max(0, dBytes / dt) : 0);
-  }, []);
-
-  const beginUpdate = useCallback((background: boolean) => {
-    samplesRef.current = [];
-    setIsBackground(background);
-    setPhase("checking");
-    setDownloaded(0);
-    setTotal(null);
-    setThroughputBps(0);
-    setError(null);
-  }, []);
-
-  // Subscribe to Rust-side update:* events.
-  useEffect(() => {
-    if (!isDesktopApp()) return;
-    let unlisten: (() => void) | null = null;
-    let cancelled = false;
-    onUpdateEvent({
-      onCheckStart: () => setPhase("checking"),
-      onDownloadProgress: handleProgress,
-      onInstallStart: () => setPhase("installing"),
-      onDownloadDone: (payload) => {
-        setPhase("downloaded");
-        setVersion(payload.version);
-      },
-      onError: (err) => {
-        setPhase("failed");
-        setError(err);
-      },
-    }).then((u) => {
-      if (cancelled) u();
-      else unlisten = u;
-    });
-    return () => {
-      cancelled = true;
-      unlisten?.();
-    };
-  }, [handleProgress]);
-
-  // "Install and Restart" immediate full takeover path.
-  const startInstall = useCallback(async () => {
-    beginUpdate(false);
-    try {
-      await installDesktopUpdate();
-    } catch (err) {
-      setPhase("failed");
-      setError({ stage: "check", kind: "other", message: toErrorMessage(err) });
-    }
-  }, [beginUpdate]);
-
-  // "Update Later" caches the update in the background, no UI takeover.
-  const startBackgroundDownload = useCallback(async () => {
-    beginUpdate(true);
-    try {
-      await downloadDesktopUpdate();
-    } catch (err) {
-      setPhase("failed");
-      setError({ stage: "check", kind: "other", message: toErrorMessage(err) });
-    }
-  }, [beginUpdate]);
-
-  // Install a previously downloaded update.
-  const installDownloadedFn = useCallback(async () => {
-    setIsBackground(false);
-    setPhase("installing");
-    setError(null);
-    try {
-      await installDownloadedUpdate();
-    } catch (err) {
-      setPhase("failed");
-      setIsBackground(false);
-      setError({
-        stage: "install",
-        kind: "other",
-        message: toErrorMessage(err),
-      });
-    }
-  }, []);
-
-  const dismissFailure = useCallback(() => {
-    setPhase("idle");
-    setError(null);
-    setIsBackground(false);
-  }, []);
-
-  const value = useMemo<ContextValue>(
-    () => ({
-      phase,
-      isBackground,
-      hasUpdate,
-      supportsLaterInstall,
-      version,
-      body,
-      downloaded,
-      total,
-      throughputBps,
-      error,
-      startInstall,
-      startBackgroundDownload,
-      installDownloaded: installDownloadedFn,
-      retry: startInstall,
-      dismissFailure,
-    }),
-    [
-      phase,
-      isBackground,
-      hasUpdate,
-      supportsLaterInstall,
-      version,
-      body,
-      downloaded,
-      total,
-      throughputBps,
-      error,
-      startInstall,
-      startBackgroundDownload,
-      installDownloadedFn,
-      dismissFailure,
-    ],
-  );
-
+const UpdateContext = createContext<ContextValue | null>(null);
+export function updateErrorCode(error: unknown) {
+  const message = error instanceof Error ? error.message : "";
   return (
-    <DesktopUpdateContext.Provider value={value}>
+    message.match(/^([A-Z][A-Z0-9_]{1,127})(?:$|\s|-)/)?.[1] ??
+    "UPDATE_REQUEST_FAILED"
+  );
+}
+export function shouldAcceptStatus(
+  current: UpdateStatus | null,
+  incoming: UpdateStatus,
+) {
+  if (current?.schemaVersion !== 2) return true;
+  return incoming.schemaVersion === 2 && incoming.revision! > current.revision!;
+}
+
+/** Shared by browser and WebView. No Tauri update IPC or per-widget polling. */
+export function DesktopUpdateProvider({ children }: { children: ReactNode }) {
+  const [status, setStatus] = useState<UpdateStatus | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [actionPending, setPending] = useState(false);
+  const current = useRef<UpdateStatus | null>(null);
+  const refreshTask = useRef<Promise<void> | null>(null);
+  const actionTask = useRef<Promise<void> | null>(null);
+  const lastRefresh = useRef(0);
+
+  const accept = useCallback((next: UpdateStatus | null) => {
+    if (!next) {
+      current.current = null;
+      setStatus(null);
+      return;
+    }
+    if (shouldAcceptStatus(current.current, next)) {
+      current.current = next;
+      setStatus(next);
+    }
+  }, []);
+
+  const refresh = useCallback(() => {
+    if (refreshTask.current) return refreshTask.current;
+    const task = (async () => {
+      try {
+        accept(await updatesApi.status());
+      } catch (failure) {
+        setError(updateErrorCode(failure));
+      } finally {
+        lastRefresh.current = Date.now();
+      }
+    })().finally(() => {
+      refreshTask.current = null;
+    });
+    refreshTask.current = task;
+    return task;
+  }, [accept]);
+
+  useEffect(() => {
+    let disposed = false;
+    let stream: AbortController | null = null;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    let wake: (() => void) | undefined;
+    const pause = (ms: number) =>
+      new Promise<void>((resolve) => {
+        wake = resolve;
+        timer = setTimeout(resolve, ms);
+      });
+    const onFocus = () => {
+      if (!document.hidden && Date.now() - lastRefresh.current >= 1000)
+        void refresh();
+    };
+    const onVisibility = () => {
+      stream?.abort();
+      clearTimeout(timer);
+      wake?.();
+      onFocus();
+    };
+    void (async () => {
+      while (!disposed) {
+        await refresh();
+        if (disposed) return;
+        if (!document.hidden && current.current?.schemaVersion === 2) {
+          stream = new AbortController();
+          try {
+            await watchUpdateStatus(
+              stream.signal,
+              accept,
+              current.current.revision,
+            );
+          } catch {
+            // Stream failure falls back to one shared ten-second poll.
+          }
+        }
+        if (!disposed) await pause(document.hidden ? 60_000 : 10_000);
+      }
+    })();
+    window.addEventListener("focus", onFocus);
+    window.addEventListener("online", onVisibility);
+    document.addEventListener("visibilitychange", onVisibility);
+    return () => {
+      disposed = true;
+      stream?.abort();
+      clearTimeout(timer);
+      wake?.();
+      window.removeEventListener("focus", onFocus);
+      window.removeEventListener("online", onVisibility);
+      document.removeEventListener("visibilitychange", onVisibility);
+    };
+  }, [accept, refresh]);
+
+  const action = useCallback(
+    (operation: () => Promise<UpdateStatus | null>) => {
+      if (actionTask.current) return actionTask.current;
+      setPending(true);
+      setError(null);
+      const task = (async () => {
+        try {
+          accept(await operation());
+        } catch (failure) {
+          setError(updateErrorCode(failure));
+          await refresh();
+        } finally {
+          setPending(false);
+        }
+      })().finally(() => {
+        actionTask.current = null;
+      });
+      actionTask.current = task;
+      return task;
+    },
+    [accept, refresh],
+  );
+
+  const notifyAvailable =
+    status?.schemaVersion === 2
+      ? status.notifyAvailable === true
+      : Boolean(
+          status?.latest?.isNewer &&
+            status.phase !== "installing" &&
+            status.phase !== "idle",
+        );
+  return (
+    <UpdateContext.Provider
+      value={{
+        status,
+        notifyAvailable,
+        actionPending,
+        error,
+        refresh,
+        check: () => action(updatesApi.check),
+        download: (target) =>
+          action(() =>
+            updatesApi.download(target ?? current.current ?? undefined),
+          ),
+        install: (target) =>
+          action(() =>
+            updatesApi.install(target ?? current.current ?? undefined),
+          ),
+        installVersion: (version, url, signature) =>
+          action(() => updatesApi.installVersion(version, url, signature)),
+      }}
+    >
       {children}
-    </DesktopUpdateContext.Provider>
+    </UpdateContext.Provider>
   );
 }
 
-export function useDesktopUpdate(): ContextValue {
-  const ctx = useContext(DesktopUpdateContext);
-  if (!ctx) {
-    throw new Error(
-      "useDesktopUpdate must be used inside <DesktopUpdateProvider>",
-    );
-  }
-  return ctx;
+export function useDesktopUpdate() {
+  const context = useContext(UpdateContext);
+  if (!context)
+    throw new Error("useDesktopUpdate requires DesktopUpdateProvider");
+  return context;
 }

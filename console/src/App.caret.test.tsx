@@ -3,7 +3,10 @@ import { describe, expect, it } from "vitest";
 
 describe("browser caret policy", () => {
   it("hides static-text carets and restores editable carets", () => {
-    const source = readFileSync(`${process.cwd()}/src/App.tsx`, "utf8");
+    const source = readFileSync(`${process.cwd()}/src/App.tsx`, "utf8").replace(
+      /\r\n/g,
+      "\n",
+    );
     expect(source).toContain(`#root,
 #root * {
   caret-color: transparent;

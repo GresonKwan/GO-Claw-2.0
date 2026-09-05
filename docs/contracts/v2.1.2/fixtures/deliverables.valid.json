@@ -1,0 +1,24 @@
+{
+  "schemaVersion": 1,
+  "agentId": "default",
+  "chatId": "00000000-0000-4000-8000-000000000001",
+  "turnId": "00000000-0000-4000-8000-000000000001",
+  "responseId": "00000000-0000-4000-8000-000000000001",
+  "revision": 1,
+  "status": "ready",
+  "items": [
+    {
+      "id": "00000000-0000-4000-8000-000000000001",
+      "turnId": "00000000-0000-4000-8000-000000000001",
+      "name": "交付图片.png",
+      "kind": "image",
+      "mimeType": "image/png",
+      "sizeBytes": 10,
+      "exists": true,
+      "directOpenAllowed": false,
+      "previewAllowed": true,
+      "previewKind": "image",
+      "createdAt": "2026-09-04T00:00:00Z"
+    }
+  ]
+}

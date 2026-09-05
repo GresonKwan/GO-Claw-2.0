@@ -63,6 +63,83 @@ def _valid_fixture(root: Path) -> None:
     _write(root, ".github/workflows/check.yml", "name: local\n")
     _write(
         root,
+        "src/qwenpaw/app/go_claw_component_updates.py",
+        "\n".join(
+            (
+                "async def install(self,",
+                "await self.initialize()",
+                "async with self._lock:",
+                "await self._refresh()",
+                'raise UpdateError("TARGET_CHANGED")',
+                'if transaction["enginePhase"] != "STAGED":',
+                "await self.engine.install(transaction)",
+                'self._install_id = transaction["transactionId"]',
+            )
+        ),
+    )
+    _write(
+        root,
+        "console/src-tauri/src/update_engine/bootstrap.rs",
+        "\n".join(
+            (
+                "fn install_verified(",
+                "recovery::create(root, &backup, t)",
+                '"updates/installing.lock"',
+                "t.installation_started = true",
+                '"install-locked"',
+                "runtime.stop(root,",
+                '"slot-ready"',
+                '"root-files-ready"',
+                "runtime.healthy(",
+                '"candidate-healthy-stopped"',
+                '"runtime/active-slot.json"',
+                '"metadata-written"',
+                "t.engine_phase = Phase::Committed",
+                "unlock(root, t)",
+                "fn rollback(",
+                "bound_lock(root, t)",
+                "t.engine_phase = Phase::RollingBack",
+                "runtime.stop(root,",
+                "recovery::restore(",
+                "runtime.restored(root, t, deadline)",
+                '"restore-complete"',
+                "t.engine_phase = Phase::RolledBack",
+                "unlock(root, t)",
+                "t.engine_phase = Phase::Blocked",
+            )
+        ),
+    )
+    _write(
+        root,
+        "src/qwenpaw/app/go_claw_provision.py",
+        "\n".join(
+            (
+                "INSTANCE_ID_RECOVERY_REQUIRED",
+                "def _has_existing_identity_evidence():",
+                "async def _provision():",
+                "if marker_path.exists() or marker_path.is_symlink():",
+                "if credentials_path.exists():",
+                "instance_id = _load_or_create_instance_id(",
+                "allow_create=not _has_existing_identity_evidence"
+                "(root, working_dir)",
+                "payload = await http_post(",
+            )
+        ),
+    )
+    _write(
+        root,
+        "src/qwenpaw/app/go_claw_billing.py",
+        "\n".join(
+            (
+                "async def _ensure_billing_enrollment():",
+                "if load_billing_profile() is not None:",
+                "if profile_path.exists() or profile_path.is_symlink():",
+                "instance_id, newapi_subtoken = _load_legacy_identity",
+            )
+        ),
+    )
+    _write(
+        root,
         "src/qwenpaw/app/_app.py",
         "\n".join(
             (
@@ -90,6 +167,19 @@ def _valid_fixture(root: Path) -> None:
                 "client::begin_client_launch",
                 "backend::setup",
             ),
+        ),
+    )
+    _write(
+        root,
+        "console/src-tauri/src/portable.rs",
+        "\n".join(
+            (
+                "pub(crate) fn prepare",
+                "if update_lock.is_file()",
+                "crate::update_engine::slots::resolve(&self.root)",
+                "for directory in [",
+                "crate::update_engine::slots::environment",
+            )
         ),
     )
     _write(
@@ -179,6 +269,23 @@ def test_rejects_runtime_order_drift(tmp_path):
     assert any("runtime order no longer matches" in error for error in errors)
 
 
+def test_rejects_removed_old_identity_guard(tmp_path):
+    _valid_fixture(tmp_path)
+    path = tmp_path / "src/qwenpaw/app/go_claw_provision.py"
+    path.write_text(
+        path.read_text("utf-8").replace(
+            "allow_create=not _has_existing_identity_evidence"
+            "(root, working_dir)",
+            "allow_create=True",
+        ),
+        encoding="utf-8",
+    )
+    assert any(
+        "allow_create" in error
+        for error in MODULE.validate_contract(tmp_path, check_origin=False)
+    )
+
+
 def test_rejects_missing_sequence(tmp_path):
     _valid_fixture(tmp_path)
     document = tmp_path / "docs/GO-CLAW-运行时序与维护规则.zh.md"
@@ -189,6 +296,20 @@ def test_rejects_missing_sequence(tmp_path):
     errors = MODULE.validate_contract(tmp_path, check_origin=False)
 
     assert any(MODULE.SEQUENCE_TITLES[-1] in error for error in errors)
+
+
+def test_rejects_slot_resolution_after_shared_data_creation(tmp_path):
+    _valid_fixture(tmp_path)
+    path = tmp_path / "console/src-tauri/src/portable.rs"
+    text = path.read_text("utf-8").replace(
+        "crate::update_engine::slots::resolve(&self.root)\nfor directory in [",
+        "for directory in [\ncrate::update_engine::slots::resolve(&self.root)",
+    )
+    path.write_text(text, encoding="utf-8")
+    assert any(
+        "runtime order no longer matches" in error
+        for error in MODULE.validate_contract(tmp_path, check_origin=False)
+    )
 
 
 def test_normalizes_supported_github_remote_urls():
@@ -208,4 +329,34 @@ def test_normalizes_supported_github_remote_urls():
             f"ssh://git@github.com/{expected}.git",
         )
         == expected
+    )
+
+
+def test_rejects_component_pointer_before_candidate_health(tmp_path):
+    _valid_fixture(tmp_path)
+    path = tmp_path / "console/src-tauri/src/update_engine/bootstrap.rs"
+    text = path.read_text("utf-8").replace(
+        '"candidate-healthy-stopped"\n"runtime/active-slot.json"',
+        '"runtime/active-slot.json"\n"candidate-healthy-stopped"',
+    )
+    path.write_text(text, encoding="utf-8")
+    assert any(
+        "runtime order no longer matches" in error
+        for error in MODULE.validate_contract(tmp_path, check_origin=False)
+    )
+
+
+def test_rejects_component_unlock_before_complete_restore(tmp_path):
+    _valid_fixture(tmp_path)
+    path = tmp_path / "console/src-tauri/src/update_engine/bootstrap.rs"
+    text = path.read_text("utf-8").replace(
+        '"restore-complete"\nt.engine_phase = Phase::RolledBack\n'
+        "unlock(root, t)",
+        'unlock(root, t)\n"restore-complete"\n'
+        "t.engine_phase = Phase::RolledBack",
+    )
+    path.write_text(text, encoding="utf-8")
+    assert any(
+        "runtime order no longer matches" in error
+        for error in MODULE.validate_contract(tmp_path, check_origin=False)
     )

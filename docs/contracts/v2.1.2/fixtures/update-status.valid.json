@@ -1,0 +1,31 @@
+{
+  "schemaVersion": 2,
+  "revision": 4,
+  "enabled": true,
+  "currentVersion": "2.1.1",
+  "phase": "downloaded",
+  "enginePhase": "STAGED",
+  "latest": {
+    "version": "2.1.2",
+    "notes": "",
+    "pubDate": "2026-09-04T00:00:00Z",
+    "isNewer": true
+  },
+  "targetManifestSha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "transactionId": "00000000-0000-4000-8000-000000000001",
+  "activeSlot": "legacy",
+  "targetSlot": "A",
+  "changedComponents": [
+    "backend-core"
+  ],
+  "downloadBytes": 200,
+  "fullBytes": 200,
+  "estimateOnly": false,
+  "downloaded": 200,
+  "total": 200,
+  "progressPercent": 90,
+  "installationStarted": false,
+  "notifyAvailable": true,
+  "error": "",
+  "failure": null
+}

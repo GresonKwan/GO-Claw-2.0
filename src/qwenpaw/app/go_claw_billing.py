@@ -18,6 +18,7 @@ import json
 import logging
 import os
 import secrets
+import uuid
 from collections.abc import Awaitable, Callable
 from datetime import datetime
 from pathlib import Path
@@ -27,6 +28,7 @@ from urllib.parse import urlparse
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from ..utils.io_utils import write_json_atomic
+from ..__version__ import __version__
 from .go_claw_credentials import CREDENTIALS_RELATIVE_PATH, BatchCredentials
 from .go_claw_provision import (
     INSTANCE_ID_FILENAME,
@@ -36,7 +38,7 @@ from .go_claw_provision import (
 logger = logging.getLogger(__name__)
 
 BILLING_PROFILE_FILENAME = ".go-claw-billing.json"
-CLIENT_VERSION = "2.1.1"
+CLIENT_VERSION = __version__
 REQUEST_TIMEOUT_SECONDS = 10
 APPROVED_BILLING_BASE_URL = "https://goclaw.host/go-claw/billing"
 
@@ -72,7 +74,12 @@ class BillingProfile(_StrictModel):
         parsed = urlparse(value)
         if parsed.scheme != "https" or not parsed.netloc:
             raise ValueError("billing base URL must use HTTPS")
-        if parsed.username or parsed.password or parsed.query or parsed.fragment:
+        if (
+            parsed.username
+            or parsed.password
+            or parsed.query
+            or parsed.fragment
+        ):
             raise ValueError("billing base URL contains forbidden components")
         normalized = value.rstrip("/")
         if normalized != APPROVED_BILLING_BASE_URL:
@@ -82,11 +89,14 @@ class BillingProfile(_StrictModel):
 
 class EnrollmentChallenge(_StrictModel):
     schema_version: Literal[1] = Field(alias="schemaVersion")
-    challenge_id: str = Field(alias="challengeId", min_length=36, max_length=36)
+    challenge_id: str = Field(
+        alias="challengeId", min_length=36, max_length=36
+    )
     nonce: str = Field(min_length=43, max_length=43)
     expires_at: str = Field(alias="expiresAt", min_length=20, max_length=40)
     canonical_format: Literal[
-        "goclaw-billing-enrollment-v1\\n{instanceId}\\n{challengeId}\\n{nonce}\\n{expiresAt}"
+        "goclaw-billing-enrollment-v1\\n{instanceId}\\n{challengeId}"
+        "\\n{nonce}\\n{expiresAt}"
     ] = Field(alias="canonicalFormat")
 
 
@@ -107,7 +117,7 @@ def portable_billing_profile_path() -> Path | None:
 
 
 def load_billing_profile() -> BillingProfile | None:
-    """Load and validate the profile; malformed data is treated as unavailable."""
+    """Validate the profile; malformed data is treated as unavailable."""
     path = portable_billing_profile_path()
     if path is None or path.is_symlink() or not path.is_file():
         return None
@@ -119,7 +129,9 @@ def load_billing_profile() -> BillingProfile | None:
 
 
 def _load_enrollment_url(root: Path) -> str | None:
-    config_path = root / CREDENTIALS_RELATIVE_PATH.parent / PROVISION_CONFIG_FILENAME
+    config_path = (
+        root / CREDENTIALS_RELATIVE_PATH.parent / PROVISION_CONFIG_FILENAME
+    )
     try:
         raw = json.loads(config_path.read_text("utf-8"))
         explicit = str(raw.get("billingEnrollmentUrl", "")).strip()
@@ -142,7 +154,10 @@ def _load_enrollment_url(root: Path) -> str | None:
 
 
 def _load_legacy_identity(root: Path, working_dir: Path) -> tuple[str, str]:
-    instance_id = (working_dir / INSTANCE_ID_FILENAME).read_text("utf-8").strip()
+    identity_path = working_dir / INSTANCE_ID_FILENAME
+    if identity_path.is_symlink():
+        raise ValueError("INSTANCE_ID_RECOVERY_REQUIRED")
+    instance_id = str(uuid.UUID(identity_path.read_text("utf-8").strip()))
     credentials_path = root / CREDENTIALS_RELATIVE_PATH
     credentials = BatchCredentials.model_validate_json(
         credentials_path.read_text("utf-8"),
@@ -168,7 +183,9 @@ async def _default_http_post(url: str, body: dict[str, Any]) -> dict[str, Any]:
 
 
 def _request_nonce() -> str:
-    return base64.urlsafe_b64encode(secrets.token_bytes(18)).decode().rstrip("=")
+    return (
+        base64.urlsafe_b64encode(secrets.token_bytes(18)).decode().rstrip("=")
+    )
 
 
 async def ensure_billing_enrollment(
@@ -177,10 +194,15 @@ async def ensure_billing_enrollment(
 ) -> bool:
     """Best-effort idempotent enrollment for portable legacy instances."""
     try:
-        return await _ensure_billing_enrollment(http_post or _default_http_post)
-    except Exception:  # noqa: BLE001 - billing cannot break application startup
+        return await _ensure_billing_enrollment(
+            http_post or _default_http_post
+        )
+    except (
+        Exception
+    ):  # noqa: BLE001 - billing cannot break application startup
         logger.warning(
-            "GO CLAW billing enrollment deferred; core application is unaffected",
+            "GO CLAW billing enrollment deferred; "
+            "core application is unaffected",
             exc_info=False,
         )
         return False
@@ -192,6 +214,12 @@ async def _ensure_billing_enrollment(http_post: HttpPost) -> bool:
         return True
     if load_billing_profile() is not None:
         return True
+
+    if profile_path.exists() or profile_path.is_symlink():
+        # An invalid existing ledger identity needs recovery, not a new
+        # enrollment that could replace the customer's account binding.
+        logger.warning("GO CLAW billing profile requires recovery; preserved")
+        return False
 
     working_dir = profile_path.parent
     root = working_dir.parent
@@ -240,7 +268,9 @@ async def _ensure_billing_enrollment(http_post: HttpPost) -> bool:
     try:
         os.chmod(profile_path, 0o600)
     except OSError:
-        logger.debug("Could not tighten billing profile mode on this filesystem")
+        logger.debug(
+            "Could not tighten billing profile mode on this filesystem"
+        )
     logger.info(
         "GO CLAW billing enrollment ready (account=%s...)",
         result.billing.account_id[:8],

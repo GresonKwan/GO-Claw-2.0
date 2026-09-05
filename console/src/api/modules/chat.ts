@@ -44,8 +44,17 @@ export const chatApi = {
     if (!filename) return "";
     if (filename.startsWith("http://") || filename.startsWith("https://"))
       return filename;
-    let cleaned = filename.replace(/^\/+/, "");
-    const path = `${FILES_PREVIEW}/${cleaned}`;
+    // Encode exactly once per path segment.  encodeURI leaves '#', '?' and
+    // existing '%' escapes ambiguous; those characters are valid in uploaded
+    // filenames and must never become a fragment/query or a second decode.
+    const cleaned = filename.replace(/\\/g, "/");
+    const encoded = cleaned
+      .split("/")
+      // Uvicorn/Starlette decode routed path parameters twice. Protect a
+      // literal percent for that stack while leaving UTF-8 escapes normal.
+      .map((segment) => encodeURIComponent(segment.replace(/%/g, "%25")))
+      .join("/");
+    const path = `${FILES_PREVIEW}/${encoded}`;
     const url = getApiUrl(path);
 
     const token = getApiToken();

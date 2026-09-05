@@ -17,6 +17,7 @@ import json as _json
 import logging
 import os
 import sys
+from uuid import uuid4
 from datetime import datetime
 from pathlib import Path
 from typing import Any, AsyncGenerator, Dict, List, Optional, Union
@@ -45,7 +46,6 @@ from ..base import (
     TextContent,
 )
 from ..utils import file_url_to_local_path
-
 
 logger = logging.getLogger(__name__)
 
@@ -387,6 +387,7 @@ class ConsoleChannel(BaseChannel):
         self._clear_session_turn_usage(session_id)
         user_id = getattr(request, "user_id", "") or ""
         channel_name = getattr(request, "channel", "") or self.channel
+        touched_chat = None
 
         # Refresh the chat's updated_at so the console session list surfaces
         # this new message as the latest activity (issue #6131). stream_one is
@@ -398,7 +399,7 @@ class ConsoleChannel(BaseChannel):
             try:
                 chat_mgr = getattr(self._workspace, "chat_manager", None)
                 if chat_mgr is not None:
-                    await chat_mgr.touch_chat_by_session(
+                    touched_chat = await chat_mgr.touch_chat_by_session(
                         session_id=session_id,
                         channel=channel_name,
                         user_id=user_id or None,
@@ -409,6 +410,17 @@ class ConsoleChannel(BaseChannel):
                     session_id[:30],
                     exc_info=True,
                 )
+
+        deliverable_token = None
+        if touched_chat is not None and self._workspace is not None:
+            from ...deliverables.collector import bind_turn
+
+            deliverable_token = bind_turn(
+                agent_id=self._workspace.agent_id,
+                chat_id=touched_chat.id,
+                turn_id=uuid4().hex,
+                workspace_root=self._workspace.workspace_dir,
+            )
 
         try:
             send_meta = getattr(request, "channel_meta", None) or {}
@@ -439,6 +451,40 @@ class ConsoleChannel(BaseChannel):
                     if event_output is not None:
                         for message in event_output:
                             event.output.append(message)
+                    if deliverable_token is not None:
+                        from ...deliverables.collector import finalize_turn
+                        from ...deliverables.store import DeliverablesStore
+
+                        final_message_id = next(
+                            (
+                                str(getattr(message, "id", ""))
+                                for message in reversed(event.output)
+                                if getattr(message, "id", None)
+                            ),
+                            uuid4().hex,
+                        )
+                        response_id = f"response_{final_message_id}"
+                        event.id = response_id
+                        final_text = "\n".join(
+                            str(getattr(part, "text", "") or "")
+                            for message in event.output
+                            for part in (
+                                getattr(message, "content", None) or []
+                            )
+                            if getattr(part, "text", None)
+                        )
+                        manifest = finalize_turn(response_id, final_text)
+                        if manifest is not None:
+                            envelope = DeliverablesStore().envelope(
+                                manifest,
+                                workspace_root=self._workspace.workspace_dir,
+                            )
+                            event.metadata = dict(
+                                getattr(event, "metadata", None) or {}
+                            )
+                            event.metadata["goClawDeliverables"] = (
+                                envelope.model_dump(mode="json")
+                            )
 
                 data = self._serialize_event_for_sse(event)
                 yield f"data: {data}\n\n"
@@ -497,6 +543,11 @@ class ConsoleChannel(BaseChannel):
             logger.exception("console process/reply failed")
             err_msg = str(e).strip() or "An error occurred while processing."
             self._print_error(err_msg)
+        finally:
+            if deliverable_token is not None:
+                from ...deliverables.collector import reset_turn
+
+                reset_turn(deliverable_token)
 
     async def consume_one(self, payload: Any) -> None:
         """Process one payload; drain stream_one (queue/terminal)."""

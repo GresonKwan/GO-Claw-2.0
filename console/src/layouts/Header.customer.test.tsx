@@ -155,45 +155,21 @@ describe("customer Header", () => {
     );
   });
 
-  it("shows local GO CLAW update guidance and opens release details on web", async () => {
+  it("keeps the version popup without a version dot or upstream update channel", async () => {
     const user = userEvent.setup();
     runtime.onDesktop = false;
-    runtime.apiVersion = "1.0.0";
-    fetchMock.mockResolvedValue({
-      json: vi.fn().mockResolvedValue({
-        releases: {
-          "2.0.0": [{ upload_time_iso_8601: "2020-01-01T00:00:00Z" }],
-        },
-      }),
-    });
+    runtime.apiVersion = "2.1.1";
     vi.stubGlobal("fetch", fetchMock);
     renderHeader();
-
-    const versionBadge = await screen.findByText("v1.0.0");
-    await waitFor(() =>
-      expect(document.querySelector(".ant-badge-dot")).toBeInTheDocument(),
-    );
+    const versionBadge = await screen.findByText("v2.1.1");
+    expect(document.querySelector(".ant-badge-dot")).not.toBeInTheDocument();
     await user.click(versionBadge);
-
+    await waitFor(() => expect(screen.getByRole("dialog")).toBeInTheDocument());
     expect(
-      screen.getByRole("heading", { name: "如何更新 GO CLAW" }),
-    ).toBeInTheDocument();
-    expect(screen.getByText("pip install -U qwenpaw")).toBeInTheDocument();
-    const releaseDetails = screen.getByRole("button", {
-      name: "查看更新详情",
-    });
-    await user.click(releaseDetails);
-
-    expect(openExternalLink).toHaveBeenCalledWith(
-      "https://qwenpaw.agentscope.io/release-notes?lang=zh",
-    );
-    expect(fetchMock).toHaveBeenCalledTimes(1);
-    expect(fetchMock).toHaveBeenCalledWith(
-      "https://pypi.org/pypi/qwenpaw/json",
-    );
-    expect(
-      fetchMock.mock.calls.some(([url]) => String(url).includes("faq.")),
-    ).toBe(false);
+      screen.queryByText("pip install -U qwenpaw"),
+    ).not.toBeInTheDocument();
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(openExternalLink).not.toHaveBeenCalled();
   });
 
   it("opens desktop DevTools after eight rapid logo clicks", async () => {

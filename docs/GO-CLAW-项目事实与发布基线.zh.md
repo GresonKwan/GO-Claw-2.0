@@ -1,11 +1,86 @@
 # GO CLAW 项目事实与发布基线
 
-> 状态：当前有效。最后现场复核：2026-09-02（Asia/Shanghai）。
+> 状态：当前有效。最后现场复核：2026-09-05（Asia/Shanghai）。
 >
 > 本文只记录“现在是什么”和“发布前必须成立什么”。历史变更见
 > `GO-CLAW-变更台账.zh.md`，操作步骤见各专题文档，尚未实施的内容不得写成现状。
 
+2026-09-05 开发态补充：`codex/v2.1.2` 已把产品唯一版本升到 2.1.2，并完成组件 A/B 引擎、
+Bridge、双橙点更新 UI、技能 Banner、交付产物、附件 AT-03 修复和 draft Release 工作流的代码接线。
+同日已完成一次本地**未签名** Main Full Build、完整 portable 结构检查和实际 full staging 的两次确定性
+组件分包；RC 已在 F 盘新建隔离目录真实启动，未覆盖根产品或数据。真实签名资产、客户盘 A/B、
+跨版本余额回读及全部五种媒体能力的本轮复验尚未完成。因此当前事实仍是“未发布、生产更新入口未切换”，
+不能把源码版本、本地 RC 或自动测试解释为线上 v2.1.2 已可更新。
+
+本地构建证据（不具备发布资格）：
+
+- NSIS：`D:\GO-CLAW-v212-build-work\target-main-b\release\bundle\nsis\GO CLAW_2.1.2_x64-setup.exe`，
+  622564466 字节，SHA-256 `261eda38833fa41e9bfb018a7f71beff1ea71de06b24b4994422d8b7f44cabcb`；
+- Portable ZIP：`D:\GO-CLAW-v212-build-work\dist-main-0905b\GO-CLAW-Portable-2.1.2-Windows-x64.zip`，
+  634905818 字节，SHA-256 `08b945378715f07f64abc482606554c22ad4df988793189c5894e5310a19f610`；
+- ZIP 共 13264 个条目、解压后 1432526282 字节；壳、后端、独立更新引擎、Node/Python runtime、
+  qwen-image/wan27 种子均存在，无路径穿越、`credentials.json`、`provision.json` 或私钥文件；
+- 上述 EXE 的 Windows Authenticode 状态为 `NotSigned`；这与 Tauri updater/minisign 是两套独立机制。
+  Authenticode 不是 v2.1.2 技术发布硬门禁，但本地构建未注入 Tauri 私钥、没有组成正式 sidecar/目录
+  签名链，因此该批本地产物仍不得上传、发布或切换生产源；正式资产必须由已有 CI Tauri key 构建；
+- `F:\GO-CLAW-v2.1.2-RC-0905` 为隔离副本，13264 个文件、1432526282 字节，8 个关键文件哈希
+  与 D 盘 staging 一致；F 根目录现有 `data`、`secrets`、产品 EXE 和聊天记录未修改；
+- 2026-09-05 实际启动后，壳/后端进程路径均归属该隔离目录，`/api/version` 为 2.1.2、
+  `/api/healthz` 为 ok 且加载 5 个预置员工；`qwen-image-tool`、`wan27-tool` 均为
+  `enabled=true/loaded=true`，日志确认 5 个 workspace 注入媒体工具，无异常栈；
+- 浏览器真实页面确认版本、5 员工、算力充值入口及技能 Banner 的标题、副标题和右侧按钮。公共包按
+  凭据边界不携带 `credentials.json`/`provision.json`，所以该隔离实例的额度为 404、模型档位为 503、
+  充值显示初始化中；这证明未绑定态降级，不证明真实账号额度/provider 或支付调用通过；
+- 经用户授权，临时复制 F 根产品的 credentials/provision 及最小 instance/billing 绑定文件并重启后，
+  额度、模型档位、充值配置和余额四个接口均为 200；真实 UI 显示 41% 额度条、经济/均衡/高性能三档、
+  `￥1对应500万算力`、10/50/100/200 快捷按钮、整数金额输入与历史账本。此绑定步骤未创建充值订单，
+  未复制聊天记录或数据库；后续媒体验收另用专用构建探针令牌执行；
+- 同时只读确认 v2 索引/目录及其签名四个生产 URL 均为 404，设置页因此显示 discover 阶段
+  `DOWNLOAD_REJECTED`。本轮未修改生产更新源。
+
+2026-09-05 GitHub 配置只读复核：`TAURI_SIGNING_PRIVATE_KEY`、
+`TAURI_SIGNING_PRIVATE_KEY_PASSWORD` 已存在，`TAURI_UPDATER_PUBKEY` 与
+`tauri.conf.json` 内置值完全一致；未读取私钥内容。GO CLAW OSS 的 endpoint/access-key secrets 与
+bucket/public-base variables 尚未出现在仓库配置。Windows Authenticode 企业证书未接入 workflow，
+沿用既有交付策略时不阻塞 v2.1.2；代价是 Windows 可能继续显示未知发布者/SmartScreen 提示，列为后续优化。
+
+同日媒体真实调用：在已绑定隔离 RC 内调用 `generate_image` 一次，上游返回 token plan 周配额耗尽
+（提示 2026-09-07 07:27 UTC 重置）；调用 `generate_video_from_text` 三次，均到达上游但返回当前分组
+负载饱和 429。工具调用与 480P/1:1/3 秒参数传递成立，未产生 PNG/MP4；这是 provider 容量/额度阻塞，
+不能写成端到端生成成功，也不是此前“工具未检测到”回归。调用后额度 UI/API 正常更新，无本地异常栈。
+
+随后经用户授权建立 New API 媒体备用管线。变更前使用 SQLite backup API 创建
+`/opt/new-api/data/backups/one-api-before-media-fallback-20260905T020257Z.db`，SHA-256 为
+`768a3676332e8518b0059a099322310960ee1b2f539cb0adc2a3aefff60c7988`，文件/目录权限分别为
+`600`/`700`，变更前后 `PRAGMA integrity_check` 均为 `ok`。当前四个产品媒体模型的拓扑固定为：
+渠道 3 Token Plan（priority 10）作为主路，渠道 2 阿里 API 直连（priority 0）作为备用；渠道 1
+只承担文字兼容协议，不再错误声明产品媒体模型；全局 `RetryTimes` 从 1 调整为 2。
+
+同一专用构建探针令牌经 New API 公共接口完成真实故障转移：图片请求先由渠道 3 返回周配额 429，
+日志记录 `use_channel=["3","2"]`，渠道 2 最终返回 HTTP 200 和有效图片；3 秒 480P/1:1 文生视频
+同样记录 `重试：3->2`，提交后约 100 秒完成并返回有效 MP4。两项总计按 New API 账本计费
+USD 0.611（图片 USD 0.080、视频 USD 0.531），只扣专用构建探针令牌，不改客户账本。未把 400、
+504、524 强行映射为可重试，避免参数错误或长任务超时触发重复付费请求。配置前还通过渠道 2
+直连生成过一张探测图片；该笔可能由阿里侧另行计费，不计入上述 New API USD 0.611 账本。
+
 ## 1. 权威性和冲突处理
+
+2026-09-04 Windows 现场补充（仅本机，不更新下文生产服务器历史复核日期）：带更新器的
+v2.0.1 候选基准在 D 盘 NTFS 完成历史 staging 477092325 字节包的下载、验签、安装及自动
+重启；API/UI/版本标记均为 2.1.1，无安装锁/失败摘要，空聊天索引与身份文件摘要未变。但继承的
+1.0.0 媒体插件因 `<2.1.0` 限制被禁用，模型档位 UI 仍显示加载中，**产品 readiness 不通过**。
+原始无更新器的另一份 2.0.1 不能直接套用这项在线事务证明。
+2026-09-05 00:01 补充：F exFAT 独立同基准也完成安装事务和自动重启，版本/程序哈希同 NTFS，
+无安装锁/失败摘要、额度前后同值、身份/凭据摘要未变；同样媒体禁用、模型档位加载中。
+两样本聊天索引原本均为空，尚不能证明非空历史消息/归档/附件可读。未修改 F 根目录现有产品。
+详见 [本次现场](incidents/2026-09-04-v201-clean-sample-preflight.zh.md)。未关闭事故、未变更生产源。
+
+2026-09-04 23:31 公共更新 HTTP 只读复核：`https://goclaw.host:8443/updates/latest.json`
+现返回 **2.1.1**、pub_date `2026-09-01T09:43:12+08:00`，Windows URL 为
+`https://goclaw.host:8443/updates/GO-CLAW-Update-2.1.1-setup.exe`，含签名。
+下文生产 2.1.0/服务器软链描述是历史记录，不能再当成此 URL 的当前响应。此次没有 SSH 核对
+软链或下载生产包，不能由 manifest 版本推断生产包内容/验收状态。正在实测的历史 staging
+pub_date 为 `2026-08-31T16:09:38+08:00`、不同 URL；其故障不能直接归给现生产包。
 
 当前状态的资料优先级固定为：
 
@@ -50,7 +125,7 @@ Release，也不得向其推送本项目提交。
 | --- | --- |
 | 生产服务器 | `1.14.203.54` |
 | SSH 用户 | `root` |
-| 本机 SSH 私钥位置 | `/Users/gresonkwan/Downloads/GoClaw0810.pem` |
+| 本机 SSH 私钥位置 | `C:\Users\Gemini the Z\Downloads\GoClaw0810.pem` |
 | SSH 公钥指纹 | `SHA256:1ue8rpU83cufqgL97ohlvTyImZhndBSFBSlcsAMJuzI` |
 | 产品域名 | `goclaw.host`，当前解析到 `1.14.203.54` |
 | 客户 New API 基础地址 | `https://goclaw.host:8443/v1` |
@@ -82,13 +157,15 @@ Nginx 的已验证配置文件是：
 ### 4.1 渠道现状
 
 - 渠道 1 `阿里百炼_TokenPlan_1` 是 OpenAI 类型，基础地址为
-  `https://token-plan.cn-beijing.maas.aliyuncs.com/compatible-mode`。当前已列出本轮
-  三个文字模型和四个媒体模型；文字别名 `deepseek-v4-flash` 映射到
+  `https://token-plan.cn-beijing.maas.aliyuncs.com/compatible-mode`。当前只承担文字/音频兼容协议，
+  不再声明四个产品媒体模型；文字别名 `deepseek-v4-flash` 映射到
   `deepseek-v4-flash-0731`。
-- 渠道 2 是阿里类型的历史百炼直连渠道，地址为独立的 `aliyuncs.com` endpoint，保留旧
-  Wan/Qwen Image 模型。
+- 渠道 2 `阿里百炼_直连API_1` 是阿里类型的百炼直连备用渠道，地址为独立的 `aliyuncs.com`
+  endpoint；当前挂载四个产品媒体模型，优先级为 0，并保留历史 Wan/Qwen Image 模型。
 - 渠道 3 `阿里百炼_TokenPlan_媒体` 是经用户明确授权新增的阿里类型媒体渠道，基础地址为
   `https://token-plan.cn-beijing.maas.aliyuncs.com`，仅挂载本轮四个媒体模型，优先级为 10。
+- 全局 `RetryTimes=2`。该固定版本遇到可重试的主路错误时会进入下一优先级；400、504、524
+  保持默认不重试，不做宽泛状态码覆写。
 - 现有 provisioning 签发的样本令牌可以从 `/v1/models` 看到本轮七个必需模型。
 
 客户媒体插件仍只调用 New API 公开入口：图片使用 `/v1/images/generations`，视频使用
@@ -108,8 +185,10 @@ Nginx 的已验证配置文件是：
 新增渠道 3；渠道 1、2 均未修改。当前固定 New API `v1.0.0-rc.24` 不需要私有补丁：
 其 Ali task adaptor 会将 `metadata.input.media` 和 `metadata.parameters` 还原为百炼原生请求。
 
-五项真实验收全部通过：图片生成、图片编辑、文生视频、图生视频、参考图生视频均由
-渠道 3 承载并返回有效媒体 URL，无旧模型自动回退。因此媒体发布门禁已解除。
+2026-08-26 的五项真实验收全部通过：图片生成、图片编辑、文生视频、图生视频、参考图生视频当时均由
+渠道 3 承载并返回有效媒体 URL。2026-09-05 在渠道 3 周额度耗尽现场新增上述渠道 2 备用管线，
+并重新实测图片生成和文生视频的 `3->2` 故障转移成功；图片编辑、图生视频、参考图生视频共享相同
+模型渠道拓扑，但本轮尚未重复产生对应付费样本。
 
 ### 4.2 唯一产品模型映射（内部）
 
@@ -144,12 +223,20 @@ schema-1 `credentials.json` 原子写入产品盘并导入文字、媒体 provid
   加载、启用；
 - 在线更新 payload 不包含 `GO-CLAW-Config`，因此不覆盖客户已有 provisioning 配置或实例凭据。
 
-### 5.1 算力充值开发分支状态（尚未生产启用）
+### 5.1 算力充值状态
 
 `codex/compute-recharge` 已按冻结合同落地本地凭据隔离、存量实例 challenge/proof enrollment、
-同源充值代理、整数金额域模型、幂等订单骨架和前端入口。功能开关默认关闭；开发骨架在耐久
-PostgreSQL 仓储、微信 Native 商户配置、回调入账故障注入和 staging 对账完成前拒绝生产模式
-启动。此状态不表示线上充值已经可用，也不授权修改生产更新源、公开 Release 或服务器配置。
+同源充值代理、整数金额域模型、幂等订单、PostgreSQL 双分录账本、微信 Native 支付和前端入口。
+代码默认仍为 fail-closed；生产实例由独立配置显式开启，不能把服务端已启用推断为尚未发布的
+v2.1.2 客户端已经上线，也不授权修改生产更新源或公开 Release。
+
+2026-09-05 只读复核：公网与 `127.0.0.1:9200` readiness 均为 HTTP 200；
+`go-claw-billing.service` 为 active、主进程退出码 0、重启次数 0，Nginx 配置检查通过。用户此前
+支付的最新一笔 ￥1 订单在服务端为 `PAID/APPLIED`，只有 1 个 CREDIT adjustment、1 个 APPLIED
+adjustment、1 个 PAYMENT journal、1 个 QUOTA_CREDIT journal 和 1 个已处理回调；订单快照为
+5,000,000 展示算力与 75,000 NewAPI quota unit，按资产汇总的 journal 差额为 0，无退款、无未解决
+对账项。F 盘仅只读确认已有 schema 1 billing profile、账户/实例身份文件和 bearer token 字段，未
+输出任何 ID 或 token，未为本次复核再次支付。
 
 存量迁移只允许新增 `data/.go-claw-billing.json`，并复用已有 `instance_id → newapi_user_id`；
 失败只影响充值入口，聊天记录、员工、模型、原 token/quota、额度条和在线更新不得变化。
@@ -304,8 +391,9 @@ v2.0.1 对 staging manifest 做一次升级验收；客户不得成为第一位�
    显示明确故障页而不是打开一个同样不可用的浏览器。
 2. 客户前端和其调用的产品 API 响应不出现 provider/model/base URL/API key。
 3. 每个员工独立保存经济/均衡/高性能档位，新员工默认经济。
-4. 五个媒体工具均通过 New API 的 Token Plan 原生媒体渠道实测，不存在旧百炼直连自动回退；
-   当前该门禁已通过。
+4. 五个媒体工具必须只调用 New API 产品入口；生产路由以 Token Plan 原生媒体渠道为主、阿里直连为
+   备用。2026-09-05 图片生成和文生视频已实测 `3->2` 故障转移，另三项沿用同一渠道拓扑但发布前
+   是否复验按当次媒体变更范围决定，不增加固定付费门槛。
 5. Main Full ZIP 只包含唯一、规范的 `provision.json`，不包含任何静态 `credentials.json`、
    enrollment ticket 或签名私钥；共享 HMAC 的可提取局限已记录。首次启动必须生成
    `data/instance.id` 和实例凭据，`/api/console/quota` 返回 200 且额度字段有效。

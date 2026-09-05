@@ -18,6 +18,7 @@ REQUIRED_RUNTIME_ENTRIES = (
     Path("qwenpaw-backend/qwenpaw-backend.exe"),
     Path("python-runtime/python/python.exe"),
     Path("node-runtime/node.exe"),
+    Path("go-claw-update-engine.exe"),
 )
 EXPECTED_PROVISION_URL = "https://goclaw.host:8443/go-claw/provision"
 

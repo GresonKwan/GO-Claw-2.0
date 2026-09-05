@@ -380,6 +380,10 @@
 }
 
 .versionBadge {
+  border: 0;
+  padding: 0;
+  background: none;
+  font-family: inherit;
   font-size: 12px;
   color: #1a171673;
   font-weight: 600;
@@ -1339,4 +1343,20 @@
   align-items: center;
   justify-content: space-between;
   gap: 6px;
+}
+.updateDotAnchor {
+  display: inline-flex;
+  position: relative;
+  flex-shrink: 0;
+}
+
+.updateOrangeDot {
+  position: absolute;
+  top: -2px;
+  right: -2px;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #ff7a3d;
+  pointer-events: none;
 }

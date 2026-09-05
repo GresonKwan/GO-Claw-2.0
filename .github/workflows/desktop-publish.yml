@@ -63,7 +63,28 @@ jobs:
           copy_one './go-claw-update-package-*/GO-CLAW-Update-*-setup.exe.sig'
           copy_one './go-claw-update-package-*/latest.json'
           copy_one './go-claw-update-package-*/SHA256SUMS.txt'
-          files=(GO-CLAW-Setup-*-Windows-x64.exe GO-CLAW-Setup-*-Windows-x64.exe.sig GO-CLAW-Update-*-setup.exe GO-CLAW-Update-*-setup.exe.sig latest.json SHA256SUMS.txt)
+          mapfile -t v2_assets < <(find ./go-claw-update-package-*/v2-assets -maxdepth 1 -type f -print | sort)
+          if [ "${#v2_assets[@]}" -lt 20 ]; then
+            echo "::error::Signed v2 component assets are incomplete (${#v2_assets[@]})"
+            exit 1
+          fi
+          for asset in "${v2_assets[@]}"; do cp "$asset" .; done
+          files=(
+            GO-CLAW-Setup-*-Windows-x64.exe
+            GO-CLAW-Setup-*-Windows-x64.exe.sig
+            GO-CLAW-Update-*-setup.exe
+            GO-CLAW-Update-*-setup.exe.sig
+            latest.json
+            SHA256SUMS.txt
+            *.zip
+            *.zip.sig
+            windows-release-v2.json
+            windows-release-v2.json.sig
+            release-index-v2.json
+            release-index-v2.json.sig
+            release-catalog-v2.json
+            release-catalog-v2.json.sig
+          )
           sha256sum -c SHA256SUMS.txt
 
           release_json=$(gh release view "${{ inputs.tag }}" --json isDraft,assets --repo "$GITHUB_REPOSITORY")
@@ -90,8 +111,10 @@ jobs:
     if: ${{ !inputs.dry_run }}
     runs-on: ubuntu-latest
     env:
-      OSS_BUCKET: ${{ vars.OSS_BUCKET || 'qwenpaw-download' }}
-      OSS_PUBLIC_BASE_URL: ${{ vars.OSS_PUBLIC_BASE_URL || 'https://download.qwenpaw.agentscope.io/files/apps/desktop' }}
+      # GO CLAW is an independent downstream product.  Never inherit or fall
+      # back to the upstream QwenPaw distribution endpoints.
+      OSS_BUCKET: ${{ vars.GO_CLAW_OSS_BUCKET }}
+      OSS_PUBLIC_BASE_URL: ${{ vars.GO_CLAW_OSS_PUBLIC_BASE_URL }}
     steps:
       - name: Checkout (for scripts)
         uses: actions/checkout@v4
@@ -113,6 +136,26 @@ jobs:
       - name: Download all artifacts
         uses: actions/download-artifact@v4
 
+      - name: Validate GO CLAW-owned OSS destination
+        shell: bash
+        env:
+          OSS_ENDPOINT: ${{ secrets.GO_CLAW_OSS_ENDPOINT }}
+          OSS_ACCESS_KEY_ID: ${{ secrets.GO_CLAW_OSS_ACCESS_KEY_ID }}
+          OSS_ACCESS_KEY_SECRET: ${{ secrets.GO_CLAW_OSS_ACCESS_KEY_SECRET }}
+        run: |
+          set -euo pipefail
+          for value_name in OSS_BUCKET OSS_PUBLIC_BASE_URL OSS_ENDPOINT OSS_ACCESS_KEY_ID OSS_ACCESS_KEY_SECRET; do
+            if [ -z "${!value_name:-}" ]; then
+              echo "::error::${value_name} is required for GO CLAW OSS publishing"
+              exit 1
+            fi
+          done
+          destination="${OSS_BUCKET} ${OSS_PUBLIC_BASE_URL} ${OSS_ENDPOINT}"
+          if grep -Eqi 'qwenpaw|agentscope' <<<"${destination}"; then
+            echo "::error::Refusing to publish GO CLAW assets to an upstream QwenPaw/AgentScope destination"
+            exit 1
+          fi
+
       - name: Install ossutil
         run: |
           wget https://gosspublic.alicdn.com/ossutil/1.7.18/ossutil-v1.7.18-linux-amd64.zip
@@ -123,9 +166,9 @@ jobs:
 
       - name: Configure ossutil
         run: |
-          ossutil config -e ${{ secrets.OSS_ENDPOINT }} \
-            -i ${{ secrets.OSS_ACCESS_KEY_ID }} \
-            -k ${{ secrets.OSS_ACCESS_KEY_SECRET }} \
+          ossutil config -e ${{ secrets.GO_CLAW_OSS_ENDPOINT }} \
+            -i ${{ secrets.GO_CLAW_OSS_ACCESS_KEY_ID }} \
+            -k ${{ secrets.GO_CLAW_OSS_ACCESS_KEY_SECRET }} \
             -L CH
 
       - name: Process and upload Tauri artifacts (versioned only)
@@ -133,7 +176,7 @@ jobs:
         # manifest and index are promoted AFTER the release is published — see
         # desktop-promote.yml — so the auto-updater is never pointed at a version
         # whose release/PyPI/Docker publish might still fail.
-        if: hashFiles('QwenPaw-Desktop-Tauri-*/*') != ''
+        if: hashFiles('go-claw-windows-installer-*/*') != '' || hashFiles('QwenPaw-Desktop-Tauri-macOS-*/*') != ''
         run: |
           VERSION="${{ steps.version.outputs.version }}"
 

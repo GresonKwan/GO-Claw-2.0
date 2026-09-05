@@ -1,0 +1,467 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "required": [
+    "schemaVersion",
+    "revision",
+    "enabled",
+    "currentVersion",
+    "phase",
+    "enginePhase",
+    "latest",
+    "targetManifestSha256",
+    "transactionId",
+    "activeSlot",
+    "targetSlot",
+    "changedComponents",
+    "downloadBytes",
+    "fullBytes",
+    "estimateOnly",
+    "downloaded",
+    "total",
+    "progressPercent",
+    "installationStarted",
+    "notifyAvailable",
+    "error",
+    "failure"
+  ],
+  "properties": {
+    "schemaVersion": {
+      "const": 2
+    },
+    "revision": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 9007199254740991
+    },
+    "enabled": {
+      "type": "boolean"
+    },
+    "currentVersion": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 256
+    },
+    "phase": {
+      "enum": [
+        "idle",
+        "checking",
+        "available",
+        "downloading",
+        "downloaded",
+        "installing",
+        "failed"
+      ]
+    },
+    "enginePhase": {
+      "enum": [
+        "IDLE",
+        "CHECKING",
+        "AVAILABLE",
+        "PLANNING",
+        "DOWNLOADING",
+        "STAGED",
+        "SWITCH_PENDING",
+        "VERIFYING",
+        "COMMITTED",
+        "FAILED",
+        "ROLLING_BACK",
+        "ROLLED_BACK",
+        "BLOCKED"
+      ]
+    },
+    "latest": {
+      "anyOf": [
+        {
+          "type": "object",
+          "required": [
+            "version",
+            "notes",
+            "pubDate",
+            "isNewer"
+          ],
+          "properties": {
+            "version": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 256
+            },
+            "notes": {
+              "type": "string"
+            },
+            "pubDate": {
+              "type": "string"
+            },
+            "isNewer": {
+              "type": "boolean"
+            }
+          },
+          "additionalProperties": true
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "targetManifestSha256": {
+      "anyOf": [
+        {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "transactionId": {
+      "anyOf": [
+        {
+          "type": "string",
+          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "activeSlot": {
+      "enum": [
+        "legacy",
+        "A",
+        "B"
+      ]
+    },
+    "targetSlot": {
+      "enum": [
+        "A",
+        "B",
+        null
+      ]
+    },
+    "changedComponents": {
+      "type": "array",
+      "items": {
+        "enum": [
+          "desktop-shell",
+          "backend-core",
+          "backend-heavy-runtime",
+          "python-runtime",
+          "node-runtime",
+          "bundled-plugins",
+          "product-docs"
+        ]
+      },
+      "uniqueItems": true
+    },
+    "downloadBytes": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 9007199254740991
+    },
+    "fullBytes": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 9007199254740991
+    },
+    "estimateOnly": {
+      "type": "boolean"
+    },
+    "downloaded": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 9007199254740991
+    },
+    "total": {
+      "anyOf": [
+        {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "progressPercent": {
+      "anyOf": [
+        {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 100
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "installationStarted": {
+      "type": "boolean"
+    },
+    "notifyAvailable": {
+      "type": "boolean"
+    },
+    "error": {
+      "type": "string"
+    },
+    "failure": {
+      "anyOf": [
+        {
+          "type": "object",
+          "required": [
+            "code",
+            "stage",
+            "retryable"
+          ],
+          "properties": {
+            "code": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 256
+            },
+            "stage": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 256
+            },
+            "retryable": {
+              "type": "boolean"
+            }
+          },
+          "additionalProperties": true
+        },
+        {
+          "type": "null"
+        }
+      ]
+    }
+  },
+  "additionalProperties": true,
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "enginePhase": {
+            "const": "IDLE"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "phase": {
+            "const": "idle"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "enginePhase": {
+            "const": "CHECKING"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "phase": {
+            "const": "checking"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "enginePhase": {
+            "const": "AVAILABLE"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "phase": {
+            "const": "available"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "enginePhase": {
+            "const": "PLANNING"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "phase": {
+            "const": "downloading"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "enginePhase": {
+            "const": "DOWNLOADING"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "phase": {
+            "const": "downloading"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "enginePhase": {
+            "const": "STAGED"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "phase": {
+            "const": "downloaded"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "enginePhase": {
+            "const": "SWITCH_PENDING"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "phase": {
+            "const": "installing"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "enginePhase": {
+            "const": "VERIFYING"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "phase": {
+            "const": "installing"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "enginePhase": {
+            "const": "COMMITTED"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "phase": {
+            "const": "idle"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "enginePhase": {
+            "const": "FAILED"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "phase": {
+            "const": "failed"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "enginePhase": {
+            "const": "ROLLING_BACK"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "phase": {
+            "const": "installing"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "enginePhase": {
+            "const": "ROLLED_BACK"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "phase": {
+            "const": "failed"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "enginePhase": {
+            "const": "BLOCKED"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "phase": {
+            "const": "failed"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "installationStarted": {
+            "const": true
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "notifyAvailable": {
+            "const": false
+          }
+        }
+      }
+    }
+  ]
+}

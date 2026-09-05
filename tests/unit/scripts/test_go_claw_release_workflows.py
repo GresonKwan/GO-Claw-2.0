@@ -24,14 +24,17 @@ def test_signed_windows_build_stages_exact_public_assets():
         "GO-CLAW-Update-*-setup.exe.sig",
         "dist/latest.json",
         "dist/SHA256SUMS.txt",
+        "windows-release-v2.json",
+        "release-index-v2.json",
+        "release-catalog-v2.json",
     ):
         assert token in workflow
     assert (
         "QwenPaw-Tauri-${{ steps.version.outputs.version }}-Windows-setup.exe"
         not in workflow
     )
-    transaction = workflow.index("test_portable_update.ps1")
-    signing = workflow.index("tauri signer sign")
+    transaction = workflow.index("test_portable_update_bridge.ps1")
+    signing = workflow.index("tauri signer sign $setup")
     assert transaction < signing
 
 
@@ -46,6 +49,9 @@ def test_publish_requires_exact_credential_free_windows_assets():
         "GO-CLAW-Update-*-setup.exe.sig",
         "latest.json",
         "SHA256SUMS.txt",
+        "windows-release-v2.json",
+        "release-index-v2.json",
+        "release-catalog-v2.json",
     ):
         assert name in workflow
     attach_step = workflow.split("Attach signed GO CLAW Windows assets", 1)[
@@ -58,3 +64,20 @@ def test_publish_requires_exact_credential_free_windows_assets():
     assert "gh release view" in attach_step
     assert "--clobber" not in attach_step
     assert "Refusing to replace an existing release asset" in attach_step
+
+
+def test_desktop_oss_publish_and_promote_fail_closed_to_go_claw_destination():
+    for relative in (
+        ".github/workflows/desktop-publish.yml",
+        ".github/workflows/desktop-promote.yml",
+    ):
+        workflow = (ROOT / relative).read_text(encoding="utf-8")
+        assert "vars.GO_CLAW_OSS_BUCKET" in workflow
+        assert "vars.GO_CLAW_OSS_PUBLIC_BASE_URL" in workflow
+        assert "secrets.GO_CLAW_OSS_ENDPOINT" in workflow
+        assert "secrets.GO_CLAW_OSS_ACCESS_KEY_ID" in workflow
+        assert "secrets.GO_CLAW_OSS_ACCESS_KEY_SECRET" in workflow
+        assert "qwenpaw-download" not in workflow
+        assert "download.qwenpaw.agentscope.io" not in workflow
+        assert "Refusing to" in workflow
+        assert "upstream QwenPaw/AgentScope destination" in workflow

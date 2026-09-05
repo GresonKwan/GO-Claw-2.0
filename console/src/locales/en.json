@@ -634,6 +634,9 @@
     "copyFailed": "Failed to copy agent configuration"
   },
   "skills": {
+    "marketBannerTitle": "Gain professional capabilities through skills",
+    "marketBannerDescription": "Find your most efficient workflow among 110,000 skills",
+    "marketBannerBrowse": "Browse skills",
     "title": "Skills",
     "description": "Manage agent skills and capabilities.",
     "importHub": "Upload via URL",
@@ -3150,6 +3153,19 @@
     },
     "execute": "Run {{tool}}",
     "executeDefault": "Run tool"
+  },
+  "deliverables": {
+    "title": "Deliverables",
+    "loading": "Loading preview…",
+    "open": "Open",
+    "reveal": "Show in folder",
+    "previewNamed": "Preview {{name}}",
+    "revealNamed": "Show {{name}} in folder",
+    "mediaRegion": "Image and video deliverables",
+    "missing": "File moved or deleted",
+    "openFailed": "Could not open this deliverable",
+    "collapse": "Collapse",
+    "showMore": "Show {{count}} more"
   },
   "preview": {
     "error": {

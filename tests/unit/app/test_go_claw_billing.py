@@ -46,7 +46,9 @@ def portable(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
                     "apiKey": SUBTOKEN,
                 },
                 "dashscope": {
-                    "compatibleBaseUrl": "https://newapi.example/compatible-mode/v1",
+                    "compatibleBaseUrl": (
+                        "https://newapi.example/compatible-mode/v1"
+                    ),
                     "apiKey": SUBTOKEN,
                 },
             },
@@ -58,7 +60,9 @@ def portable(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
             {
                 "provisionUrl": "https://prov.example/api/provision",
                 "hmacSecret": "legacy-only",
-                "billingEnrollmentUrl": "https://prov.example/go-claw/provision/billing",
+                "billingEnrollmentUrl": (
+                    "https://prov.example/go-claw/provision/billing"
+                ),
             },
         ),
         "utf-8",
@@ -85,7 +89,10 @@ async def test_legacy_enrollment_uses_existing_subtoken_and_writes_profile(
                 "challengeId": challenge_id,
                 "nonce": "n" * 43,
                 "expiresAt": expires_at,
-                "canonicalFormat": "goclaw-billing-enrollment-v1\\n{instanceId}\\n{challengeId}\\n{nonce}\\n{expiresAt}",
+                "canonicalFormat": (
+                    "goclaw-billing-enrollment-v1\\n{instanceId}"
+                    "\\n{challengeId}\\n{nonce}\\n{expiresAt}"
+                ),
             }
         return {
             "schemaVersion": 2,
@@ -123,7 +130,9 @@ async def test_legacy_enrollment_uses_existing_subtoken_and_writes_profile(
 
 
 @pytest.mark.asyncio
-async def test_enrollment_failure_never_damages_legacy_files(portable: Path) -> None:
+async def test_enrollment_failure_never_damages_legacy_files(
+    portable: Path,
+) -> None:
     credentials = portable / CREDENTIALS_RELATIVE_PATH
     before = credentials.read_bytes()
 
@@ -166,3 +175,20 @@ def test_invalid_profile_is_never_exposed(portable: Path) -> None:
     path = portable / "data" / BILLING_PROFILE_FILENAME
     path.write_text('{"accessToken":"secret"}', "utf-8")
     assert load_billing_profile() is None
+
+
+@pytest.mark.asyncio
+async def test_invalid_existing_profile_is_preserved_without_reenrollment(
+    portable,
+):
+    path = portable / "data" / BILLING_PROFILE_FILENAME
+    original = b'{"accountId":"damaged-existing-account"}'
+    path.write_bytes(original)
+    credentials = (portable / CREDENTIALS_RELATIVE_PATH).read_bytes()
+
+    async def forbidden(*_args):
+        pytest.fail("Must not replace an existing billing binding")
+
+    assert await ensure_billing_enrollment(http_post=forbidden) is False
+    assert path.read_bytes() == original
+    assert (portable / CREDENTIALS_RELATIVE_PATH).read_bytes() == credentials

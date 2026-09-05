@@ -64,19 +64,48 @@ def _portable_root() -> Path | None:
     return Path(raw).expanduser().resolve().parent
 
 
-def _load_or_create_instance_id(instance_path: Path) -> str:
-    if instance_path.is_file():
+def _load_or_create_instance_id(
+    instance_path: Path,
+    *,
+    allow_create: bool = True,
+) -> str:
+    if instance_path.is_symlink():
+        raise ValueError("INSTANCE_ID_RECOVERY_REQUIRED")
+    if instance_path.exists():
         existing = instance_path.read_text(encoding="utf-8").strip()
-        if existing:
-            try:
-                return str(uuid.UUID(existing))
-            except ValueError:
-                logger.warning("Invalid stored instance ID, regenerating")
+        try:
+            return str(uuid.UUID(existing))
+        except ValueError as exc:
+            # Corruption is not evidence of a new customer. Preserve the
+            # original bytes and credentials; never silently create a second
+            # account, token or initial quota for an existing portable copy.
+            raise ValueError("INSTANCE_ID_RECOVERY_REQUIRED") from exc
+    if not allow_create:
+        raise ValueError("INSTANCE_ID_RECOVERY_REQUIRED")
     instance_id = str(uuid.uuid4())
     instance_path.parent.mkdir(parents=True, exist_ok=True)
-    instance_path.write_text(instance_id, encoding="utf-8")
+    try:
+        with instance_path.open("x", encoding="utf-8") as stream:
+            stream.write(instance_id)
+            stream.flush()
+            os.fsync(stream.fileno())
+    except FileExistsError:
+        return _load_or_create_instance_id(instance_path, allow_create=False)
     os.chmod(instance_path, 0o600)
     return instance_id
+
+
+def _has_existing_identity_evidence(root: Path, working_dir: Path) -> bool:
+    """Fixed paths only; no chat traversal or startup remote audit."""
+    markers = (
+        root / CREDENTIALS_RELATIVE_PATH,
+        working_dir / MARKER_FILENAME,
+        working_dir / ".go-claw-billing.json",
+        root / "secrets" / "providers.json",
+        root / "updates" / "last-update.json",
+        root / "runtime" / "active-slot.json",
+    )
+    return any(path.exists() or path.is_symlink() for path in markers)
 
 
 def _load_provision_config(config_path: Path) -> tuple[str, str] | None:
@@ -139,6 +168,7 @@ async def _provision(http_post: HttpPost) -> bool:
 
     instance_id = _load_or_create_instance_id(
         working_dir / INSTANCE_ID_FILENAME,
+        allow_create=not _has_existing_identity_evidence(root, working_dir),
     )
     ts = int(time.time())
     sign = hmac.new(

@@ -1,0 +1,176 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "required": [
+    "schemaVersion",
+    "version",
+    "buildCommit",
+    "platform",
+    "channel",
+    "minUpdaterVersion",
+    "components",
+    "files",
+    "deleteFiles",
+    "minFreeBytes",
+    "readinessVersion",
+    "entrypointId"
+  ],
+  "properties": {
+    "schemaVersion": {
+      "const": 2
+    },
+    "version": {
+      "type": "string",
+      "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+(?:-[0-9A-Za-z.-]+)?$"
+    },
+    "buildCommit": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{40}$"
+    },
+    "platform": {
+      "const": "windows-x86_64"
+    },
+    "channel": {
+      "enum": [
+        "stable",
+        "staging"
+      ]
+    },
+    "minUpdaterVersion": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 256
+    },
+    "components": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "id",
+          "archiveUrl",
+          "archiveBytes",
+          "unpackedBytes",
+          "sha256",
+          "signature",
+          "contentDigest"
+        ],
+        "properties": {
+          "id": {
+            "enum": [
+              "desktop-shell",
+              "backend-core",
+              "backend-heavy-runtime",
+              "python-runtime",
+              "node-runtime",
+              "bundled-plugins",
+              "product-docs"
+            ]
+          },
+          "archiveUrl": {
+            "type": "string",
+            "pattern": "^https://",
+            "maxLength": 4096
+          },
+          "archiveBytes": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          },
+          "unpackedBytes": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          },
+          "sha256": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{64}$"
+          },
+          "signature": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 4096
+          },
+          "contentDigest": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{64}$"
+          }
+        },
+        "additionalProperties": true
+      },
+      "minItems": 1,
+      "maxItems": 7
+    },
+    "files": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "relativePath",
+          "sizeBytes",
+          "sha256",
+          "component",
+          "mount"
+        ],
+        "properties": {
+          "relativePath": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 1024,
+            "pattern": "^(?!/)(?!.*(?:^|/)\\.\\.?(/|$))(?!.*[\\\\:*?\"<>|\\u0000-\\u001f\\u007f])(?!.*//)(?!.*[ .](/|$)).+[^/]$"
+          },
+          "sizeBytes": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          },
+          "sha256": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{64}$"
+          },
+          "component": {
+            "enum": [
+              "desktop-shell",
+              "backend-core",
+              "backend-heavy-runtime",
+              "python-runtime",
+              "node-runtime",
+              "bundled-plugins",
+              "product-docs"
+            ]
+          },
+          "mount": {
+            "enum": [
+              "slot",
+              "bootstrap",
+              "root-docs"
+            ]
+          }
+        },
+        "additionalProperties": true
+      },
+      "minItems": 1
+    },
+    "deleteFiles": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 1024,
+        "pattern": "^(?!/)(?!.*(?:^|/)\\.\\.?(/|$))(?!.*[\\\\:*?\"<>|\\u0000-\\u001f\\u007f])(?!.*//)(?!.*[ .](/|$)).+[^/]$"
+      },
+      "uniqueItems": true
+    },
+    "minFreeBytes": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 9007199254740991
+    },
+    "readinessVersion": {
+      "const": 1
+    },
+    "entrypointId": {
+      "const": "go-claw-portable-v1"
+    }
+  },
+  "additionalProperties": true
+}

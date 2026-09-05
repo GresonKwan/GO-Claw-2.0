@@ -168,7 +168,7 @@ async def lifespan(  # pylint: disable=too-many-statements,too-many-branches
         name="go-claw-billing-enrollment",
     )
     ensure_go_claw_model_tiers(provider_manager)
-    schedule_update_checks()
+    update_checks_task = schedule_update_checks()
     local_model_manager = LocalModelManager.get_instance()
 
     # --- AppServiceManager + WorkspaceRegistry ---
@@ -525,6 +525,13 @@ async def lifespan(  # pylint: disable=too-many-statements,too-many-branches
     try:
         yield
     finally:
+        if update_checks_task is not None:
+            update_checks_task.cancel()
+            with suppress(asyncio.CancelledError):
+                await update_checks_task
+            from .go_claw_updates import get_update_manager
+
+            await get_update_manager().close()
         billing_task = getattr(app.state, "billing_enrollment_task", None)
         if billing_task is not None and not billing_task.done():
             billing_task.cancel()

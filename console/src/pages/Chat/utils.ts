@@ -137,7 +137,9 @@ function decodeUriPathSegments(path: string): string {
     .map((segment) => {
       if (!segment) return segment;
       try {
-        return decodeURIComponent(segment);
+        // filePreviewUrl protects literal '%' from the server's two routing
+        // decodes. Undo only that marker, then perform the browser-side decode.
+        return decodeURIComponent(segment.replace(/%2525/gi, "%25"));
       } catch {
         return segment;
       }

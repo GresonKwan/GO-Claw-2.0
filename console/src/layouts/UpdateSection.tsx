@@ -1,53 +1,40 @@
-import { useCallback, useEffect, useState } from "react";
-import { Button, Modal, Progress, Spin, Tag } from "antd";
+import { useState } from "react";
+import { Button, Modal, Progress } from "antd";
 import { useTranslation } from "react-i18next";
+import { updatesApi, type ReleaseItem } from "../api/modules/updates";
 import {
-  updatesApi,
-  type ReleaseItem,
-  type UpdateStatus,
-} from "../api/modules/updates";
+  useDesktopUpdate,
+  updateErrorCode,
+} from "../contexts/DesktopUpdateContext";
 import styles from "./index.module.less";
 
-const POLL_MS = 10_000;
-
-/** 齿轮弹层中的"版本与更新"区块（便携浏览器模式，走后端 HTTP）。 */
+/** One shared update state, no widget timers or independent download channel. */
 export function UpdateSection() {
   const { t } = useTranslation();
-  const [status, setStatus] = useState<UpdateStatus | null>(null);
+  const update = useDesktopUpdate();
   const [releases, setReleases] = useState<ReleaseItem[]>([]);
   const [showHistory, setShowHistory] = useState(false);
-  const [checking, setChecking] = useState(false);
-
-  const refresh = useCallback(async () => {
-    setStatus(await updatesApi.status());
-  }, []);
-
-  useEffect(() => {
-    void refresh();
-    const timer = setInterval(() => void refresh(), POLL_MS);
-    return () => clearInterval(timer);
-  }, [refresh]);
-
-  if (!status) return null; // 非便携 / updates 关闭：整体隐藏
-
-  const busy = ["checking", "downloading", "installing"].includes(status.phase);
-  const hasUpdate = Boolean(status.latest?.isNewer);
-  const percent =
-    status.total && status.total > 0
-      ? Math.round((status.downloaded / status.total) * 100)
-      : undefined;
-
-  const doCheck = async () => {
-    setChecking(true);
-    setStatus(await updatesApi.check());
-    setChecking(false);
-  };
-
-  const doDownload = async () => {
-    setStatus(await updatesApi.download());
-  };
-
-  const doInstall = () => {
+  const [historyError, setHistoryError] = useState<string | null>(null);
+  const status = update.status;
+  if (!status?.enabled) return null;
+  const busy =
+    update.actionPending ||
+    ["checking", "downloading", "installing"].includes(status.phase);
+  const progress =
+    status.schemaVersion === 2
+      ? status.progressPercent
+      : status.phase === "downloaded" || status.phase === "installing"
+      ? 90
+      : status.total
+      ? Math.min(85, (status.downloaded / status.total) * 85)
+      : null;
+  const showProgress =
+    progress != null &&
+    ["downloading", "downloaded", "installing", "failed"].includes(
+      status.phase,
+    );
+  const code = update.error || status.error || historyError;
+  const confirmInstall = () =>
     Modal.confirm({
       title: t("updates.installConfirmTitle"),
       content: t("updates.installConfirmContent", {
@@ -55,117 +42,138 @@ export function UpdateSection() {
       }),
       okText: t("updates.installNow"),
       cancelText: t("common.cancel"),
-      onOk: async () => {
-        setStatus(await updatesApi.install());
-      },
+      onOk: () => update.install(status),
     });
-  };
-
   const loadHistory = async () => {
     if (!showHistory) {
-      const data = await updatesApi.releases();
-      setReleases(data?.releases ?? []);
+      try {
+        setHistoryError(null);
+        setReleases((await updatesApi.releases()).releases);
+      } catch (error) {
+        setHistoryError(updateErrorCode(error));
+      }
     }
     setShowHistory(!showHistory);
   };
-
   return (
     <div className={styles.updateSection}>
       <div className={styles.updateRow}>
         <span>
           {t("updates.currentVersion")}: v{status.currentVersion}
         </span>
-        <Button size="small" loading={checking} onClick={doCheck}>
-          {t("updates.checkNow")}
-        </Button>
+        <span className={styles.updateDotAnchor}>
+          <Button
+            size="small"
+            disabled={busy}
+            loading={status.phase === "checking"}
+            onClick={() => void update.check()}
+          >
+            {t("updates.checkNow")}
+          </Button>
+          {update.notifyAvailable && (
+            <span
+              aria-hidden="true"
+              data-testid="check-update-dot"
+              className={styles.updateOrangeDot}
+            />
+          )}
+        </span>
       </div>
-
-      {status.phase === "failed" && status.error && (
-        <div className={styles.updateError}>{t("updates.checkFailed")}</div>
-      )}
-
-      {hasUpdate && (
+      {status.latest?.isNewer && (
         <div className={styles.updateRow}>
-          <Tag color="orange">
-            {t("updates.newVersion", { version: status.latest?.version })}
-          </Tag>
+          {t("updates.newVersion", { version: status.latest.version })}
         </div>
       )}
-
-      {status.phase === "available" && (
-        <Button type="primary" size="small" block onClick={doDownload}>
+      {code && (
+        <div role="status" className={styles.updateError}>
+          {t("updates.checkFailed")} · {code}
+        </div>
+      )}
+      {showProgress && (
+        <Progress
+          percent={Math.round(progress!)}
+          size="small"
+          status={status.phase === "failed" ? "exception" : "active"}
+        />
+      )}
+      {status.enginePhase === "ROLLING_BACK" && (
+        <div role="status">{t("updates.recovering", "恢复旧版本")}</div>
+      )}
+      {(status.phase === "available" ||
+        (status.phase === "failed" &&
+          status.latest?.isNewer &&
+          !status.installationStarted &&
+          status.enginePhase !== "BLOCKED")) && (
+        <Button
+          type="primary"
+          size="small"
+          block
+          disabled={busy}
+          onClick={() => void update.download(status)}
+        >
           {t("updates.downloadNow")}
         </Button>
       )}
-
-      {status.phase === "downloading" && (
-        <Progress
-          percent={percent}
-          size="small"
-          status="active"
-          showInfo={percent !== undefined}
-        />
-      )}
-
       {status.phase === "downloaded" && (
         <Button
           type="primary"
           size="small"
           block
-          loading={busy}
-          onClick={doInstall}
+          loading={update.actionPending}
+          onClick={confirmInstall}
         >
           {t("updates.installNow")}
         </Button>
       )}
-
       {status.phase === "installing" && (
-        <div className={styles.updateRow}>
-          <Spin size="small" /> {t("updates.installing")}
-        </div>
+        <div role="status">{t("updates.installing")}</div>
       )}
-
-      <Button type="link" size="small" onClick={loadHistory}>
+      <Button
+        type="link"
+        size="small"
+        disabled={busy}
+        onClick={() => void loadHistory()}
+      >
         {showHistory ? t("updates.hideHistory") : t("updates.showHistory")}
       </Button>
       {showHistory && (
         <div className={styles.updateHistory}>
-          {releases.length === 0 && <div>{t("updates.historyEmpty")}</div>}
-          {releases.map((r) => (
-            <div key={r.version} className={styles.updateHistoryItem}>
+          {!releases.length && !historyError && (
+            <div>{t("updates.historyEmpty")}</div>
+          )}
+          {releases.map((release) => (
+            <div key={release.version} className={styles.updateHistoryItem}>
               <span>
-                v{r.version}
-                {r.isCurrent && (
-                  <Tag color="green">{t("updates.currentTag")}</Tag>
-                )}
+                v{release.version}
+                {release.isCurrent ? " · " + t("updates.currentTag") : ""}
               </span>
-              {!r.isCurrent && r.setupUrl && r.signatureUrl && (
-                <Button
-                  size="small"
-                  type="link"
-                  onClick={() =>
-                    Modal.confirm({
-                      title: t("updates.installConfirmTitle"),
-                      content: t("updates.installConfirmContent", {
-                        version: r.version,
-                      }),
-                      okText: t("updates.installNow"),
-                      cancelText: t("common.cancel"),
-                      onOk: async () => {
-                        setStatus(
-                          await updatesApi.installVersion(
-                            r.version,
-                            r.setupUrl,
-                            r.signatureUrl,
+              {!release.isCurrent &&
+                release.setupUrl &&
+                release.signatureUrl && (
+                  <Button
+                    size="small"
+                    type="link"
+                    disabled={busy}
+                    onClick={() =>
+                      Modal.confirm({
+                        title: t("updates.installConfirmTitle"),
+                        content: t("updates.installConfirmContent", {
+                          version: release.version,
+                        }),
+                        okText: t("updates.installNow"),
+                        cancelText: t("common.cancel"),
+                        onOk: () =>
+                          update.installVersion(
+                            release.version,
+                            release.setupUrl,
+                            release.signatureUrl,
                           ),
-                        );
-                      },
-                    })
-                  }
-                >
-                  {t("updates.installThisVersion")}
-                </Button>
-              )}
+                      })
+                    }
+                  >
+                    {t("updates.installThisVersion")}
+                  </Button>
+                )}
             </div>
           ))}
         </div>

@@ -11,6 +11,7 @@ from agentscope.message import ToolResultState
 from agentscope.message import TextBlock, DataBlock, URLSource
 
 from ...runtime.tool_registry import tool_descriptor
+from ...app.deliverables import register_published
 from .file_io import _resolve_file_path, _path_to_file_url
 
 
@@ -77,6 +78,7 @@ async def send_file_to_user(
 
     try:
         file_url = _path_to_file_url(file_path)
+        register_published(file_path)
 
         return ToolChunk(
             is_last=True,

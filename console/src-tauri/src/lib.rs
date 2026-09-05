@@ -7,6 +7,7 @@ mod client_readiness;
 mod external_link;
 mod portable;
 mod tray;
+mod update_engine;
 mod updates;
 
 use tauri::{Manager, RunEvent, WebviewWindow, WindowEvent};

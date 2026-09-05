@@ -37,8 +37,9 @@ jobs:
     if: ${{ !inputs.dry_run }}
     runs-on: ubuntu-latest
     env:
-      OSS_BUCKET: ${{ vars.OSS_BUCKET || 'qwenpaw-download' }}
-      OSS_PUBLIC_BASE_URL: ${{ vars.OSS_PUBLIC_BASE_URL || 'https://download.qwenpaw.agentscope.io/files/apps/desktop' }}
+      # Fail closed unless the downstream product's own destination is set.
+      OSS_BUCKET: ${{ vars.GO_CLAW_OSS_BUCKET }}
+      OSS_PUBLIC_BASE_URL: ${{ vars.GO_CLAW_OSS_PUBLIC_BASE_URL }}
     steps:
       - name: Checkout (for scripts)
         uses: actions/checkout@v4
@@ -60,6 +61,26 @@ jobs:
       - name: Download all artifacts
         uses: actions/download-artifact@v4
 
+      - name: Validate GO CLAW-owned OSS destination
+        shell: bash
+        env:
+          OSS_ENDPOINT: ${{ secrets.GO_CLAW_OSS_ENDPOINT }}
+          OSS_ACCESS_KEY_ID: ${{ secrets.GO_CLAW_OSS_ACCESS_KEY_ID }}
+          OSS_ACCESS_KEY_SECRET: ${{ secrets.GO_CLAW_OSS_ACCESS_KEY_SECRET }}
+        run: |
+          set -euo pipefail
+          for value_name in OSS_BUCKET OSS_PUBLIC_BASE_URL OSS_ENDPOINT OSS_ACCESS_KEY_ID OSS_ACCESS_KEY_SECRET; do
+            if [ -z "${!value_name:-}" ]; then
+              echo "::error::${value_name} is required for GO CLAW OSS promotion"
+              exit 1
+            fi
+          done
+          destination="${OSS_BUCKET} ${OSS_PUBLIC_BASE_URL} ${OSS_ENDPOINT}"
+          if grep -Eqi 'qwenpaw|agentscope' <<<"${destination}"; then
+            echo "::error::Refusing to promote GO CLAW assets to an upstream QwenPaw/AgentScope destination"
+            exit 1
+          fi
+
       - name: Install ossutil
         run: |
           wget https://gosspublic.alicdn.com/ossutil/1.7.18/ossutil-v1.7.18-linux-amd64.zip
@@ -70,13 +91,13 @@ jobs:
 
       - name: Configure ossutil
         run: |
-          ossutil config -e ${{ secrets.OSS_ENDPOINT }} \
-            -i ${{ secrets.OSS_ACCESS_KEY_ID }} \
-            -k ${{ secrets.OSS_ACCESS_KEY_SECRET }} \
+          ossutil config -e ${{ secrets.GO_CLAW_OSS_ENDPOINT }} \
+            -i ${{ secrets.GO_CLAW_OSS_ACCESS_KEY_ID }} \
+            -k ${{ secrets.GO_CLAW_OSS_ACCESS_KEY_SECRET }} \
             -L CH
 
       - name: Promote versioned files to latest
-        if: hashFiles('QwenPaw-Desktop-Tauri-*/*') != ''
+        if: hashFiles('go-claw-windows-installer-*/*') != '' || hashFiles('QwenPaw-Desktop-Tauri-macOS-*/*') != ''
         run: |
           VERSION="${{ steps.version.outputs.version }}"
 
@@ -108,11 +129,11 @@ jobs:
           }
 
           promote_latest \
-            "QwenPaw-Desktop-Tauri-Windows-*" \
-            "QwenPaw-Tauri-*-Windows-setup.exe" \
+            "go-claw-windows-installer-*" \
+            "GO-CLAW-Setup-*-Windows-x64.exe" \
             "win-tauri" \
-            "QwenPaw-Tauri-${VERSION}-Windows-setup.exe" \
-            "QwenPaw-Tauri-latest-Windows-setup.exe"
+            "GO-CLAW-Setup-${VERSION}-Windows-x64.exe" \
+            "GO-CLAW-Setup-latest-Windows-x64.exe"
 
           promote_latest \
             "QwenPaw-Desktop-Tauri-macOS-*" \

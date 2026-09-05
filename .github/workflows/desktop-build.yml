@@ -257,69 +257,115 @@ jobs:
           if-no-files-found: ignore
           retention-days: 7
 
-      - name: Build portable update package (NSIS)
+      - name: Build signed component update and legacy A/B Bridge
         shell: pwsh
         env:
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         run: |
           $version = "${{ steps.version.outputs.version }}"
+          $commit = (git rev-parse HEAD).Trim()
           $stage = Get-ChildItem -LiteralPath "dist" -Directory -Filter "GO-CLAW-Portable-*-Windows-x64" |
             Select-Object -First 1
           if (-not $stage) { throw "portable staging directory not found" }
+          $baseUrl = "https://github.com/GresonKwan/GO-Claw-2.0/releases/download/v$version"
+          $indexUrl = "$baseUrl/release-index-v2.json"
+          $manifestUrl = "$baseUrl/windows-release-v2.json"
+          $work = "dist/v2-work"
+          $public = "dist/v2-assets"
+          if (Test-Path $work) { Remove-Item -LiteralPath $work -Recurse -Force }
+          New-Item -ItemType Directory -Force -Path $public | Out-Null
 
-          # 白名单：仅程序文件。绝不包含 GO-CLAW-Config（批次凭证）、
-          # portable.json、data/secrets/logs/cache/backups/updates。
-          $payload = "dist/payload"
-          if (Test-Path $payload) { Remove-Item -Recurse -Force $payload }
-          New-Item -ItemType Directory -Path $payload | Out-Null
-          foreach ($item in @("GO-CLAW-Portable.exe", "binaries", "LICENSE", "README-PORTABLE.zh-CN.txt")) {
-            Copy-Item -LiteralPath (Join-Path $stage.FullName $item) -Destination $payload -Recurse
-          }
-          $forbidden = @("GO-CLAW-Config", "portable.json", "data", "secrets", "logs", "cache", "backups", "updates")
-          foreach ($item in $forbidden) {
-            if (Test-Path (Join-Path $payload $item)) { throw "forbidden content in update payload: $item" }
-          }
+          cargo build --manifest-path console/src-tauri/Cargo.toml --release --bin go-claw-update-engine
+          if ($LASTEXITCODE -ne 0) { throw "standalone update engine build failed" }
+          $engine = (Resolve-Path "console/src-tauri/target/release/go-claw-update-engine.exe").Path
 
-          $payloadRoot = (Resolve-Path -LiteralPath $payload).Path.TrimEnd('\')
-          $relativeLengths = @(
-            Get-ChildItem -LiteralPath $payloadRoot -Recurse -File | ForEach-Object {
-              $_.FullName.Substring($payloadRoot.Length + 1).Length
+          python scripts/pack-tauri/build_component_packages.py `
+            --root $stage.FullName `
+            --output $work `
+            --base-url $baseUrl `
+            --trusted-host github.com
+          if ($LASTEXITCODE -ne 0) { throw "component packaging failed" }
+          foreach ($archive in Get-ChildItem $work -File -Filter "*.zip") {
+            npm --prefix console exec -- tauri signer sign $archive.FullName
+            if ($LASTEXITCODE -ne 0 -or -not (Test-Path "$($archive.FullName).sig")) {
+              throw "component signing failed: $($archive.Name)"
             }
-          )
-          if ($relativeLengths.Count -eq 0) { throw "update payload is empty" }
-          $maxRelativePath = ($relativeLengths | Measure-Object -Maximum).Maximum
-          Write-Host "Longest update payload relative path: $maxRelativePath"
-
-          Copy-Item "console/src-tauri/nsis/go-claw-update.nsi" "dist/update.nsi"
-          Push-Location "dist"
-          makensis "/DGO_CLAW_VERSION=$version" "/DGO_CLAW_MAX_RELATIVE_PATH=$maxRelativePath" "update.nsi"
-          if ($LASTEXITCODE -ne 0) { Pop-Location; throw "makensis failed" }
-          Pop-Location
-          $setup = "dist/GO-CLAW-Update-$version-setup.exe"
-          if (-not (Test-Path $setup)) { throw "update installer not produced" }
-          $setup = (Resolve-Path -LiteralPath $setup).Path
-
-          # Fast executable contract: use the production NSIS script with a
-          # tiny probe payload to exercise cwd release, rollback and restart.
-          ./scripts/verify/test_portable_update.ps1 `
-            -NsisScript "console/src-tauri/nsis/go-claw-update.nsi"
-
-          if ([string]::IsNullOrWhiteSpace($env:TAURI_SIGNING_PRIVATE_KEY)) {
-            throw "TAURI_SIGNING_PRIVATE_KEY is required for the update package"
           }
+          python scripts/pack-tauri/assemble_component_manifest.py `
+            --draft "$work/components.unsigned.json" `
+            --pubkey-config "console/src-tauri/tauri.conf.json" `
+            --version $version `
+            --commit $commit `
+            --channel staging `
+            --trusted-host github.com `
+            --output "$work/windows-release-v2.json"
+          if ($LASTEXITCODE -ne 0) { throw "component manifest assembly failed" }
+          npm --prefix console exec -- tauri signer sign "$work/windows-release-v2.json"
+          if ($LASTEXITCODE -ne 0) { throw "component manifest signing failed" }
+          $manifestHash = (Get-FileHash "$work/windows-release-v2.json" -Algorithm SHA256).Hash.ToLowerInvariant()
+
+          Copy-Item "console/src-tauri/nsis/go-claw-update-bridge.nsi" "$work/bridge.nsi"
+          Push-Location $work
+          makensis /INPUTCHARSET UTF8 `
+            "/DGO_CLAW_VERSION=$version" `
+            "/DGO_CLAW_INDEX_URL=$indexUrl" `
+            "/DGO_CLAW_TARGET_MANIFEST=$manifestHash" `
+            "/DGO_CLAW_ENGINE=$engine" `
+            "bridge.nsi"
+          if ($LASTEXITCODE -ne 0) { Pop-Location; throw "Bridge makensis failed" }
+          Pop-Location
+          ./scripts/verify/test_portable_update_bridge.ps1 `
+            -NsisScript "console/src-tauri/nsis/go-claw-update-bridge.nsi"
+          $setup = (Resolve-Path "$work/GO-CLAW-Update-$version-setup.exe").Path
           npm --prefix console exec -- tauri signer sign $setup
-          if ($LASTEXITCODE -ne 0) { throw "tauri signer sign failed" }
-          if (-not (Test-Path -LiteralPath "$setup.sig")) {
-            throw "Signed update sidecar was not produced"
+          if ($LASTEXITCODE -ne 0 -or -not (Test-Path "$setup.sig")) {
+            throw "Bridge signing failed"
           }
           python scripts/pack-tauri/build_go_claw_update_manifest.py `
             --version $version `
             --setup $setup `
-            --base-url "https://github.com/GresonKwan/GO-Claw-2.0/releases/latest/download" `
+            --base-url $baseUrl `
+            --build-commit $commit `
             --notes "GO CLAW $version" `
             --output "dist/latest.json"
-          if ($LASTEXITCODE -ne 0) { throw "manifest generation failed" }
+          if ($LASTEXITCODE -ne 0) { throw "legacy manifest generation failed" }
+
+          $config = Get-Content "console/src-tauri/tauri.conf.json" -Raw | ConvertFrom-Json
+          [IO.File]::WriteAllText(
+            "$work/updater.pub",
+            $config.plugins.updater.pubkey,
+            [Text.ASCIIEncoding]::new()
+          )
+          python scripts/pack-tauri/build_release_index_v2.py `
+            --manifest "$work/windows-release-v2.json" `
+            --manifest-url $manifestUrl `
+            --bridge $setup `
+            --bridge-url "$baseUrl/$([IO.Path]::GetFileName($setup))" `
+            --pubkey-file "$work/updater.pub" `
+            --legacy-latest "dist/latest.json" `
+            --output "$work/release-index-v2.json" `
+            --trusted-host github.com
+          if ($LASTEXITCODE -ne 0) { throw "release index assembly failed" }
+          npm --prefix console exec -- tauri signer sign "$work/release-index-v2.json"
+          if ($LASTEXITCODE -ne 0) { throw "release index signing failed" }
+          python scripts/pack-tauri/build_release_catalog_v2.py `
+            --release "$work/release-index-v2.json" $indexUrl `
+            --pubkey-file "$work/updater.pub" `
+            --trusted-host github.com `
+            --output "$work/release-catalog-v2.json"
+          if ($LASTEXITCODE -ne 0) { throw "release catalog assembly failed" }
+          npm --prefix console exec -- tauri signer sign "$work/release-catalog-v2.json"
+          if ($LASTEXITCODE -ne 0) { throw "release catalog signing failed" }
+
+          Copy-Item $setup, "$setup.sig" -Destination dist
+          foreach ($pattern in @(
+            "*.zip", "*.zip.sig", "windows-release-v2.json", "windows-release-v2.json.sig",
+            "release-index-v2.json", "release-index-v2.json.sig",
+            "release-catalog-v2.json", "release-catalog-v2.json.sig"
+          )) {
+            Copy-Item "$work/$pattern" -Destination $public
+          }
 
       - name: Upload Tauri Windows artifact
         uses: actions/upload-artifact@v4
@@ -400,7 +446,7 @@ jobs:
             --update-signature "$($updates[0].FullName).sig" `
             --latest-json "dist/latest.json" `
             --pubkey-config "console/src-tauri/tauri.conf.json" `
-            --update-payload "dist/payload" `
+            --update-payload "dist/v2-assets" `
             --webview2-authenticode-subject $env:WEBVIEW2_AUTHENTICODE_SUBJECT
           if ($LASTEXITCODE -ne 0) { throw "Windows release contract verification failed" }
 
@@ -413,9 +459,10 @@ jobs:
             Get-ChildItem dist -File -Filter "GO-CLAW-Update-*-setup.exe"
             Get-ChildItem dist -File -Filter "GO-CLAW-Update-*-setup.exe.sig"
             Get-Item "dist/latest.json"
+            Get-ChildItem "dist/v2-assets" -File
           ) | Sort-Object Name
-          if ($files.Count -ne 5) {
-            throw "Expected five public Windows release inputs, found $($files.Count)"
+          if ($files.Count -lt 19) {
+            throw "Expected signed v2 component release inputs, found only $($files.Count)"
           }
           $lines = foreach ($file in $files) {
             $digest = (Get-FileHash -LiteralPath $file.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
@@ -453,6 +500,7 @@ jobs:
             dist/GO-CLAW-Update-*-setup.exe.sig
             dist/latest.json
             dist/SHA256SUMS.txt
+            dist/v2-assets/*
           if-no-files-found: error
 
   build-tauri-macos:

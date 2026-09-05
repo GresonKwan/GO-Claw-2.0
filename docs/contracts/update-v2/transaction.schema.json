@@ -1,0 +1,161 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "required": [
+    "schemaVersion",
+    "transactionId",
+    "revision",
+    "generation",
+    "targetVersion",
+    "sourceVersion",
+    "fromSlot",
+    "toSlot",
+    "targetManifestSha256",
+    "enginePhase",
+    "completedStages",
+    "oldShellSha256",
+    "newShellSha256",
+    "downloadedPackages",
+    "progressPercent",
+    "installationStarted",
+    "failure",
+    "previousJournalSha256"
+  ],
+  "properties": {
+    "schemaVersion": {
+      "const": 1
+    },
+    "transactionId": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+    },
+    "revision": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 9007199254740991
+    },
+    "generation": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 9007199254740991
+    },
+    "targetVersion": {
+      "type": "string",
+      "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+(?:-[0-9A-Za-z.-]+)?$"
+    },
+    "sourceVersion": {
+      "type": "string",
+      "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+(?:-[0-9A-Za-z.-]+)?$"
+    },
+    "fromSlot": {
+      "enum": [
+        "legacy",
+        "A",
+        "B"
+      ]
+    },
+    "toSlot": {
+      "enum": [
+        "A",
+        "B"
+      ]
+    },
+    "targetManifestSha256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "enginePhase": {
+      "enum": [
+        "IDLE",
+        "CHECKING",
+        "AVAILABLE",
+        "PLANNING",
+        "DOWNLOADING",
+        "STAGED",
+        "SWITCH_PENDING",
+        "VERIFYING",
+        "COMMITTED",
+        "FAILED",
+        "ROLLING_BACK",
+        "ROLLED_BACK",
+        "BLOCKED"
+      ]
+    },
+    "completedStages": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 256
+      },
+      "uniqueItems": true
+    },
+    "oldShellSha256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "newShellSha256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "downloadedPackages": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "pattern": "^[0-9a-f]{64}$"
+      },
+      "uniqueItems": true
+    },
+    "progressPercent": {
+      "type": "number",
+      "minimum": 0,
+      "maximum": 100
+    },
+    "installationStarted": {
+      "type": "boolean"
+    },
+    "failure": {
+      "anyOf": [
+        {
+          "type": "object",
+          "required": [
+            "code",
+            "stage",
+            "retryable"
+          ],
+          "properties": {
+            "code": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 256
+            },
+            "stage": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 256
+            },
+            "retryable": {
+              "type": "boolean"
+            }
+          },
+          "additionalProperties": true
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "previousJournalSha256": {
+      "anyOf": [
+        {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    }
+  },
+  "additionalProperties": true
+}

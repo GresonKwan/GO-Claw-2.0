@@ -21,6 +21,7 @@ from ...config.context import (
 )
 from ...constant import WORKING_DIR
 from ...runtime.tool_registry import tool_descriptor
+from ...app.deliverables import register_candidate
 from ...utils.io_utils import (
     append_text_async,
     get_path_lock,
@@ -305,6 +306,7 @@ async def write_file(
                 encoding=encoding,
                 new_file_mode=_USER_FILE_MODE,
             )
+        register_candidate(file_path)
         return ToolChunk(
             is_last=True,
             state=ToolResultState.SUCCESS,
@@ -445,6 +447,7 @@ async def edit_file(
                 ],
             )
 
+    register_candidate(resolved_path)
     return ToolChunk(
         is_last=True,
         state=ToolResultState.SUCCESS,
@@ -502,6 +505,7 @@ async def append_file(
             content,
             encoding=encoding,
         )
+        register_candidate(file_path)
         return ToolChunk(
             is_last=True,
             state=ToolResultState.SUCCESS,

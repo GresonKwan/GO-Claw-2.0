@@ -3,6 +3,10 @@ import { screen, within } from "@testing-library/react";
 import { renderWithProviders } from "@/test/common_setup";
 import { SidebarBottomDock } from "./SidebarBottomDock";
 
+vi.mock("../contexts/DesktopUpdateContext", () => ({
+  useDesktopUpdate: () => ({ notifyAvailable: false }),
+}));
+
 vi.mock("react-i18next", () => ({
   useTranslation: () => ({ t: (key: string) => key }),
 }));

@@ -46,6 +46,7 @@ def test_updater_pubkey_reader_returns_tracked_value(tmp_path):
 
 def _write_runtime_layout(binaries: Path) -> None:
     for relative in (
+        "go-claw-update-engine.exe",
         "qwenpaw-backend/qwenpaw-backend.exe",
         "python-runtime/python/python.exe",
         "node-runtime/node.exe",
@@ -404,3 +405,31 @@ def test_stage_refuses_repository_root_as_dist(tmp_path):
             credentials_example_file=credentials_example_file,
             repository_root=tmp_path,
         )
+
+
+def test_windows_build_pins_node_for_npm_lifecycle_scripts():
+    script = (
+        Path(__file__).parents[3]
+        / "scripts/pack-tauri/build_win_pyinstaller.ps1"
+    ).read_text(encoding="utf-8")
+    node_path = script.index('$env:PATH = "$NODE_DIR;$env:PATH"')
+    npm_ci = script.index("& $NODE_BIN $NPM_CLI ci")
+    assert node_path < npm_ci
+
+
+def test_windows_build_runs_tauri_hook_with_pinned_node_only_once():
+    script = (
+        Path(__file__).parents[3]
+        / "scripts/pack-tauri/build_win_pyinstaller.ps1"
+    ).read_text(encoding="utf-8")
+
+    explicit_hook = script.index(
+        "& $NODE_BIN $NPM_CLI run build:tauri-bootstrap"
+    )
+    tauri_build = script.index(
+        "& $NODE_BIN $NPM_CLI exec -- tauri build"
+    )
+    assert explicit_hook < tauri_build
+    assert '$TAURI_PREBUILT_FRONTEND_CONFIG = ' in script
+    assert '{\"build\":{\"beforeBuildCommand\":\"\"}}' in script
+    assert script.count("--config $TAURI_PREBUILT_FRONTEND_CONFIG") == 2

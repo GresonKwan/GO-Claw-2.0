@@ -3,7 +3,6 @@ from __future__ import annotations
 
 import os
 from pathlib import Path
-from urllib.parse import unquote
 from fastapi import APIRouter, HTTPException
 from starlette.responses import FileResponse
 
@@ -65,7 +64,10 @@ async def preview_file(
     filepath: str,
 ):
     """Preview file."""
-    normalized = unquote(filepath)
+    # Starlette already URL-decodes the path parameter once.  A second
+    # ``unquote`` would turn a literal filename such as ``100%2F完成.png`` into
+    # an extra path segment and is both a correctness and traversal boundary.
+    normalized = filepath
 
     # Normalize /C:/... to C:/... on Windows.
     if (

@@ -182,3 +182,38 @@ async def test_http_provision_url_is_rejected(portable_env: Path) -> None:
     http = FakeHttp()
     assert await provision_go_claw_credentials(http_post=http) is False
     assert http.calls == []
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("original", [b"not-a-uuid", b"", b"\xff\xfe\x00"])
+async def test_damaged_identity_is_never_regenerated(portable_env, original):
+    path = portable_env / "data" / INSTANCE_ID_FILENAME
+    path.write_bytes(original)
+    http = FakeHttp()
+    assert await provision_go_claw_credentials(http_post=http) is False
+    assert path.read_bytes() == original
+    assert http.calls == []
+    assert not _credentials_path(portable_env).exists()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "marker",
+    [
+        "data/.go-claw-billing.json",
+        "updates/last-update.json",
+        "runtime/active-slot.json",
+        "secrets/providers.json",
+    ],
+)
+async def test_missing_old_identity_does_not_create_new_account(
+    portable_env, marker
+):
+    path = portable_env / marker
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_bytes(b"original marker, do not rewrite")
+    http = FakeHttp()
+    assert await provision_go_claw_credentials(http_post=http) is False
+    assert not (portable_env / "data" / INSTANCE_ID_FILENAME).exists()
+    assert http.calls == []
+    assert path.read_bytes() == b"original marker, do not rewrite"

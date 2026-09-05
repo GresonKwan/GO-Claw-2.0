@@ -88,9 +88,7 @@ pub(super) fn create(app: &tauri::AppHandle) -> Result<Command, String> {
 
 #[cfg(not(debug_assertions))]
 fn packaged_python_runtime(app: &tauri::AppHandle) -> Option<PathBuf> {
-    let base = app
-        .path()
-        .resource_dir()
+    let base = program_resource_dir(app)
         .ok()?
         .join("binaries")
         .join("python-runtime")
@@ -108,9 +106,7 @@ fn packaged_python_runtime(app: &tauri::AppHandle) -> Option<PathBuf> {
 
 #[cfg(not(debug_assertions))]
 fn packaged_node_runtime(app: &tauri::AppHandle) -> Option<PathBuf> {
-    let root = app
-        .path()
-        .resource_dir()
+    let root = program_resource_dir(app)
         .ok()?
         .join("binaries")
         .join("node-runtime");
@@ -129,10 +125,7 @@ fn packaged_backend_executable(app: &tauri::AppHandle) -> Result<PathBuf, String
     } else {
         "qwenpaw-backend"
     };
-    let path = app
-        .path()
-        .resource_dir()
-        .map_err(|err| format!("failed to resolve resource directory: {err}"))?
+    let path = program_resource_dir(app)?
         .join("binaries")
         .join("qwenpaw-backend")
         .join(executable_name);
@@ -145,6 +138,16 @@ fn packaged_backend_executable(app: &tauri::AppHandle) -> Result<PathBuf, String
             path.display()
         ))
     }
+}
+
+#[cfg(not(debug_assertions))]
+fn program_resource_dir(app: &tauri::AppHandle) -> Result<PathBuf, String> {
+    if let Some(portable) = app.state::<crate::portable::PortableRuntime>().state() {
+        return Ok(portable.program_root.clone());
+    }
+    app.path()
+        .resource_dir()
+        .map_err(|_| "RESOURCE_DIRECTORY_UNAVAILABLE".into())
 }
 
 #[cfg(not(debug_assertions))]

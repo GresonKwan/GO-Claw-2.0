@@ -1,0 +1,28 @@
+{
+  "schemaVersion": 2,
+  "version": "2.1.2",
+  "buildCommit": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+  "platform": "windows-x86_64",
+  "channel": "staging",
+  "minUpdaterVersion": "2.1.2",
+  "componentDigests": [
+    {
+      "id": "backend-core",
+      "contentDigest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "archiveBytes": 200
+    }
+  ],
+  "fullBytes": 200,
+  "releaseManifest": {
+    "url": "https://goclaw.host:8443/updates-staging/2.1.2/fixture",
+    "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "signature": "fixture-not-a-real-signature",
+    "sizeBytes": 200
+  },
+  "legacyBridge": {
+    "url": "https://goclaw.host:8443/updates-staging/2.1.2/fixture",
+    "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "signature": "fixture-not-a-real-signature",
+    "sizeBytes": 200
+  }
+}

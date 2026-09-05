@@ -8,6 +8,7 @@ import {
 import { useTranslation } from "react-i18next";
 import { QuotaBar } from "./QuotaBar";
 import SidebarSettingsPanel from "./SidebarSettingsPanel";
+import { useDesktopUpdate } from "../contexts/DesktopUpdateContext";
 import styles from "./index.module.less";
 
 interface SidebarBottomDockProps {
@@ -21,6 +22,7 @@ export function SidebarBottomDock({
 }: SidebarBottomDockProps) {
   const { t } = useTranslation();
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const { notifyAvailable } = useDesktopUpdate();
 
   return (
     <div className={styles.sidebarBottomDock} data-testid="sidebar-bottom-dock">
@@ -42,7 +44,16 @@ export function SidebarBottomDock({
             className={`${styles.dockAction} ${styles.dockSettingsAction}`}
             aria-label={t("nav.settings")}
           >
-            <SparkSettingLine size={20} />
+            <span className={styles.updateDotAnchor}>
+              <SparkSettingLine size={20} />
+              {notifyAvailable && (
+                <span
+                  aria-hidden="true"
+                  data-testid="settings-update-dot"
+                  className={styles.updateOrangeDot}
+                />
+              )}
+            </span>
             {!collapsed && <span>{t("nav.settings")}</span>}
           </button>
         </Popover>

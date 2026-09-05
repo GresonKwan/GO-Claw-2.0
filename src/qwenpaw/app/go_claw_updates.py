@@ -45,9 +45,6 @@ _RELEASES_API = (
 _CHECK_INTERVAL_SECONDS = 6 * 3600
 _FIRST_CHECK_DELAY_SECONDS = 300
 _DOWNLOAD_TIMEOUT_SECONDS = 900
-_CHECK_INTERVAL_SECONDS = 6 * 3600
-_FIRST_CHECK_DELAY_SECONDS = 300
-_DOWNLOAD_TIMEOUT_SECONDS = 900
 
 
 def _portable_root() -> Optional[Path]:
@@ -493,8 +490,13 @@ class UpdateManager:
 _manager: Optional[UpdateManager] = None
 
 
-def get_update_manager() -> UpdateManager:
+def get_update_manager():
     global _manager
     if _manager is None:
-        _manager = UpdateManager()
+        from .go_claw_component_updates import ComponentUpdateManager
+
+        root = _portable_root()
+        if root is None:
+            raise RuntimeError("updates_unavailable")
+        _manager = ComponentUpdateManager(root)
     return _manager

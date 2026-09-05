@@ -1,6 +1,11 @@
 !include LogicLib.nsh
 !include nsDialogs.nsh
 
+; Capture the source hook directory while this include is parsed. Deriving
+; assets from Tauri's generated target/release/nsis directory breaks whenever
+; CARGO_TARGET_DIR points outside console/src-tauri.
+!define GO_CLAW_NSIS_ASSET_DIR "${__FILEDIR__}\nsis"
+
 Var QwenPawCliPathCheckbox
 Var QwenPawCliPathState
 
@@ -8,7 +13,7 @@ Page custom QWENPAW_CLI_PATH_PAGE QWENPAW_CLI_PATH_PAGE_LEAVE
 
 !macro QWENPAW_UPDATE_CLI_PATH ACTION
   InitPluginsDir
-  File /oname=$PLUGINSDIR\qwenpaw-update-path.ps1 "..\..\..\..\nsis\update-qwenpaw-path.ps1"
+  File /oname=$PLUGINSDIR\qwenpaw-update-path.ps1 "${GO_CLAW_NSIS_ASSET_DIR}\update-qwenpaw-path.ps1"
   nsExec::ExecToStack `powershell.exe -NoProfile -ExecutionPolicy Bypass -File "$PLUGINSDIR\qwenpaw-update-path.ps1" -Action "${ACTION}" -Path "$INSTDIR\binaries\qwenpaw-backend"`
   Pop $0
   Pop $1
@@ -43,8 +48,8 @@ Page custom QWENPAW_CLI_PATH_PAGE QWENPAW_CLI_PATH_PAGE_LEAVE
 
 !macro QWENPAW_INSTALL_DEBUG_LAUNCHER
   SetOutPath "$INSTDIR"
-  File /oname=qwenpaw-desktop-debug.cmd "..\..\..\..\nsis\qwenpaw-desktop-debug.cmd"
-  File /oname=qwenpaw-desktop-debug.ps1 "..\..\..\..\nsis\qwenpaw-desktop-debug.ps1"
+  File /oname=qwenpaw-desktop-debug.cmd "${GO_CLAW_NSIS_ASSET_DIR}\qwenpaw-desktop-debug.cmd"
+  File /oname=qwenpaw-desktop-debug.ps1 "${GO_CLAW_NSIS_ASSET_DIR}\qwenpaw-desktop-debug.ps1"
   CreateShortcut "$SMPROGRAMS\GO CLAW (Debug).lnk" "$INSTDIR\qwenpaw-desktop-debug.cmd" "" "$INSTDIR\qwenpaw-desktop.exe" 0
 !macroend
 
@@ -112,7 +117,7 @@ FunctionEnd
   ; surface a friendly retry prompt rather than the raw OS dialog.
   Push $0
   InitPluginsDir
-  File /oname=$PLUGINSDIR\qwenpaw-stop-backend-sidecar.ps1 "..\..\..\..\nsis\stop-backend-sidecar.ps1"
+  File /oname=$PLUGINSDIR\qwenpaw-stop-backend-sidecar.ps1 "${GO_CLAW_NSIS_ASSET_DIR}\stop-backend-sidecar.ps1"
   ${Do}
     nsExec::Exec `powershell.exe -NoProfile -ExecutionPolicy Bypass -File "$PLUGINSDIR\qwenpaw-stop-backend-sidecar.ps1" -InstallDir "$INSTDIR"`
     Pop $0

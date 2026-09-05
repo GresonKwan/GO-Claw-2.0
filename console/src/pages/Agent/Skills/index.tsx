@@ -10,6 +10,7 @@ import {
   ImportHubModal,
   HeaderActions,
   SkillsToolbar,
+  SkillMarketBanner,
   SkillListItem,
   getSkillVisual,
 } from "./components";
@@ -94,7 +95,8 @@ function SkillsPage() {
       next.delete("view");
       return next;
     });
-  }, [setSearchParams]);
+    void refreshSkills();
+  }, [setSearchParams, refreshSkills]);
 
   const handleMarketInstalled = useCallback(() => {
     void refreshSkills();
@@ -191,6 +193,8 @@ function SkillsPage() {
           />
         }
       />
+
+      <SkillMarketBanner onBrowse={openMarket} />
 
       <ImportHubModal
         open={importModalOpen}

@@ -43,8 +43,15 @@ Write-Host ""
 Write-Host "== Checking prerequisites ==" -ForegroundColor Yellow
 
 $UV_BIN = (Get-Command uv -ErrorAction SilentlyContinue).Source
-$PYTHON_BIN = Join-Path $REPO_ROOT ".venv\Scripts\python.exe"
+$PYTHON_BIN = if ($env:GO_CLAW_BUILD_PYTHON) {
+    [System.IO.Path]::GetFullPath($env:GO_CLAW_BUILD_PYTHON)
+} else {
+    Join-Path $REPO_ROOT ".venv\Scripts\python.exe"
+}
 if (-not (Test-Path $PYTHON_BIN)) {
+    if ($env:GO_CLAW_BUILD_PYTHON) {
+        throw "GO_CLAW_BUILD_PYTHON does not point to a Python executable: $PYTHON_BIN"
+    }
     if ($UV_BIN) {
         Write-Host ".venv not found, creating virtual environment with uv" -ForegroundColor Yellow
         & $UV_BIN venv "$REPO_ROOT\.venv"

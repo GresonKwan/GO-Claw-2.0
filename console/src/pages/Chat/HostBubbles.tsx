@@ -39,6 +39,8 @@ import type {
   ChatRequestData,
   ChatResponseData,
 } from "../../plugins/registry/types";
+import DeliverablesPanel from "./components/DeliverablesPanel";
+import { embeddedDeliverables } from "./deliverables";
 
 function sortByOrder<T extends { item: { order?: number } }>(arr: T[]): T[] {
   return arr
@@ -122,6 +124,9 @@ export function HostResponseCard(props: {
   const renderFn = renderEntry?.value;
   const prependList = sortByOrder(extLists[ChatList.responsePrepend]);
   const appendList = sortByOrder(extLists[ChatList.responseAppend]);
+  const deliverables = (
+    <DeliverablesPanel envelope={embeddedDeliverables(props.data)} />
+  );
 
   // prepend/append are routed through vendor's contentPrepend/contentAppend
   // slot so they land BETWEEN messages and Actions — actions always last.
@@ -141,7 +146,7 @@ export function HostResponseCard(props: {
         ))}
       </>
     );
-  const contentAppend =
+  const pluginAppend =
     appendList.length === 0 ? null : (
       <>
         {appendList.map((e) => (
@@ -155,6 +160,12 @@ export function HostResponseCard(props: {
         ))}
       </>
     );
+  const contentAppend = (
+    <>
+      {pluginAppend}
+      {deliverables}
+    </>
+  );
 
   const fallback = () => (
     <VendorResponseCard
@@ -166,18 +177,29 @@ export function HostResponseCard(props: {
   );
 
   if (renderFn) {
+    const pluginFallback = () => (
+      <VendorResponseCard
+        data={props.data as AnyCardProps}
+        isLast={props.isLast}
+        contentPrepend={contentPrepend as AnyCardProps}
+        contentAppend={pluginAppend as AnyCardProps}
+      />
+    );
     return (
-      <PluginSlotBoundary
-        slot={ChatScalar.responseRender}
-        pluginId={renderEntry!.pluginId}
-        fallback={fallback()}
-      >
-        {renderFn({
-          data: props.data,
-          isLast: props.isLast,
-          fallback,
-        })}
-      </PluginSlotBoundary>
+      <>
+        <PluginSlotBoundary
+          slot={ChatScalar.responseRender}
+          pluginId={renderEntry!.pluginId}
+          fallback={pluginFallback()}
+        >
+          {renderFn({
+            data: props.data,
+            isLast: props.isLast,
+            fallback: pluginFallback,
+          })}
+        </PluginSlotBoundary>
+        {deliverables}
+      </>
     );
   }
   return fallback();

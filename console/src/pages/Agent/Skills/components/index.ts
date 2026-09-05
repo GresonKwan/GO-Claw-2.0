@@ -19,6 +19,7 @@ export { SkillFilterDropdown, TAG_PREFIX } from "./SkillFilterDropdown";
 export { HeaderActions } from "./HeaderActions";
 export { AddSkillDropdown } from "./AddSkillDropdown";
 export { SkillsToolbar } from "./SkillsToolbar";
+export { SkillMarketBanner } from "./SkillMarketBanner";
 export { SkillListItem } from "./SkillListItem";
 
 export {

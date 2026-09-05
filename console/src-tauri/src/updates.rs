@@ -47,6 +47,11 @@ fn portable_root(app: &AppHandle) -> Option<std::path::PathBuf> {
 }
 
 fn ensure_updates_allowed(app: &AppHandle) -> Result<(), String> {
+    // v2 portable actions belong to the authenticated local HTTP coordinator.
+    // Do not leave an IPC route to the old in-place EXE installer.
+    if is_portable(app) {
+        return Err("USE_LOCAL_UPDATE_API".into());
+    }
     if updates_allowed_for(app) {
         Ok(())
     } else {
@@ -70,6 +75,9 @@ pub(crate) struct DesktopUpdate {
 
 #[tauri::command]
 pub(crate) async fn check_desktop_update(app: AppHandle) -> Result<Option<DesktopUpdate>, String> {
+    if is_portable(&app) {
+        return Err("USE_LOCAL_UPDATE_API".into());
+    }
     if !updates_allowed_for(&app) {
         return Ok(None);
     }
@@ -351,6 +359,9 @@ async fn install_cached_macos(
 
 #[tauri::command]
 pub(crate) async fn check_cached_update(app: AppHandle) -> Result<Option<String>, String> {
+    if is_portable(&app) {
+        return Err("USE_LOCAL_UPDATE_API".into());
+    }
     if !updates_allowed_for(&app) {
         return Ok(None);
     }

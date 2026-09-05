@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import importlib
 import json
 import re
 import threading
@@ -286,6 +287,68 @@ def test_older_canonical_bundled_plugins_are_upgraded_atomically(
         for path in plugins_dir.iterdir()
         if ".go-claw-plugin.tmp" in path.name
     ]
+
+
+@pytest.mark.parametrize("host_version", ["2.1.1", "2.1.2"])
+def test_real_media_seeds_upgrade_v201_incompatible_plugins(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    host_version: str,
+) -> None:
+    """Reproduce the signed staging upgrade's <2.1.0 plugin failure."""
+    monkeypatch.setattr(
+        importlib.import_module("qwenpaw.__version__"),
+        "__version__",
+        host_version,
+    )
+    source_root = Path(__file__).resolve().parents[3] / "plugins" / "tool"
+    plugins_dir = tmp_path / "data" / "plugins"
+    for directory, plugin_id in (
+        ("qwen-image", "qwen-image-tool"),
+        ("wan27", "wan27-tool"),
+    ):
+        installed = _write_plugin(
+            plugins_dir, directory, plugin_id, marker="old installed plugin"
+        )
+        path = installed / "plugin.json"
+        manifest = json.loads(path.read_text(encoding="utf-8"))
+        manifest["qwenpaw_version"] = {"min": "1.1.6", "max": "2.1.0"}
+        path.write_text(json.dumps(manifest), encoding="utf-8")
+        assert not PluginLoader._check_version_compatibility(
+            PluginManifest.from_dict(manifest)
+        )[0]
+
+    protected = {
+        tmp_path / "data" / "instance.id": b"test-existing-instance",
+        tmp_path / "data" / "chats.json": b'{"chats":["existing-chat"]}',
+    }
+    for path, contents in protected.items():
+        path.write_bytes(contents)
+    _configure_roots(monkeypatch, source_root, plugins_dir)
+    manifests = go_claw_bundled_plugins.install_go_claw_bundled_plugins()
+    tool_names = set()
+    for path in manifests:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+        compatible, reason = PluginLoader._check_version_compatibility(
+            PluginManifest.from_dict(payload)
+        )
+        assert compatible, reason
+        tool_names.update(tool["name"] for tool in payload["meta"]["tools"])
+    assert tool_names == {
+        "generate_image",
+        "edit_image",
+        "generate_video_from_text",
+        "generate_video_from_image",
+        "generate_video_from_reference",
+    }
+    manifest_bytes = {path: path.read_bytes() for path in manifests}
+    assert (
+        go_claw_bundled_plugins.install_go_claw_bundled_plugins() == manifests
+    )
+    assert all(
+        path.read_bytes() == data for path, data in manifest_bytes.items()
+    )
+    assert all(path.read_bytes() == data for path, data in protected.items())
 
 
 def test_canonical_directory_with_another_manifest_id_is_a_conflict(

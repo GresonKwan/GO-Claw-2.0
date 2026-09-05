@@ -15,6 +15,8 @@ import {
   extractLatestSnapshotFromCards,
 } from "../turnUsage";
 import { useTurnUsageStore } from "../turnUsageStore";
+import { deliverablesApi } from "../../../api/modules/deliverables";
+import { attachDeliverables, responseId } from "../deliverables";
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -262,6 +264,9 @@ const buildResponseCard = (
   }));
 
   const turnUsage = extractTurnUsageFromOutputMessages(outputMessages);
+  const stableResponseId = `response_${String(
+    outputMessages[outputMessages.length - 1]?.id || generateId(),
+  )}`;
 
   return {
     id: generateId(),
@@ -270,7 +275,7 @@ const buildResponseCard = (
       {
         code: CARD_RESPONSE,
         data: {
-          id: `response_${generateId()}`,
+          id: stableResponseId,
           output: normalizedMessages,
           object: "response",
           status: "completed",
@@ -1074,6 +1079,25 @@ class SessionApi implements IAgentScopeRuntimeWebUISessionAPI {
     if (signal?.aborted) throw new DOMException("Aborted", "AbortError");
     const generating = isGenerating(chatHistory);
     const messages = convertMessages(chatHistory.messages || []);
+    if (!generating) {
+      const ids = messages
+        .flatMap((message) => message.cards || [])
+        .filter((card) => card.code === CARD_RESPONSE)
+        .map((card) => responseId((card.data || {}) as Record<string, unknown>))
+        .filter((id): id is string => Boolean(id));
+      if (ids.length > 0) {
+        try {
+          const history = await deliverablesApi.query(
+            backendId,
+            ids.slice(-50),
+            signal,
+          );
+          attachDeliverables(messages, history.turns);
+        } catch {
+          // Older backends do not expose deliverables; chat history still loads.
+        }
+      }
+    }
     this.patchLastUserMessage(messages, generating, backendId);
 
     const session: ExtendedSession = {

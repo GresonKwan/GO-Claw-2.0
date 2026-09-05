@@ -3,6 +3,7 @@
 
 Blocks tool calls that target files explicitly listed in a sensitive-file set.
 """
+
 from __future__ import annotations
 
 import ntpath
@@ -390,6 +391,12 @@ class FilePathToolGuardian(BaseToolGuardian):
             if abs_path.startswith(trimmed + "\\"):
                 return True
         return False
+
+    def is_sensitive_path(self, path: str | Path) -> bool:
+        """Public fail-closed check reused by non-tool local file surfaces."""
+        if not self._enabled:
+            return False
+        return self._is_sensitive(_normalize_path(str(path)))
 
     def _make_finding(
         self,

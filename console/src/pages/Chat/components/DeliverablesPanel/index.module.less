@@ -1,0 +1,183 @@
+.panel {
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 1px solid var(--ant-color-border-secondary, #eee);
+  min-width: 0;
+
+  h3 {
+    margin: 0 0 10px;
+    font-size: 14px;
+    font-weight: 600;
+  }
+}
+
+.railShell {
+  position: relative;
+  min-width: 0;
+  padding-bottom: 8px;
+}
+.mediaRail {
+  display: flex;
+  gap: 10px;
+  overflow-x: auto;
+  overflow-y: hidden;
+  scroll-snap-type: x proximity;
+  scrollbar-width: none;
+  overscroll-behavior-inline: contain;
+  outline: none;
+  &::-webkit-scrollbar {
+    display: none;
+  }
+}
+.mediaCard {
+  flex: 0 0 180px;
+  min-width: 0;
+  scroll-snap-align: start;
+  border-radius: 8px;
+  overflow: hidden;
+  border: 1px solid var(--ant-color-border-secondary, #eee);
+  background: var(--ant-color-bg-container, #fff);
+  content-visibility: auto;
+  contain-intrinsic-size: 180px 145px;
+  &:hover .mediaVisual::after,
+  &:focus-within .mediaVisual::after {
+    opacity: 1;
+  }
+  &:hover .mediaActions,
+  &:focus-within .mediaActions {
+    opacity: 1;
+    pointer-events: auto;
+  }
+}
+.mediaSpacer {
+  flex: 0 0 auto;
+  height: 1px;
+  pointer-events: none;
+}
+.mediaVisual {
+  position: relative;
+  height: 112px;
+  background: #ececec;
+  img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+  }
+  &::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background: rgb(0 0 0 / 42%);
+    opacity: 0;
+    transition: opacity 160ms;
+  }
+}
+.mediaPlaceholder {
+  display: grid;
+  place-items: center;
+  width: 100%;
+  height: 100%;
+  font-size: 28px;
+  color: #777;
+}
+.mediaActions {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 160ms;
+  button {
+    width: 32px;
+    height: 32px;
+    border: 0;
+    border-radius: 50%;
+    color: #fff;
+    background: rgb(0 0 0 / 55%);
+    cursor: pointer;
+  }
+  button:disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
+  }
+}
+.mediaName {
+  padding: 7px 9px;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  font-size: 12px;
+}
+.scrollOverlay {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 1px;
+  height: 4px;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 160ms;
+  background: color-mix(in srgb, currentColor 8%, transparent);
+  border-radius: 999px;
+}
+.scrollThumb {
+  height: 100%;
+  min-width: 36px;
+  border-radius: inherit;
+  background: color-mix(in srgb, currentColor 34%, transparent);
+  will-change: transform;
+}
+.railShell:hover .scrollOverlay,
+.railShell:focus-within .scrollOverlay,
+.scrolling .scrollOverlay {
+  opacity: 1;
+  pointer-events: auto;
+}
+.scrollThumb {
+  cursor: ew-resize;
+}
+.fileList {
+  display: grid;
+  gap: 6px;
+  margin-top: 8px;
+}
+.fileRow {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  min-width: 0;
+  padding: 7px 8px;
+  border-radius: 8px;
+  background: var(--ant-color-fill-quaternary, #fafafa);
+}
+.fileMeta {
+  display: grid;
+  min-width: 0;
+  flex: 1;
+  span {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  small {
+    color: var(--ant-color-text-tertiary, #999);
+  }
+}
+
+@media (hover: none), (pointer: coarse) {
+  .mediaVisual::after {
+    opacity: 0.22;
+  }
+  .mediaActions {
+    opacity: 1;
+    pointer-events: auto;
+    align-items: flex-end;
+    justify-content: flex-end;
+    padding: 8px;
+  }
+}

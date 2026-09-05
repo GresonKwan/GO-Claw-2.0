@@ -34,7 +34,9 @@ from .access_control import router as access_control_router
 from .provider_oauth import router as provider_oauth_router
 from .pawapps import router as pawapps_router
 from .go_claw_product import router as go_claw_product_router
+from .update_readiness import router as update_readiness_router
 from .recharge import router as recharge_router
+from .deliverables import router as deliverables_router
 
 router = APIRouter()
 
@@ -69,7 +71,9 @@ router.include_router(access_control_router)
 router.include_router(provider_oauth_router)
 router.include_router(pawapps_router)
 router.include_router(go_claw_product_router)
+router.include_router(update_readiness_router)
 router.include_router(recharge_router)
+router.include_router(deliverables_router)
 
 
 def create_agent_scoped_router() -> APIRouter:

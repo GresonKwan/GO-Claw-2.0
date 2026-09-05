@@ -45,6 +45,7 @@ def main() -> None:
         help="release download base URL",
     )
     parser.add_argument("--notes", default="")
+    parser.add_argument("--build-commit", default="")
     parser.add_argument("--output", required=True)
     args = parser.parse_args()
 
@@ -64,6 +65,14 @@ def main() -> None:
             },
         },
     }
+    if args.build_commit:
+        if len(args.build_commit) != 40 or any(
+            char not in "0123456789abcdef" for char in args.build_commit
+        ):
+            raise SystemExit(
+                "--build-commit must be a lowercase 40-character SHA"
+            )
+        manifest["buildCommit"] = args.build_commit
     Path(args.output).write_text(
         json.dumps(manifest, indent=2, ensure_ascii=False) + "\n",
         encoding="utf-8",
