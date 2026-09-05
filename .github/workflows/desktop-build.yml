@@ -668,7 +668,7 @@ jobs:
         shell: pwsh
         run: |
           npm --prefix console ci
-          python -m pip install packaging cryptography
+          python -m pip install packaging cryptography jsonschema
 
       - name: Build signed Bridge revision
         shell: pwsh
