@@ -692,6 +692,9 @@ jobs:
           $manifest = Join-Path $work "windows-release-v2.json"
           $manifestHash = (Get-FileHash $manifest -Algorithm SHA256).Hash.ToLowerInvariant()
 
+          foreach ($resource in @("qwenpaw-backend", "python-runtime", "node-runtime")) {
+            New-Item -ItemType Directory -Force -Path (Join-Path "console/src-tauri/binaries" $resource) | Out-Null
+          }
           cargo build --manifest-path console/src-tauri/Cargo.toml --release --bin go-claw-update-engine
           if ($LASTEXITCODE -ne 0) { throw "standalone update engine build failed" }
           $engine = (Resolve-Path "console/src-tauri/target/release/go-claw-update-engine.exe").Path
