@@ -58,7 +58,7 @@ jobs:
         run: python scripts/verify/go_claw_maintenance_contract.py --repo-root .
 
       - name: Install packaging helper dependencies
-        run: python -m pip install packaging python-dotenv cryptography
+        run: python -m pip install packaging python-dotenv cryptography jsonschema
 
       - name: Set up uv
         uses: astral-sh/setup-uv@v5
