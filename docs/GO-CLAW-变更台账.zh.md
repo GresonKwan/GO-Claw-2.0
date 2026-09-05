@@ -317,6 +317,7 @@ USB 升级或旧用户无损验收完成。本轮未改生产源、服务器、�
 | 08-31 | 新增隔离 `/updates-staging/2.1.1/`，部署 run `33369481282` 的完整更新包、manifest 和测试启动器；生产软链保持 `releases/2.1.0-a9ab44b`；用户完整包实测仍失败，事故保持开放 | 在不影响生产的前提下复现 v2.1.1；实际失败说明 CI 小型 probe 不能作为发布结论 |
 | 09-01 | 在当天新拷贝的 G、F 空产品盘分别复现额度条缺失和媒体工具不可用；每块盘先备份旧凭据 marker/插件 manifest，再补入受信 provisioning 配置并提升插件兼容范围；重启后额度接口 200、媒体插件加载、五个员工运行。F 盘备份位于 `F:\backups\P0-local-repair-20260901-171414` | 立即恢复现场产品盘，同时保留可回滚证据；生产更新源未修改 |
 | 09-05 | 只读复核 Billing 公网/本机 readiness、systemd、Nginx 和用户已支付的最新 ￥1 订单；订单为 `PAID/APPLIED`，支付/额度 journal、CREDIT adjustment、已处理回调各唯一，双分录按资产平衡，无退款或未解决对账项；F 盘计费 profile 仅核对 schema/字段存在性 | 将此前真实支付从口头结果升级为脱敏的客户端与服务端证据；未发起新支付、未写服务端或生产更新源 |
+| 09-05 | 正式签名 Main Build run `33947367539` 成功；F 独立目录从 2.0.1 完成 v2.1.2 A/B `COMMITTED`、自动重启和旧身份/聊天/额度保留；五员工、三档模型、真实 PNG/MP4 生成、交付产物及中文附件上传通过；GitHub `v2.1.2` 提升为 latest | 用真实 U 盘、真实签名包和真实媒体调用关闭“仅结构/仅注册”证据缺口；生产在线更新镜像仍为 2.1.1，故障诱发自动回滚作为开放全量更新前门禁 |
 | 08-25 | deepseek-v4-flash 不可用三层修复：渠道 #1 models 名单补名 + `abilities` 表补路由行 + `options.ModelRatio` 补定价 0.25 + `model_mapping` 映射到 deepseek-v4-flash-0731（上游只认带日期型号）；实测 chat completion 200 | 模型选择器调用必 503 |
 | 08-25 | provisioning 服务器 `CHAT_MODEL_ID` 由 qwen3.7-plus 改为 `deepseek-v4-flash` 并重启；服务端 quota 语义更新已部署 | 交付模型与白名单对齐 / 充值语义 |
 

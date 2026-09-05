@@ -341,6 +341,16 @@ key 写入 Full ZIP。客户盘首次启动后由 provisioning 服务签发独�
   运行日志确认五个员工和无 key 媒体工具、三档模型、两个媒体插件及实例额度合同均 PASS；
   最终 verifier 输出 `containsCredentials=false`、`containsProvisioningConfig=true`、
   `fullZipFiles=13910`、`signatureChecks=2`。
+- v2.1.2 Windows Main Build run
+  [`33947367539`](https://github.com/GresonKwan/GO-Claw-2.0/actions/runs/33947367539)
+  在提交 `f50bcfcee9a6efd23d3095a8b641f5c0c913041f` 成功；CI Full ZIP 内层 SHA-256
+  `d804f3136823f0c3c1cc0a123c58b573526db994f3c9c491686709585ecb6f94`，13,981 条
+  manifest 文件逐项校验无失败。F 盘真实 2.0.1 → 2.1.2 A/B 事务最终
+  `COMMITTED/100%`，旧身份、凭据和聊天摘要不变，首次重启额度仍为
+  `2.3/0.8745/38%`；五员工、三档模型、真实生图/视频、交付产物及中文图片/视频附件上传通过。
+  GitHub Release [`v2.1.2`](https://github.com/GresonKwan/GO-Claw-2.0/releases/tag/v2.1.2)
+  已于 2026-09-05 提升为正式 latest，固定到上述构建提交。生产更新 manifest 仍为 v2.1.1；
+  正式 Release 不等同生产更新镜像已切换。
 - staging 启动器提交 `77f7916e` 会先结束旧单实例，再注入测试 endpoint；它只消除旧
   v2.0.1 托盘进程继续使用生产 endpoint 的干扰，不修复安装事务。
 

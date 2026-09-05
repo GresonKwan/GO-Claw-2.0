@@ -1,7 +1,7 @@
 # GO CLAW v2.1.2 实施计划
 
 日期：2026-09-03；定稿：2026-09-04
-状态：本地未签名发布候选已构建（2026-09-05）；D1–D5 代码已落地，生产发布与真实签名 A/B/U 盘最终验收尚未完成
+状态：v2.1.2 正式签名构建与 F 盘真实 A/B 升级验收已完成并发布 GitHub Release（2026-09-05）；生产在线更新镜像尚未切换，U 盘故障诱发自动回滚仍作为开放全量更新前的独立门禁
 设计：[v2.1.2 详细设计](../specs/2026-09-03-go-claw-v2-1-2-design.md)
 合同：[v2.1.2 目标接口、持久化与兼容边界](../../contracts/v2.1.2/README.zh-CN.md)
 
@@ -21,7 +21,7 @@
 | D3 / Task 2.4 | HTTP v2 状态/动作和 SSE 接独立引擎；空 body 兼容、目标冻结、重复请求合并、恢复快照、同源校验；签名历史目录已接有界 release catalog | 真实安装联测 |
 | Task 2.5 / 身份保留 | 损坏旧 ID 保留而不再生成新身份；固定路径旧盘证据阻止重新开户；损坏 billing profile 保留；CLIENT_VERSION 复用唯一版本源；时序/维护检查同步；provision/billing 20 项回归通过 | 真实旧版聊天/余额前后对比仍待实机 |
 | D4 | 双橙点/单进度条统一更新 UI；交付产物收集、持久化、鉴权媒体票据、打开/定位、历史恢复和窗口化媒体轨道；附件 AT-03 单次 URL 语义修复 | 浏览器真实缩放/触屏与 provider 多模态验收 |
-| D5 | 产品版本 2.1.2；Rust/Python/前端核心回归与 Bridge 可执行合同完成；本地未签名 Main Full Build 成功；F 独立 RC 复制/哈希、未绑定态及临时绑定态 UI/API/媒体注册验收完成；真实媒体请求已到达 provider | CI Tauri 正式签名资产、F/NTFS 实际 A/B 与跨版本非空聊天回读；provider 配额/容量恢复后生成产物验收 |
+| D5 | 产品版本 2.1.2；Rust/Python/前端核心回归与 Bridge 可执行合同完成；正式签名 Main Build 成功；F 盘从 2.0.1 完成真实 A/B 升级、自动重启、数据摘要/额度保留；五员工、三档模型、充值接口、真实图片/视频生成、交付产物和中文附件上传通过 | 生产在线更新镜像原子切换；在独立 U 盘测试目录诱发候选健康失败并核对自动回滚，不阻塞已发布 GitHub Release，但阻塞生产全量更新 |
 
 本轮验证命令/工具边界见 [组件合同说明](../../contracts/update-v2/README.zh-CN.md)；
 自动测试不替代真实 USB 更新或前端布局验收。新增身份保护已同步当前运行文档；A/B 代码已接线但
@@ -65,6 +65,21 @@ EXE 的 Authenticode `NotSigned` 与 updater 签名相互独立；沿用此前 W
 所以检查更新在 discover 阶段返回 `DOWNLOAD_REJECTED`，未改生产更新源。
 已绑定 RC 内真实调用生图一次与文生视频三次：前者被上游周配额 429 拒绝，后者被上游分组负载饱和
 429 拒绝；工具检测、调用和视频最低规格参数传递已通过，但未生成文件，待 provider 恢复后补产物验收。
+
+2026-09-05 正式签名验收补充：Main Build run
+[`33947367539`](https://github.com/GresonKwan/GO-Claw-2.0/actions/runs/33947367539)
+在提交 `f50bcfcee9a6efd23d3095a8b641f5c0c913041f` 成功。CI Full ZIP 内部 SHA-256 为
+`d804f3136823f0c3c1cc0a123c58b573526db994f3c9c491686709585ecb6f94`，manifest 13,981
+项逐项校验无失败。`F:\GC201-V212-SIGNED-0905-01` 从 2.0.1 经隔离 staging 完成交易
+`3a69aec7-71ee-4693-90f6-6770cb5e2000`，最终 `COMMITTED/100%`、活动槽 A、无 failure；
+下载 533,652,013 bytes，完整版本 620,465,208 bytes，证明组件差分而非全包覆盖。升级前后的
+`instance.id`、credentials、master key、config、token usage 及全部既有 `chats.json/history.db`
+摘要一致；额度从升级前到首次启动后仍为 `2.3/0.8745/38%`，之后只因本次付费媒体验收正常消耗。
+五员工均 idle，每个员工返回 economy/balanced/performance 三档；图片/视频插件均
+`loaded=true, enabled=true`。真实生成 2048×2048 PNG（1,372,291 bytes）和 3 秒 720P
+MP4（391,708 bytes），两者均进入 `goClawDeliverables`；再以中文文件名上传 PNG/MP4 均返回
+HTTP 200，无 UTF-8 错误。GitHub Release `v2.1.2` 已提升为非 draft、非 prerelease 的 latest；
+生产 `https://goclaw.host:8443/updates/latest.json` 仍保持 2.1.1，未随 Release 自动切换。
 
 ## 1. 分支、合并与发布边界
 
