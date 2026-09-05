@@ -692,6 +692,17 @@ jobs:
           $manifest = Join-Path $work "windows-release-v2.json"
           $manifestHash = (Get-FileHash $manifest -Algorithm SHA256).Hash.ToLowerInvariant()
 
+          # The index builder intentionally re-verifies every component archive
+          # referenced by the retained manifest. Download those immutable assets
+          # into the manifest directory, but keep them out of this small hotfix
+          # artifact: only the Bridge and top-level metadata are republished.
+          $publishedManifest = Get-Content -LiteralPath $manifest -Raw | ConvertFrom-Json
+          foreach ($component in $publishedManifest.components) {
+            $archiveName = [IO.Path]::GetFileName(([Uri]$component.archiveUrl).AbsolutePath)
+            gh release download "v$version" --repo $env:GITHUB_REPOSITORY --pattern $archiveName --output (Join-Path $work $archiveName)
+            if ($LASTEXITCODE -ne 0) { throw "Unable to download published component $archiveName" }
+          }
+
           foreach ($resource in @("qwenpaw-backend", "python-runtime", "node-runtime")) {
             New-Item -ItemType Directory -Force -Path (Join-Path "console/src-tauri/binaries" $resource) | Out-Null
           }
