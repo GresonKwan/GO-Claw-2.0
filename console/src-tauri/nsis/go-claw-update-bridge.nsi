@@ -33,6 +33,7 @@ Var BridgeProgress
 Var BridgeEngine
 Var BridgeResult
 Var BridgeTimerActive
+Var BridgeFinished
 
 !ifdef GO_CLAW_BRIDGE_HEADLESS
   SilentInstall silent
@@ -83,12 +84,20 @@ Function BridgePage
   GetDlgItem $0 $HWNDPARENT 2
   EnableWindow $0 0
   StrCpy $BridgeTimerActive "1"
+  StrCpy $BridgeFinished "0"
   ${NSD_CreateTimer} BridgePoll 500
   Exec '"$BridgeEngine" bridge --root "$INSTDIR" --index-url "${GO_CLAW_INDEX_URL}" --target-version "${GO_CLAW_VERSION}" --target-manifest "${GO_CLAW_TARGET_MANIFEST}"'
   nsDialogs::Show
 FunctionEnd
 
 Function BridgePoll
+  ${If} $BridgeFinished == "1"
+    Return
+  ${EndIf}
+  ; Completion must win over progress collection. The progress helper is a
+  ; separate process and may be slow while the new backend is starting.
+  IfFileExists "$BridgeResult" bridge_finished bridge_read_progress
+  bridge_read_progress:
   nsExec::ExecToStack /TIMEOUT=10000 '"$BridgeEngine" bridge-progress --root "$INSTDIR"'
   Pop $0
   Pop $1
@@ -97,6 +106,7 @@ Function BridgePoll
   ${EndIf}
   IfFileExists "$BridgeResult" bridge_finished bridge_poll_done
   bridge_finished:
+    StrCpy $BridgeFinished "1"
     FileOpen $2 "$BridgeResult" r
     FileRead $2 $3
     FileRead $2 $4
@@ -108,7 +118,11 @@ Function BridgePoll
       SendMessage $BridgeProgress ${PBM_SETPOS} 100 0
       ${NSD_SetText} $BridgeLabel "GO CLAW ${GO_CLAW_VERSION} 已安装完成，正在启动。"
       Sleep 400
-      Quit
+      ; Leave the custom page through the normal NSIS page lifecycle. Calling
+      ; Quit directly from a timer callback can leave the hidden wrapper alive.
+      GetDlgItem $5 $HWNDPARENT 1
+      EnableWindow $5 1
+      SendMessage $HWNDPARENT ${WM_COMMAND} 1 0
     ${Else}
       ${NSD_SetText} $BridgeLabel "更新失败（$4）。程序数据未被更新器覆盖，请保留 updates 日志。"
       MessageBox MB_ICONSTOP|MB_OK "GO CLAW 更新失败：$4$\r$\n请保留 updates 目录并联系支持。"

@@ -29,12 +29,18 @@ using System.Linq;
 
 public static class Program {
     public static int Main(string[] args) {
-        if (args.Length == 0 || args[0] != "bridge") return 9;
+        if (args.Length == 0) return 9;
         int rootIndex = Array.IndexOf(args, "--root");
         if (rootIndex < 0 || rootIndex + 1 >= args.Length) return 8;
         string root = args[rootIndex + 1];
+        if (args[0] == "bridge-progress") {
+            Console.WriteLine("50");
+            return 0;
+        }
+        if (args[0] != "bridge") return 9;
         Directory.CreateDirectory(Path.Combine(root, "updates", "bridge"));
         File.WriteAllLines(Path.Combine(root, "updates", "bridge", "probe.txt"), args);
+        File.WriteAllText(Path.Combine(root, "updates", "bridge", "result.txt"), "0\nCOMMITTED\n");
         return 0;
     }
 }
@@ -111,4 +117,26 @@ if ($uiExitCode -ne 0) { throw "Interactive Bridge NSIS compilation failed" }
 if ($uiOutput -match 'function "BridgePoll" not referenced') {
   throw "Interactive Bridge timer callback was removed by the NSIS linker"
 }
+
+# The customer-facing wrapper must close itself after the engine publishes a
+# committed result. A successful transaction with a lingering update.exe still
+# locks removable media and is therefore a failed Bridge contract.
+$uiRoot = Join-Path $work "interactive portable root 中文"
+New-Item -ItemType Directory -Path (Join-Path $uiRoot "data") -Force | Out-Null
+[IO.File]::WriteAllText((Join-Path $uiRoot "portable.json"), '{"schemaVersion":1}')
+[IO.File]::WriteAllText((Join-Path $uiRoot "data\chats.json"), '交互更新保留的聊天')
+$uiBefore = (Get-FileHash -LiteralPath (Join-Path $uiRoot "data\chats.json") -Algorithm SHA256).Hash
+$uiRun = Start-Process -FilePath $bridge -ArgumentList @("/S", "/D=$uiRoot") -PassThru
+$uiDeadline = [DateTime]::UtcNow.AddSeconds(15)
+while (-not $uiRun.HasExited -and [DateTime]::UtcNow -lt $uiDeadline) {
+  Start-Sleep -Milliseconds 100
+  $uiRun.Refresh()
+}
+if (-not $uiRun.HasExited) {
+  Stop-Process -Id $uiRun.Id -Force -ErrorAction SilentlyContinue
+  throw "Interactive Bridge did not exit after COMMITTED result"
+}
+if ($uiRun.ExitCode -ne 0) { throw "Interactive Bridge exited $($uiRun.ExitCode)" }
+$uiAfter = (Get-FileHash -LiteralPath (Join-Path $uiRoot "data\chats.json") -Algorithm SHA256).Hash
+if ($uiBefore -ne $uiAfter) { throw "Interactive Bridge wrapper modified customer data" }
 Write-Host "Portable A/B Bridge executable contract passed."
