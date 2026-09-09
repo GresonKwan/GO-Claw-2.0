@@ -81,9 +81,21 @@ def test_assemble_requires_programs_seeds_and_valid_signatures(tmp_path):
 def test_release_schemas_allow_every_owned_component():
     contracts = Path(__file__).parents[3] / "docs" / "contracts" / "update-v2"
     properties = {
-        "windows-release.schema.json": "components",
-        "release-index.schema.json": "componentDigests",
+        "windows-release.schema.json": ("properties", "components"),
+        "release-index.schema.json": ("properties", "componentDigests"),
+        "release-catalog.schema.json": (
+            "properties",
+            "releases",
+            "items",
+            "properties",
+            "release",
+            "properties",
+            "componentDigests",
+        ),
     }
-    for name, property_name in properties.items():
+    for name, property_path in properties.items():
         schema = json.loads((contracts / name).read_text(encoding="utf-8"))
-        assert schema["properties"][property_name]["maxItems"] == len(COMPONENTS)
+        component_array = schema
+        for segment in property_path:
+            component_array = component_array[segment]
+        assert component_array["maxItems"] == len(COMPONENTS)
