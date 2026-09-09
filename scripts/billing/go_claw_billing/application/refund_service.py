@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 """Operator-only refund DTOs and validation helpers."""
 
 from __future__ import annotations

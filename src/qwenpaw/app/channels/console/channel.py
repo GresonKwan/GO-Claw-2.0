@@ -480,11 +480,11 @@ class ConsoleChannel(BaseChannel):
                                 workspace_root=self._workspace.workspace_dir,
                             )
                             event.metadata = dict(
-                                getattr(event, "metadata", None) or {}
+                                getattr(event, "metadata", None) or {},
                             )
-                            event.metadata["goClawDeliverables"] = (
-                                envelope.model_dump(mode="json")
-                            )
+                            event.metadata[
+                                "goClawDeliverables"
+                            ] = envelope.model_dump(mode="json")
 
                 data = self._serialize_event_for_sse(event)
                 yield f"data: {data}\n\n"

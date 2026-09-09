@@ -225,11 +225,11 @@ def build_full_bundle(
         shutil.copytree(portable, root / "Portable")
         shutil.copy2(start_path, root / "START-HERE.zh-CN.txt")
         portable_manifest = json.loads(
-            (portable / "MANIFEST.json").read_text(encoding="utf-8-sig")
+            (portable / "MANIFEST.json").read_text(encoding="utf-8-sig"),
         )
         webview = portable / "WebView2" / WEBVIEW2_NAME
         if portable_manifest.get("webView2", {}).get("sha256") != _sha256_file(
-            webview
+            webview,
         ):
             raise ValueError("portable WebView2 hash does not match manifest")
 

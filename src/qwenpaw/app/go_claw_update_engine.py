@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 """Narrow subprocess boundary for the packaged, independent Windows engine.
 
 Only explicit actions copy/hash the engine. Status/SSE never spawn processes.
@@ -66,11 +67,11 @@ class EngineClient:
 
     def _executable(self) -> Path:
         marker = json.loads(
-            read_bounded(checked_path(self.root, "portable.json"), 65536)
+            read_bounded(checked_path(self.root, "portable.json"), 65536),
         )
         shell = checked_path(self.root, "GO-CLAW-Portable.exe")
         if marker.get("schemaVersion") != 1 or not stat.S_ISREG(
-            shell.lstat().st_mode
+            shell.lstat().st_mode,
         ):
             raise UpdateError("INVALID_PRODUCT_ROOT", "engine", 503)
         program = Path(os.environ.get("GO_CLAW_PROGRAM_ROOT", str(self.root)))
@@ -82,13 +83,20 @@ class EngineClient:
             raise UpdateError("UNSAFE_PATH", "engine", 503)
         relative = program.relative_to(self.root).parts
         source = checked_path(
-            self.root, *relative, "binaries", "go-claw-update-engine.exe"
+            self.root,
+            *relative,
+            "binaries",
+            "go-claw-update-engine.exe",
         )
         digest = _digest(source)
         directory = checked_path(self.root, "updates", "engine", digest)
         directory.mkdir(parents=True, exist_ok=True)
         final = checked_path(
-            self.root, "updates", "engine", digest, "go-claw-update-engine.exe"
+            self.root,
+            "updates",
+            "engine",
+            digest,
+            "go-claw-update-engine.exe",
         )
         if not final.exists():
             temp = directory / f".{uuid4()}.tmp"

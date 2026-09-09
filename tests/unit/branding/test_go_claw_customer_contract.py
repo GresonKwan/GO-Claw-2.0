@@ -91,8 +91,7 @@ TAURI_ICON_BUILD_SCRIPTS = (
 )
 GO_CLAW_APP_ICON_SOURCE = "scripts/pack/assets/go-claw-app-icon-1024.png"
 GO_CLAW_TAURI_ICON_COMMAND = (
-    "tauri icon ../scripts/pack/assets/"
-    "go-claw-app-icon-1024.png"
+    "tauri icon ../scripts/pack/assets/" "go-claw-app-icon-1024.png"
 )
 PACKAGING_CONSUMER_TOKEN_CONTRACTS: dict[
     str,
@@ -397,7 +396,9 @@ def test_tauri_debug_shortcut_uses_go_claw_display_name() -> None:
 def test_tauri_nsis_assets_do_not_depend_on_cargo_target_location() -> None:
     nsis_hooks = _read_customer_text("console/src-tauri/nsis-hooks.nsh")
 
-    assert '!define GO_CLAW_NSIS_ASSET_DIR "${__FILEDIR__}\\nsis"' in nsis_hooks
+    assert (
+        '!define GO_CLAW_NSIS_ASSET_DIR "${__FILEDIR__}\\nsis"' in nsis_hooks
+    )
     assert '"..\\..\\..\\..\\nsis\\' not in nsis_hooks
     assert nsis_hooks.count("${GO_CLAW_NSIS_ASSET_DIR}\\") == 4
 

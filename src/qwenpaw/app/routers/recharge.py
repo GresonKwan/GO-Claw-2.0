@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 """Same-origin, credential-hiding proxy for GO CLAW recharge APIs."""
 
 from __future__ import annotations
@@ -103,28 +104,44 @@ async def _upstream(
             )
     except httpx.TimeoutException as exc:
         raise _problem(
-            504, "RECHARGE_UPSTREAM_TIMEOUT", "recharge service timed out"
+            504,
+            "RECHARGE_UPSTREAM_TIMEOUT",
+            "recharge service timed out",
         ) from exc
     except httpx.HTTPError as exc:
         raise _problem(
-            502, "RECHARGE_UPSTREAM_UNAVAILABLE", "recharge service unavailable"
+            502,
+            "RECHARGE_UPSTREAM_UNAVAILABLE",
+            "recharge service unavailable",
         ) from exc
 
     if len(response.content) > MAX_RESPONSE_BYTES:
         raise _problem(
-            502, "RECHARGE_UPSTREAM_INVALID", "recharge response is too large"
+            502,
+            "RECHARGE_UPSTREAM_INVALID",
+            "recharge response is too large",
         )
     content_type = response.headers.get("content-type", "").lower()
     if "application/json" not in content_type and "+json" not in content_type:
-        raise _problem(502, "RECHARGE_UPSTREAM_INVALID", "recharge response is invalid")
+        raise _problem(
+            502,
+            "RECHARGE_UPSTREAM_INVALID",
+            "recharge response is invalid",
+        )
     try:
         payload = response.json()
     except json.JSONDecodeError as exc:
         raise _problem(
-            502, "RECHARGE_UPSTREAM_INVALID", "recharge response is invalid"
+            502,
+            "RECHARGE_UPSTREAM_INVALID",
+            "recharge response is invalid",
         ) from exc
     if not isinstance(payload, dict):
-        raise _problem(502, "RECHARGE_UPSTREAM_INVALID", "recharge response is invalid")
+        raise _problem(
+            502,
+            "RECHARGE_UPSTREAM_INVALID",
+            "recharge response is invalid",
+        )
     if response.is_error:
         # Upstream bodies may contain diagnostics or PII.  Return a stable,
         # local code while preserving only the useful HTTP class.
@@ -133,7 +150,11 @@ async def _upstream(
             if response.status_code in {400, 401, 403, 404, 409, 429}
             else 502
         )
-        raise _problem(status, "RECHARGE_REQUEST_FAILED", "recharge request failed")
+        raise _problem(
+            status,
+            "RECHARGE_REQUEST_FAILED",
+            "recharge request failed",
+        )
     return payload
 
 

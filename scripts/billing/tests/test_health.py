@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 from fastapi.testclient import TestClient
 from go_claw_billing.app import create_app
 from go_claw_billing.config import Settings

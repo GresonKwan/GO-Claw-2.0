@@ -68,10 +68,12 @@ def _fixture(tmp_path: Path) -> dict[str, Path | str]:
                     "path": "WebView2/MicrosoftEdgeWebview2Setup.exe",
                     "distribution": "evergreen-bootstrapper",
                     "requiresNetwork": True,
-                    "source": "https://go.microsoft.com/fwlink/p/?LinkId=2124703",
+                    "source": (
+                        "https://go.microsoft.com/fwlink/p/?LinkId=2124703"
+                    ),
                     "sha256": hashlib.sha256(b"MZ-webview").hexdigest(),
                 },
-            }
+            },
         ),
         encoding="utf-8",
     )

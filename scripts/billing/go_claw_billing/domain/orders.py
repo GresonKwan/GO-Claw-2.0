@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 """Payment and quota states are intentionally independent."""
 
 from __future__ import annotations
@@ -43,7 +44,7 @@ class PaymentOrder:
     created_at: datetime = field(default_factory=lambda: datetime.now(UTC))
     updated_at: datetime = field(default_factory=lambda: datetime.now(UTC))
     expires_at: datetime = field(
-        default_factory=lambda: datetime.now(UTC) + timedelta(minutes=15)
+        default_factory=lambda: datetime.now(UTC) + timedelta(minutes=15),
     )
     refunded_at: datetime | None = None
     refund_state: str = "NONE"
@@ -70,9 +71,7 @@ class PaymentOrder:
             status = "CLOSED"
         else:
             status = "REVIEW_REQUIRED"
-        amount_cny = (
-            f"{self.priced.amount_fen // 100}.{self.priced.amount_fen % 100:02d}"
-        )
+        amount_cny = f"{self.priced.amount_fen // 100}.{self.priced.amount_fen % 100:02d}"
         data: dict[str, object] = {
             "orderId": str(self.order_id),
             "merchantOrderNo": self.out_trade_no,
@@ -88,5 +87,8 @@ class PaymentOrder:
         if self.code_url is not None:
             data["codeUrl"] = self.code_url
         if self.refunded_at is not None:
-            data["refundedAt"] = self.refunded_at.isoformat().replace("+00:00", "Z")
+            data["refundedAt"] = self.refunded_at.isoformat().replace(
+                "+00:00",
+                "Z",
+            )
         return data

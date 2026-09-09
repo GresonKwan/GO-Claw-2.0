@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 """Durable PostgreSQL repositories for accounts, orders and the ledger."""
 
 # Nested async context managers keep transaction, cursor and pool ownership
@@ -28,7 +29,11 @@ from ..application.payment_service import PaymentConfirmation
 from ..application.refund_service import RefundRecord
 from ..domain.adjustments import UpstreamResult
 from ..domain.ledger import JournalLine, validate_balanced
-from ..domain.money import DISPLAY_UNITS_PER_FEN, NEWAPI_UNITS_PER_FEN, PricedAmount
+from ..domain.money import (
+    DISPLAY_UNITS_PER_FEN,
+    NEWAPI_UNITS_PER_FEN,
+    PricedAmount,
+)
 from ..domain.orders import GrantState, PaymentOrder, PaymentState
 
 
@@ -84,7 +89,9 @@ class PricingRepository:
             raise RuntimeError("exactly one active pricing policy is required")
         row = rows[0]
         if row["daily_limit_fen"] != 10_000_000:
-            raise RuntimeError("active pricing policy daily limit is not approved")
+            raise RuntimeError(
+                "active pricing policy daily limit is not approved",
+            )
         return PricingPolicy(
             row["policy_id"],
             row["version"],
@@ -100,7 +107,9 @@ class PostgresAccountStore:
     hasher: PasswordHasher = field(default_factory=PasswordHasher)
 
     async def enroll(
-        self, instance_id: UUID, newapi_user_id: int
+        self,
+        instance_id: UUID,
+        newapi_user_id: int,
     ) -> tuple[AccountRecord, str]:
         async with self.pool.connection() as connection:
             async with connection.transaction():
@@ -154,7 +163,8 @@ class PostgresAccountStore:
                     token_id = uuid4()
                     secret = secrets.token_urlsafe(32)
                     token_hash = await asyncio.to_thread(
-                        self.hasher.hash, secret + self.pepper
+                        self.hasher.hash,
+                        secret + self.pepper,
                     )
                     await cursor.execute(
                         """
@@ -172,7 +182,9 @@ class PostgresAccountStore:
                         ),
                     )
         account = AccountRecord(
-            row["account_id"], row["instance_id"], row["newapi_user_id"]
+            row["account_id"],
+            row["instance_id"],
+            row["newapi_user_id"],
         )
         return account, f"gcb_live_{token_id.hex}_{secret}"
 
@@ -204,7 +216,10 @@ class PostgresAccountStore:
                         (token_id,),
                     )
                     row = await cursor.fetchone()
-                    if row is None or row["status"] not in {"ISSUED", "ACTIVE"}:
+                    if row is None or row["status"] not in {
+                        "ISSUED",
+                        "ACTIVE",
+                    }:
                         return None
                     if row["status"] == "ISSUED" and row[
                         "issued_expires_at"
@@ -253,14 +268,18 @@ class CodeUrlCipher:
     def encrypt(self, value: str) -> bytes:
         nonce = secrets.token_bytes(12)
         return nonce + AESGCM(self._key()).encrypt(
-            nonce, value.encode(), b"code_url:v1"
+            nonce,
+            value.encode(),
+            b"code_url:v1",
         )
 
     def decrypt(self, value: bytes | None) -> str | None:
         if value is None:
             return None
         return (
-            AESGCM(self._key()).decrypt(value[:12], value[12:], b"code_url:v1").decode()
+            AESGCM(self._key())
+            .decrypt(value[:12], value[12:], b"code_url:v1")
+            .decode()
         )
 
 
@@ -320,7 +339,9 @@ class PostgresOrderRepository:
                     existing = await cursor.fetchone()
                     if existing is not None:
                         if bytes(existing["request_sha256"]) != request_hash:
-                            raise IdempotencyConflict("idempotency key body mismatch")
+                            raise IdempotencyConflict(
+                                "idempotency key body mismatch",
+                            )
                         await cursor.execute(
                             "SELECT * FROM payment_order WHERE order_id=%s",
                             (existing["resource_id"],),
@@ -358,7 +379,9 @@ class PostgresOrderRepository:
                         int(total_row["total"]) + order.priced.amount_fen
                         > self.daily_limit_fen
                     ):
-                        raise DailyLimitExceeded("daily recharge limit exceeded")
+                        raise DailyLimitExceeded(
+                            "daily recharge limit exceeded",
+                        )
                     await cursor.execute(
                         """
                         INSERT INTO payment_order (
@@ -420,7 +443,11 @@ class PostgresOrderRepository:
             raise RuntimeError("order is not eligible for QR transition")
         return _order_from_row(row, self.code_url_cipher)
 
-    async def get_owned(self, account_id: UUID, order_id: UUID) -> PaymentOrder | None:
+    async def get_owned(
+        self,
+        account_id: UUID,
+        order_id: UUID,
+    ) -> PaymentOrder | None:
         async with self.pool.connection() as connection:
             async with connection.cursor(row_factory=dict_row) as cursor:
                 await cursor.execute(
@@ -430,7 +457,11 @@ class PostgresOrderRepository:
                 row = await cursor.fetchone()
         return _order_from_row(row, self.code_url_cipher) if row else None
 
-    async def list_owned(self, account_id: UUID, limit: int) -> list[PaymentOrder]:
+    async def list_owned(
+        self,
+        account_id: UUID,
+        limit: int,
+    ) -> list[PaymentOrder]:
         async with self.pool.connection() as connection:
             async with connection.cursor(row_factory=dict_row) as cursor:
                 await cursor.execute(
@@ -445,7 +476,9 @@ class PostgresOrderRepository:
         return [_order_from_row(row, self.code_url_cipher) for row in rows]
 
     async def close_owned(
-        self, account_id: UUID, order_id: UUID
+        self,
+        account_id: UUID,
+        order_id: UUID,
     ) -> PaymentOrder | None:
         """Development compatibility only; production uses PaymentRecoveryService."""
         async with self.pool.connection() as connection:
@@ -510,7 +543,9 @@ class PostgresOrderRepository:
             await connection.commit()
 
     async def mark_unpaid(
-        self, order_id: UUID, state: PaymentState
+        self,
+        order_id: UUID,
+        state: PaymentState,
     ) -> PaymentOrder:
         if state not in {PaymentState.CLOSED, PaymentState.EXPIRED}:
             raise ValueError("invalid unpaid terminal state")
@@ -531,7 +566,8 @@ class PostgresOrderRepository:
                 row = await cursor.fetchone()
                 if row is None:
                     await cursor.execute(
-                        "SELECT * FROM payment_order WHERE order_id=%s", (order_id,)
+                        "SELECT * FROM payment_order WHERE order_id=%s",
+                        (order_id,),
                     )
                     row = await cursor.fetchone()
             await connection.commit()
@@ -539,7 +575,11 @@ class PostgresOrderRepository:
             raise RuntimeError("order disappeared during unpaid transition")
         return _order_from_row(row, self.code_url_cipher)
 
-    async def mark_payment_review(self, order_id: UUID, error_code: str) -> None:
+    async def mark_payment_review(
+        self,
+        order_id: UUID,
+        error_code: str,
+    ) -> None:
         async with self.pool.connection() as connection:
             async with connection.cursor() as cursor:
                 await cursor.execute(
@@ -562,7 +602,11 @@ class LedgerRepository:
     hmac_key: str
     key_version: int = 1
 
-    async def customer_entries(self, account_id: UUID, limit: int) -> list[dict]:
+    async def customer_entries(
+        self,
+        account_id: UUID,
+        limit: int,
+    ) -> list[dict]:
         async with self.pool.connection() as connection:
             async with connection.cursor(row_factory=dict_row) as cursor:
                 await cursor.execute(
@@ -596,7 +640,9 @@ class LedgerRepository:
                 "kind": row["journal_type"],
                 "amountFen": int(row["amount_fen"]),
                 "computeUnits": int(row["compute_units"]),
-                "occurredAt": row["occurred_at"].isoformat().replace("+00:00", "Z"),
+                "occurredAt": row["occurred_at"]
+                .isoformat()
+                .replace("+00:00", "Z"),
                 "reversalOf": (
                     str(row["reversal_of_journal_id"])
                     if row["reversal_of_journal_id"]
@@ -642,7 +688,7 @@ class LedgerRepository:
         async with connection.cursor(row_factory=dict_row) as cursor:
             await cursor.execute("SELECT pg_advisory_xact_lock(91004201)")
             await cursor.execute(
-                "SELECT entry_hash FROM journal_entry ORDER BY posted_at DESC, journal_id DESC LIMIT 1"
+                "SELECT entry_hash FROM journal_entry ORDER BY posted_at DESC, journal_id DESC LIMIT 1",
             )
             previous = await cursor.fetchone()
             previous_hash = bytes(previous["entry_hash"]) if previous else None
@@ -668,7 +714,9 @@ class LedgerRepository:
                 ],
             }
             entry_hash = hmac.new(
-                self.hmac_key.encode(), _canonical(payload), hashlib.sha256
+                self.hmac_key.encode(),
+                _canonical(payload),
+                hashlib.sha256,
             ).digest()
             await cursor.execute(
                 """
@@ -694,7 +742,9 @@ class LedgerRepository:
             )
             for line in lines:
                 owner = (
-                    account_id if line.account_code.startswith("customer_") else None
+                    account_id
+                    if line.account_code.startswith("customer_")
+                    else None
                 )
                 await cursor.execute(
                     """
@@ -842,7 +892,9 @@ class PaymentCommitterRepository:
                         description="WeChat payment confirmed",
                         lines=[
                             JournalLine(
-                                "wechat_clearing", "CNY_FEN", debit=order["amount_fen"]
+                                "wechat_clearing",
+                                "CNY_FEN",
+                                debit=order["amount_fen"],
                             ),
                             JournalLine(
                                 "customer_prepayment",
@@ -927,16 +979,23 @@ class RefundRepository:
                     replay = await cursor.fetchone()
                     if replay is not None:
                         if bytes(replay["request_sha256"]) != request_hash:
-                            raise IdempotencyConflict("refund idempotency mismatch")
+                            raise IdempotencyConflict(
+                                "refund idempotency mismatch",
+                            )
                         await cursor.execute(
                             "SELECT * FROM refund WHERE refund_id=%s",
                             (replay["resource_id"],),
                         )
                         existing = await cursor.fetchone()
                         if existing is None:
-                            raise RuntimeError("refund replay resource is missing")
+                            raise RuntimeError(
+                                "refund replay resource is missing",
+                            )
                         return _refund_from_row(existing), True
-                    if order["payment_state"] != "PAID" or order["grant_state"] != "APPLIED":
+                    if (
+                        order["payment_state"] != "PAID"
+                        or order["grant_state"] != "APPLIED"
+                    ):
                         raise ValueError("order is not refundable")
                     await cursor.execute(
                         "SELECT COALESCE(sum(amount_fen),0) AS refunded FROM refund WHERE order_id=%s",
@@ -944,10 +1003,12 @@ class RefundRepository:
                     )
                     refunded = await cursor.fetchone()
                     remaining_refundable = order["amount_fen"] - int(
-                        refunded["refunded"]
+                        refunded["refunded"],
                     )
                     if amount_fen > remaining_refundable:
-                        raise ValueError("refund exceeds remaining refundable amount")
+                        raise ValueError(
+                            "refund exceeds remaining refundable amount",
+                        )
                     await cursor.execute(
                         """
                         SELECT adjustment_id FROM quota_adjustment
@@ -1036,7 +1097,7 @@ class RefundRepository:
                          WHERE r.state IN ('QUOTA_REVERSED','WECHAT_PROCESSING')
                            AND r.next_attempt_at <= now()
                          ORDER BY r.updated_at FOR UPDATE OF r SKIP LOCKED LIMIT 1
-                        """
+                        """,
                     )
                     row = await cursor.fetchone()
                     if row is None:
@@ -1053,7 +1114,9 @@ class RefundRepository:
         return _refund_from_row(row)
 
     async def record_wechat_accepted(
-        self, refund_id: UUID, wechat_refund_id: str | None
+        self,
+        refund_id: UUID,
+        wechat_refund_id: str | None,
     ) -> None:
         async with self.pool.connection() as connection:
             async with connection.cursor() as cursor:
@@ -1069,7 +1132,11 @@ class RefundRepository:
             await connection.commit()
 
     async def reschedule_refund(
-        self, refund_id: UUID, *, delay_seconds: int, error_code: str | None = None
+        self,
+        refund_id: UUID,
+        *,
+        delay_seconds: int,
+        error_code: str | None = None,
     ) -> None:
         delay = max(10, min(delay_seconds, 3600))
         async with self.pool.connection() as connection:
@@ -1085,7 +1152,11 @@ class RefundRepository:
             await connection.commit()
 
     async def retry_refund_creation(
-        self, refund_id: UUID, *, delay_seconds: int, error_code: str
+        self,
+        refund_id: UUID,
+        *,
+        delay_seconds: int,
+        error_code: str,
     ) -> None:
         delay = max(10, min(delay_seconds, 3600))
         async with self.pool.connection() as connection:
@@ -1139,7 +1210,12 @@ class RefundRepository:
                         ) VALUES ('WECHATPAY',%s,'REFUND.SUCCESS',%s,%s,%s,1,now())
                         ON CONFLICT (provider,event_id) DO NOTHING RETURNING event_id
                         """,
-                        (event_id, serial, hashlib.sha256(raw_body).digest(), raw_body),
+                        (
+                            event_id,
+                            serial,
+                            hashlib.sha256(raw_body).digest(),
+                            raw_body,
+                        ),
                     )
                     if await cursor.fetchone() is None:
                         return False
@@ -1161,7 +1237,9 @@ class RefundRepository:
                         )
                         return False
                     if refund["state"] != "WECHAT_PROCESSING":
-                        raise ValueError("refund cannot transition to completed")
+                        raise ValueError(
+                            "refund cannot transition to completed",
+                        )
                     await cursor.execute(
                         """
                         UPDATE refund SET state='REFUNDED',wechat_refund_id=%s,
@@ -1204,9 +1282,15 @@ class RefundRepository:
                         description="WeChat refund confirmed",
                         lines=[
                             JournalLine(
-                                "customer_prepayment", "CNY_FEN", debit=amount_fen
+                                "customer_prepayment",
+                                "CNY_FEN",
+                                debit=amount_fen,
                             ),
-                            JournalLine("wechat_clearing", "CNY_FEN", credit=amount_fen),
+                            JournalLine(
+                                "wechat_clearing",
+                                "CNY_FEN",
+                                credit=amount_fen,
+                            ),
                         ],
                     )
                     await cursor.execute(
@@ -1242,7 +1326,7 @@ class QuotaAdjustmentRepository:
                          WHERE state IN ('QUEUED','FAILED_RETRYABLE')
                          ORDER BY created_at
                          FOR UPDATE SKIP LOCKED LIMIT 1
-                        """
+                        """,
                     )
                     row = await cursor.fetchone()
                     if row is None:
@@ -1296,11 +1380,19 @@ class QuotaAdjustmentRepository:
                          WHERE adjustment_id=%s AND state='APPLYING' AND attempt_id=%s
                         RETURNING newapi_quota_units
                         """,
-                        (state, state, error_code, item.adjustment_id, item.attempt_id),
+                        (
+                            state,
+                            state,
+                            error_code,
+                            item.adjustment_id,
+                            item.attempt_id,
+                        ),
                     )
                     row = await cursor.fetchone()
                     if row is None:
-                        raise RuntimeError("quota adjustment attempt lost ownership")
+                        raise RuntimeError(
+                            "quota adjustment attempt lost ownership",
+                        )
                     if state == "APPLIED" and item.direction == "CREDIT":
                         await cursor.execute(
                             """
@@ -1345,7 +1437,9 @@ class QuotaAdjustmentRepository:
                         )
                         refund = await cursor.fetchone()
                         if refund is None:
-                            raise RuntimeError("refund quota reversal has no workflow")
+                            raise RuntimeError(
+                                "refund quota reversal has no workflow",
+                            )
                         await cursor.execute(
                             "UPDATE refund SET state='QUOTA_REVERSED',updated_at=now() WHERE refund_id=%s",
                             (refund["refund_id"],),
@@ -1357,7 +1451,9 @@ class QuotaAdjustmentRepository:
                             refund_id=refund["refund_id"],
                             account_id=item.account_id,
                             correlation_id=item.adjustment_id,
-                            reversal_of_journal_id=refund["original_journal_id"],
+                            reversal_of_journal_id=refund[
+                                "original_journal_id"
+                            ],
                             description="NewAPI quota reversed for reviewed refund",
                             lines=[
                                 JournalLine(
@@ -1372,7 +1468,10 @@ class QuotaAdjustmentRepository:
                                 ),
                             ],
                         )
-                    elif state == "REVIEW_REQUIRED" and item.direction == "CREDIT":
+                    elif (
+                        state == "REVIEW_REQUIRED"
+                        and item.direction == "CREDIT"
+                    ):
                         await cursor.execute(
                             "UPDATE payment_order SET grant_state='REVIEW_REQUIRED',updated_at=now() WHERE order_id=%s",
                             (item.order_id,),
@@ -1413,7 +1512,7 @@ class OutboxRepository:
                            AND available_at <= now()
                          ORDER BY created_at
                          FOR UPDATE SKIP LOCKED LIMIT 1
-                        """
+                        """,
                     )
                     row = await cursor.fetchone()
                     if row is None:
@@ -1429,7 +1528,9 @@ class OutboxRepository:
                         (row["event_id"],),
                     )
         return ClaimedOutboxEvent(
-            row["event_id"], row["aggregate_id"], row["event_type"]
+            row["event_id"],
+            row["aggregate_id"],
+            row["event_type"],
         )
 
     async def publish_local(self, event: ClaimedOutboxEvent) -> None:
@@ -1504,7 +1605,10 @@ class ReconciliationRepository:
             await connection.commit()
         return row["run_id"] if row else None
 
-    async def orders_for_date(self, business_date: date) -> list[ReconciliationOrder]:
+    async def orders_for_date(
+        self,
+        business_date: date,
+    ) -> list[ReconciliationOrder]:
         async with self.pool.connection() as connection:
             async with connection.cursor(row_factory=dict_row) as cursor:
                 await cursor.execute(
@@ -1517,13 +1621,16 @@ class ReconciliationRepository:
                 rows = await cursor.fetchall()
         return [
             ReconciliationOrder(
-                row["order_id"], row["out_trade_no"], row["payment_state"]
+                row["order_id"],
+                row["out_trade_no"],
+                row["payment_state"],
             )
             for row in rows
         ]
 
     async def refunds_for_date(
-        self, business_date: date
+        self,
+        business_date: date,
     ) -> list[ReconciliationRefund]:
         async with self.pool.connection() as connection:
             async with connection.cursor(row_factory=dict_row) as cursor:
@@ -1574,7 +1681,11 @@ class ReconciliationRepository:
                 )
             await connection.commit()
 
-    async def add_local_invariant_differences(self, run_id: UUID, business_date: date) -> int:
+    async def add_local_invariant_differences(
+        self,
+        run_id: UUID,
+        business_date: date,
+    ) -> int:
         queries = (
             (
                 "PAID_WITHOUT_PAYMENT_JOURNAL",
@@ -1618,8 +1729,18 @@ class ReconciliationRepository:
                 count += 1
         return count
 
-    async def complete(self, run_id: UUID, *, differences: int, failed: bool = False) -> None:
-        state = "FAILED" if failed else ("DIFFERENCES" if differences else "MATCHED")
+    async def complete(
+        self,
+        run_id: UUID,
+        *,
+        differences: int,
+        failed: bool = False,
+    ) -> None:
+        state = (
+            "FAILED"
+            if failed
+            else ("DIFFERENCES" if differences else "MATCHED")
+        )
         async with self.pool.connection() as connection:
             async with connection.cursor() as cursor:
                 await cursor.execute(
@@ -1650,12 +1771,16 @@ class AuditRepository:
         async with self.pool.connection() as connection:
             async with connection.transaction():
                 async with connection.cursor(row_factory=dict_row) as cursor:
-                    await cursor.execute("SELECT pg_advisory_xact_lock(91004202)")
                     await cursor.execute(
-                        "SELECT event_hash FROM audit_event ORDER BY occurred_at DESC,audit_id DESC LIMIT 1"
+                        "SELECT pg_advisory_xact_lock(91004202)",
+                    )
+                    await cursor.execute(
+                        "SELECT event_hash FROM audit_event ORDER BY occurred_at DESC,audit_id DESC LIMIT 1",
                     )
                     previous = await cursor.fetchone()
-                    previous_hash = bytes(previous["event_hash"]) if previous else None
+                    previous_hash = (
+                        bytes(previous["event_hash"]) if previous else None
+                    )
                     payload = {
                         "auditId": str(audit_id),
                         "actorType": actor_type,
@@ -1665,10 +1790,14 @@ class AuditRepository:
                         "resourceId": resource_id,
                         "reason": reason,
                         "metadata": metadata or {},
-                        "previousHash": previous_hash.hex() if previous_hash else None,
+                        "previousHash": previous_hash.hex()
+                        if previous_hash
+                        else None,
                     }
                     event_hash = hmac.new(
-                        self.hmac_key.encode(), _canonical(payload), hashlib.sha256
+                        self.hmac_key.encode(),
+                        _canonical(payload),
+                        hashlib.sha256,
                     ).digest()
                     await cursor.execute(
                         """

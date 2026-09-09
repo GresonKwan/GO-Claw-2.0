@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 """Refund state constants; refunds remain server/admin-only."""
 
 from enum import StrEnum

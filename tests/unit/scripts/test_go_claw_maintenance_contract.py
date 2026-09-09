@@ -74,7 +74,7 @@ def _valid_fixture(root: Path) -> None:
                 'if transaction["enginePhase"] != "STAGED":',
                 "await self.engine.install(transaction)",
                 'self._install_id = transaction["transactionId"]',
-            )
+            ),
         ),
     )
     _write(
@@ -106,7 +106,7 @@ def _valid_fixture(root: Path) -> None:
                 "t.engine_phase = Phase::RolledBack",
                 "unlock(root, t)",
                 "t.engine_phase = Phase::Blocked",
-            )
+            ),
         ),
     )
     _write(
@@ -123,7 +123,7 @@ def _valid_fixture(root: Path) -> None:
                 "allow_create=not _has_existing_identity_evidence"
                 "(root, working_dir)",
                 "payload = await http_post(",
-            )
+            ),
         ),
     )
     _write(
@@ -135,7 +135,7 @@ def _valid_fixture(root: Path) -> None:
                 "if load_billing_profile() is not None:",
                 "if profile_path.exists() or profile_path.is_symlink():",
                 "instance_id, newapi_subtoken = _load_legacy_identity",
-            )
+            ),
         ),
     )
     _write(
@@ -179,7 +179,7 @@ def _valid_fixture(root: Path) -> None:
                 "crate::update_engine::slots::resolve(&self.root)",
                 "for directory in [",
                 "crate::update_engine::slots::environment",
-            )
+            ),
         ),
     )
     _write(

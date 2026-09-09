@@ -4,7 +4,6 @@
 from __future__ import annotations
 
 import mimetypes
-import os
 import stat
 from dataclasses import dataclass
 from pathlib import Path
@@ -90,7 +89,9 @@ def _has_reparse_component(root: Path, path: Path) -> bool:
             return True
         try:
             attrs = getattr(
-                current.stat(follow_symlinks=False), "st_file_attributes", 0
+                current.stat(follow_symlinks=False),
+                "st_file_attributes",
+                0,
             )
             if attrs & getattr(stat, "FILE_ATTRIBUTE_REPARSE_POINT", 0x400):
                 return True
@@ -140,7 +141,7 @@ def validate_file(
     workspace_root: str | Path,
     require_preview: bool = False,
 ) -> SafeFile:
-    """Resolve a file beneath the two approved roots without following links."""
+    """Resolve beneath the approved roots without following links."""
     raw = str(raw_path)
     if not raw or "\x00" in raw:
         raise DeliverableSecurityError("INVALID_PATH")
@@ -211,7 +212,10 @@ def validate_file(
 
 
 def resolve_stored(
-    record, *, workspace_root: str | Path, require_preview: bool = False
+    record,
+    *,
+    workspace_root: str | Path,
+    require_preview: bool = False,
 ) -> SafeFile:
     root = (
         Path(workspace_root)

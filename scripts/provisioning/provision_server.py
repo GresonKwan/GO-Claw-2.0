@@ -555,7 +555,9 @@ def create_billing_challenge(
 
 
 @app.post("/go-claw/provision/billing/enrollments")
-def complete_billing_enrollment(body: BillingEnrollmentRequest) -> JSONResponse:
+def complete_billing_enrollment(
+    body: BillingEnrollmentRequest,
+) -> JSONResponse:
     if not BILLING_INTERNAL_URL or not BILLING_INTERNAL_TOKEN:
         return _error(503, "ENROLLMENT_TEMPORARILY_UNAVAILABLE")
     now = datetime.now(UTC)
@@ -778,8 +780,7 @@ def _display_remaining(remaining_units: object) -> int | None:
     ):
         return None
     display_remaining = (
-        remaining_units * DISPLAY_UNITS_NUMERATOR
-        // DISPLAY_UNITS_DENOMINATOR
+        remaining_units * DISPLAY_UNITS_NUMERATOR // DISPLAY_UNITS_DENOMINATOR
     )
     if display_remaining > MAX_DISPLAY_REMAINING:
         return None

@@ -36,7 +36,9 @@ class TurnCollector:
         self.candidates[key] = (safe, published or bool(prior and prior[1]))
 
     def finalize(
-        self, response_id: str, final_text: str
+        self,
+        response_id: str,
+        final_text: str,
     ) -> DeliverablesManifest | None:
         selected: list[SafeFile] = []
         for safe, published in self.candidates.values():
@@ -48,12 +50,14 @@ class TurnCollector:
                 try:
                     selected.append(
                         validate_file(
-                            safe.path, workspace_root=self.workspace_root
-                        )
+                            safe.path,
+                            workspace_root=self.workspace_root,
+                        ),
                     )
                 except DeliverableSecurityError:
                     logger.debug(
-                        "deliverable changed before finalize", exc_info=True
+                        "deliverable changed before finalize",
+                        exc_info=True,
                     )
         if not selected:
             return None
@@ -87,15 +91,20 @@ class TurnCollector:
 
 
 _CURRENT: ContextVar[TurnCollector | None] = ContextVar(
-    "go_claw_turn_deliverables", default=None
+    "go_claw_turn_deliverables",
+    default=None,
 )
 
 
 def bind_turn(
-    *, agent_id: str, chat_id: str, turn_id: str, workspace_root: Path
+    *,
+    agent_id: str,
+    chat_id: str,
+    turn_id: str,
+    workspace_root: Path,
 ) -> Token:
     return _CURRENT.set(
-        TurnCollector(agent_id, chat_id, turn_id, workspace_root)
+        TurnCollector(agent_id, chat_id, turn_id, workspace_root),
     )
 
 
@@ -116,7 +125,8 @@ def register_published(path: str | Path) -> None:
 
 
 def finalize_turn(
-    response_id: str, final_text: str
+    response_id: str,
+    final_text: str,
 ) -> DeliverablesManifest | None:
     current = _CURRENT.get()
     if current is None:
@@ -124,6 +134,6 @@ def finalize_turn(
     try:
         return current.finalize(response_id, final_text)
     except Exception:
-        # A deliverables I/O failure must not turn a completed answer into a failure.
+        # Deliverables I/O must not turn a completed answer into a failure.
         logger.warning("deliverable manifest finalize failed", exc_info=True)
         return None

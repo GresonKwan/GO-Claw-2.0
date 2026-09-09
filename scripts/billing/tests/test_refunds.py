@@ -1,13 +1,20 @@
+# -*- coding: utf-8 -*-
 from datetime import UTC, datetime
 from uuid import uuid4
 
 import pytest
 from go_claw_billing.api.webhooks import _parse_refund
 from go_claw_billing.domain.money import price_amount
-from go_claw_billing.domain.orders import GrantState, PaymentOrder, PaymentState
+from go_claw_billing.domain.orders import (
+    GrantState,
+    PaymentOrder,
+    PaymentState,
+)
 
 
-def test_refund_notification_requires_exact_merchant_and_success_event() -> None:
+def test_refund_notification_requires_exact_merchant_and_success_event() -> (
+    None
+):
     decoded = {
         "_event_id": "event-1",
         "_event_type": "REFUND.SUCCESS",
@@ -23,7 +30,9 @@ def test_refund_notification_requires_exact_merchant_and_success_event() -> None
         _parse_refund(decoded, expected_mchid="wrong")
 
 
-def test_customer_status_does_not_report_refunded_until_callback_completion() -> None:
+def test_customer_status_does_not_report_refunded_until_callback_completion() -> (
+    None
+):
     now = datetime.now(UTC)
     order = PaymentOrder(
         account_id=uuid4(),

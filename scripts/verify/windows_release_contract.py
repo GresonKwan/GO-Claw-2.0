@@ -185,10 +185,9 @@ def _verify_full_zip(full_zip: Path, pubkey: str) -> dict[str, object]:
     if manifest.get("provisioningConfigSha256") != _sha256(provision_data):
         raise ValueError("Full ZIP manifest provisioning config hash mismatch")
     webview_data = relative_data[WEBVIEW2_PATH]
-    if (
-        not WEBVIEW2_MIN_BYTES <= len(webview_data) <= WEBVIEW2_MAX_BYTES
-        or not webview_data.startswith(b"MZ")
-    ):
+    if not WEBVIEW2_MIN_BYTES <= len(
+        webview_data,
+    ) <= WEBVIEW2_MAX_BYTES or not webview_data.startswith(b"MZ"):
         raise ValueError("Full ZIP WebView2 Bootstrapper identity is invalid")
     webview_contract = manifest.get("webView2", {})
     if (

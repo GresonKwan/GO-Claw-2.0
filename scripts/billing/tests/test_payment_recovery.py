@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 from datetime import UTC, datetime, timedelta
 from uuid import uuid4
 
@@ -24,7 +25,9 @@ def signed_result(state: str = "SUCCESS") -> dict:
 def test_signed_query_requires_exact_merchant_binding() -> None:
     with pytest.raises(ValueError, match="merchant binding"):
         confirmation_from_signed_query(
-            signed_result(), expected_appid="wrong", expected_mchid="merchant-approved"
+            signed_result(),
+            expected_appid="wrong",
+            expected_mchid="merchant-approved",
         )
 
 
@@ -50,14 +53,23 @@ class FakeOrders:
         self.reviewed = False
 
     async def get_owned(self, account_id, order_id):
-        if account_id == self.order.account_id and order_id == self.order.order_id:
+        if (
+            account_id == self.order.account_id
+            and order_id == self.order.order_id
+        ):
             return self.order
         return None
 
     async def list_recoverable(self, limit):
         return [self.order][:limit]
 
-    async def schedule_recovery(self, order_id, *, delay_seconds, error_code=None):
+    async def schedule_recovery(
+        self,
+        order_id,
+        *,
+        delay_seconds,
+        error_code=None,
+    ):
         self.scheduled = True
 
     async def mark_unpaid(self, order_id, state):
@@ -106,7 +118,9 @@ def make_order(*, expired: bool = False) -> PaymentOrder:
         payment_state=PaymentState.QR_READY,
         created_at=now - timedelta(minutes=20),
         updated_at=now - timedelta(minutes=20),
-        expires_at=now - timedelta(minutes=5) if expired else now + timedelta(minutes=5),
+        expires_at=now - timedelta(minutes=5)
+        if expired
+        else now + timedelta(minutes=5),
     )
 
 

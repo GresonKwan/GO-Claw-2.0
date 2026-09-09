@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 import asyncio
 import hashlib
 import json
@@ -46,7 +47,7 @@ def save(root, value):
     directory = root / "updates/transactions" / value["transactionId"]
     directory.mkdir(parents=True, exist_ok=True)
     (root / "updates/current-transaction.json").write_text(
-        json.dumps({"transactionId": value["transactionId"]})
+        json.dumps({"transactionId": value["transactionId"]}),
     )
     raw = json.dumps(value, separators=(",", ":")).encode()
     data = (
@@ -98,7 +99,9 @@ async def manager(tmp_path):
     (tmp_path / "portable.json").write_text('{"schemaVersion":1}')
     (tmp_path / "GO-CLAW-Portable.exe").write_bytes(b"MZfixture")
     item = ComponentUpdateManager(
-        tmp_path, engine=Engine(tmp_path), version="2.1.1"
+        tmp_path,
+        engine=Engine(tmp_path),
+        version="2.1.1",
     )
     yield item
     if item._task:
@@ -108,13 +111,16 @@ async def manager(tmp_path):
 
 @pytest.mark.asyncio
 async def test_check_is_coalesced_and_status_never_does_io(
-    manager, monkeypatch
+    manager,
+    monkeypatch,
 ):
     await asyncio.gather(manager.check(), manager.check(), manager.check())
     assert len(manager.engine.calls) == 1
     assert manager.status()["notifyAvailable"]
     monkeypatch.setattr(
-        Path, "open", Mock(side_effect=AssertionError("status touched disk"))
+        Path,
+        "open",
+        Mock(side_effect=AssertionError("status touched disk")),
     )
     for _ in range(100):
         assert manager.status()["latest"]["version"] == "2.1.2"
@@ -176,7 +182,8 @@ async def test_unknown_target_or_not_staged_never_spawns(manager):
 
 @pytest.mark.asyncio
 async def test_check_cannot_change_target_before_first_stage_journal(
-    manager, monkeypatch
+    manager,
+    monkeypatch,
 ):
     await manager.check()
     gate = asyncio.Event()
@@ -203,7 +210,8 @@ async def test_check_cannot_change_target_before_first_stage_journal(
 
 @pytest.mark.asyncio
 async def test_missing_engine_during_stage_surfaces_failure_not_loading(
-    manager, monkeypatch
+    manager,
+    monkeypatch,
 ):
     await manager.check()
 
@@ -225,7 +233,9 @@ async def test_restart_restores_transaction_revision_and_sse(manager):
     await manager._task
     revision = manager.status()["revision"]
     restarted = ComponentUpdateManager(
-        manager.root, engine=manager.engine, version="2.1.1"
+        manager.root,
+        engine=manager.engine,
+        version="2.1.1",
     )
     try:
         await restarted.initialize()
@@ -269,7 +279,9 @@ async def test_bad_journal_is_blocked_not_silently_overwritten(manager):
 async def test_history_never_accepts_client_https_as_authority(manager):
     with pytest.raises(UpdateError, match="INVALID_TARGET"):
         await manager.install_version(
-            "2.0.1", "https://example.com/run.exe", "signed"
+            "2.0.1",
+            "https://example.com/run.exe",
+            "signed",
         )
     assert all(call[0] == "catalog" for call in manager.engine.calls)
     assert not manager.engine.installs
@@ -291,12 +303,14 @@ async def test_history_uses_verified_immutable_index_and_same_ab_engine(
         {
             "indexUrl": "https://goclaw.host/v201/release-index-v2.json",
             "release": release,
-        }
+        },
     )
     items = await manager.releases()
     assert items[0]["signatureUrl"] == "catalog-bound-signature"
     await manager.install_version(
-        "2.0.1", items[0]["setupUrl"], items[0]["signatureUrl"]
+        "2.0.1",
+        items[0]["setupUrl"],
+        items[0]["signatureUrl"],
     )
     await manager._task
     stages = [c for c in manager.engine.calls if c[0] == "stage"]
@@ -311,19 +325,22 @@ async def test_history_uses_verified_immutable_index_and_same_ab_engine(
 
 @pytest.mark.asyncio
 async def test_routes_optional_body_schema_errors_and_origin_guard(
-    manager, monkeypatch
+    manager,
+    monkeypatch,
 ):
     monkeypatch.setattr(updates, "_portable_root", lambda: manager.root)
     monkeypatch.setattr(updates, "get_update_manager", lambda: manager)
     app = FastAPI()
     app.include_router(updates.router, prefix="/api")
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://127.0.0.1:12345"
+        transport=ASGITransport(app=app),
+        base_url="http://127.0.0.1:12345",
     ) as client:
         assert (await client.post("/api/updates/install")).status_code == 409
         assert (
             await client.post(
-                "/api/updates/download", json={"targetManifestSha256": "bad"}
+                "/api/updates/download",
+                json={"targetManifestSha256": "bad"},
             )
         ).status_code == 422
         assert (
@@ -334,11 +351,13 @@ async def test_routes_optional_body_schema_errors_and_origin_guard(
         ).status_code == 403
         assert (
             await client.get(
-                "/api/updates/status", headers={"Host": "evil.example"}
+                "/api/updates/status",
+                headers={"Host": "evil.example"},
             )
         ).status_code == 403
         good = await client.post(
-            "/api/updates/check", headers={"Origin": "http://127.0.0.1:12345"}
+            "/api/updates/check",
+            headers={"Origin": "http://127.0.0.1:12345"},
         )
         assert good.status_code == 200 and good.json()["schemaVersion"] == 2
         assert (await client.post("/api/updates/download")).status_code == 200

@@ -30,7 +30,10 @@ def _location_block(config: str, declaration: str) -> str:
 
 def test_public_newapi_surface_is_an_explicit_allowlist():
     config = _config()
-    assert "include /etc/nginx/snippets/go-claw-billing-locations.conf" not in config
+    assert (
+        "include /etc/nginx/snippets/go-claw-billing-locations.conf"
+        not in config
+    )
     assert "location ^~ /go-claw/provision/billing/" not in config
     assert "location = /go-claw/healthz" not in config
 
@@ -83,9 +86,9 @@ def test_management_api_and_unknown_paths_fail_closed():
 
 def test_product_and_update_routes_keep_their_existing_upstreams():
     config = _config()
-    assert (
-        "proxy_pass http://127.0.0.1:9100/api/quota;"
-        in _location_block(config, "= /go-claw/quota")
+    assert "proxy_pass http://127.0.0.1:9100/api/quota;" in _location_block(
+        config,
+        "= /go-claw/quota",
     )
     assert (
         "proxy_pass http://127.0.0.1:9100/api/provision;"

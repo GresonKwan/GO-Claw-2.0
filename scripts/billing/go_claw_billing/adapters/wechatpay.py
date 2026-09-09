@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 """WeChat Pay API v3 Native client and notification verifier.
 
 The adapter never logs request headers, QR payloads, decrypted payer
@@ -66,12 +67,17 @@ def _verify_wechat_signature(
         signed_at = int(timestamp)
     except ValueError as exc:
         raise WeChatVerificationError("invalid timestamp") from exc
-    if abs((int(time.time()) if now is None else now) - signed_at) > clock_skew_seconds:
+    if (
+        abs((int(time.time()) if now is None else now) - signed_at)
+        > clock_skew_seconds
+    ):
         raise WeChatVerificationError("stale signature")
     pem = verification_keys_pem.get(serial)
     if pem is None:
         raise WeChatVerificationError("unknown verification key")
-    message = timestamp.encode() + b"\n" + nonce.encode() + b"\n" + body + b"\n"
+    message = (
+        timestamp.encode() + b"\n" + nonce.encode() + b"\n" + body + b"\n"
+    )
     try:
         _verification_key(pem).verify(
             base64.b64decode(signature_b64, validate=True),
@@ -140,7 +146,11 @@ class WeChatPayClient:
         payload: Mapping[str, object] | None = None,
     ) -> dict[str, Any]:
         body = (
-            json.dumps(payload, ensure_ascii=False, separators=(",", ":")).encode()
+            json.dumps(
+                payload,
+                ensure_ascii=False,
+                separators=(",", ":"),
+            ).encode()
             if payload is not None
             else b""
         )
@@ -171,13 +181,17 @@ class WeChatPayClient:
                     timestamp=response.headers.get("Wechatpay-Timestamp", ""),
                     nonce=response.headers.get("Wechatpay-Nonce", ""),
                     serial=response.headers.get("Wechatpay-Serial", ""),
-                    signature_b64=response.headers.get("Wechatpay-Signature", ""),
+                    signature_b64=response.headers.get(
+                        "Wechatpay-Signature",
+                        "",
+                    ),
                     verification_keys_pem=self.verification_keys_pem,
                     clock_skew_seconds=300,
                 )
             except WeChatVerificationError as exc:
                 raise WeChatPayAmbiguousError(
-                    "WECHAT_INVALID_RESPONSE_SIGNATURE", response.status_code
+                    "WECHAT_INVALID_RESPONSE_SIGNATURE",
+                    response.status_code,
                 ) from exc
             if response.status_code == 204:
                 return {}
@@ -186,19 +200,25 @@ class WeChatPayClient:
             except ValueError as exc:
                 if response.is_success:
                     raise WeChatPayAmbiguousError(
-                        "WECHAT_INVALID_SUCCESS_RESPONSE", response.status_code
+                        "WECHAT_INVALID_SUCCESS_RESPONSE",
+                        response.status_code,
                     ) from exc
                 raise WeChatPayError(
-                    "WECHAT_INVALID_ERROR_RESPONSE", response.status_code
+                    "WECHAT_INVALID_ERROR_RESPONSE",
+                    response.status_code,
                 ) from exc
             if not response.is_success:
-                code = decoded.get("code") if isinstance(decoded, dict) else None
+                code = (
+                    decoded.get("code") if isinstance(decoded, dict) else None
+                )
                 raise WeChatPayError(
-                    str(code or "WECHAT_REQUEST_REJECTED"), response.status_code
+                    str(code or "WECHAT_REQUEST_REJECTED"),
+                    response.status_code,
                 )
             if not isinstance(decoded, dict):
                 raise WeChatPayAmbiguousError(
-                    "WECHAT_INVALID_SUCCESS_RESPONSE", response.status_code
+                    "WECHAT_INVALID_SUCCESS_RESPONSE",
+                    response.status_code,
                 )
             return decoded
         finally:
@@ -213,13 +233,19 @@ class WeChatPayClient:
             "out_trade_no": order.out_trade_no,
             "notify_url": self.notify_url,
             "time_expire": order.expires_at.astimezone(UTC).isoformat(
-                timespec="seconds"
+                timespec="seconds",
             ),
             "amount": {"total": order.priced.amount_fen, "currency": "CNY"},
         }
-        result = await self._request("POST", "/v3/pay/transactions/native", payload)
+        result = await self._request(
+            "POST",
+            "/v3/pay/transactions/native",
+            payload,
+        )
         code_url = result.get("code_url")
-        if not isinstance(code_url, str) or not code_url.startswith("weixin://"):
+        if not isinstance(code_url, str) or not code_url.startswith(
+            "weixin://",
+        ):
             raise WeChatPayAmbiguousError("WECHAT_NATIVE_CODE_URL_MISSING")
         return code_url
 
@@ -259,11 +285,18 @@ class WeChatPayClient:
         }
         if self.refund_notify_url:
             payload["notify_url"] = self.refund_notify_url
-        return await self._request("POST", "/v3/refund/domestic/refunds", payload)
+        return await self._request(
+            "POST",
+            "/v3/refund/domestic/refunds",
+            payload,
+        )
 
     async def query_refund(self, out_refund_no: str) -> dict[str, Any]:
         encoded = quote(out_refund_no, safe="")
-        return await self._request("GET", f"/v3/refund/domestic/refunds/{encoded}")
+        return await self._request(
+            "GET",
+            f"/v3/refund/domestic/refunds/{encoded}",
+        )
 
     async def apply_trade_bill(self, business_date: str) -> dict[str, Any]:
         path = f"/v3/bill/tradebill?bill_date={quote(business_date)}&bill_type=ALL"
@@ -314,9 +347,13 @@ class WeChatNotificationVerifier:
             )
             decoded = json.loads(plaintext)
         except Exception as exc:
-            raise WeChatVerificationError("invalid encrypted notification") from exc
+            raise WeChatVerificationError(
+                "invalid encrypted notification",
+            ) from exc
         if not isinstance(decoded, dict):
-            raise WeChatVerificationError("notification resource is not an object")
+            raise WeChatVerificationError(
+                "notification resource is not an object",
+            )
         decoded["_event_id"] = envelope.get("id")
         decoded["_event_type"] = envelope.get("event_type")
         return decoded

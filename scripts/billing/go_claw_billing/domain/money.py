@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 """Exact integer pricing rules shared by API, ledger and workers."""
 
 from __future__ import annotations
@@ -39,6 +40,9 @@ def price_amount(amount_fen: int) -> PricedAmount:
         raise InvalidAmount("amountFen is outside the supported range")
     return PricedAmount(
         amount_fen=amount_fen,
-        display_compute_units=checked_multiply(amount_fen, DISPLAY_UNITS_PER_FEN),
+        display_compute_units=checked_multiply(
+            amount_fen,
+            DISPLAY_UNITS_PER_FEN,
+        ),
         newapi_quota_units=checked_multiply(amount_fen, NEWAPI_UNITS_PER_FEN),
     )

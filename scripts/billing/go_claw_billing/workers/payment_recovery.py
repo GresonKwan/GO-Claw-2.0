@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 """Recover missed payment callbacks and expire unpaid Native orders."""
 
 from __future__ import annotations
@@ -24,7 +25,8 @@ class PaymentRecoveryWorker:
         for order in orders:
             try:
                 await self.service.reconcile(
-                    order, close_unpaid=order.expires_at <= datetime.now(UTC)
+                    order,
+                    close_unpaid=order.expires_at <= datetime.now(UTC),
                 )
             except WeChatPayAmbiguousError as exc:
                 await self.service.orders.schedule_recovery(
@@ -50,7 +52,8 @@ class PaymentRecoveryWorker:
                 )
             except Exception:
                 await self.service.orders.mark_payment_review(
-                    order.order_id, "RECOVERY_VALIDATION_OR_COMMIT_FAILED"
+                    order.order_id,
+                    "RECOVERY_VALIDATION_OR_COMMIT_FAILED",
                 )
                 logger.exception(
                     "payment recovery requires operator review",
@@ -59,7 +62,11 @@ class PaymentRecoveryWorker:
             worked += 1
         return worked
 
-    async def run(self, stop: asyncio.Event, idle_seconds: float = 10.0) -> None:
+    async def run(
+        self,
+        stop: asyncio.Event,
+        idle_seconds: float = 10.0,
+    ) -> None:
         while not stop.is_set():
             worked = await self.run_once()
             if worked == 0:

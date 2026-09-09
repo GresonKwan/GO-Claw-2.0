@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 from __future__ import annotations
 
 import io
@@ -38,14 +39,17 @@ async def test_upload_preserves_real_media_bytes_and_unicode_name(
     channel = SimpleNamespace(media_dir=tmp_path)
     workspace = SimpleNamespace(
         channel_manager=SimpleNamespace(
-            get_channel=AsyncMock(return_value=channel)
-        )
+            get_channel=AsyncMock(return_value=channel),
+        ),
     )
     monkeypatch.setattr(
-        console, "get_agent_for_request", AsyncMock(return_value=workspace)
+        console,
+        "get_agent_for_request",
+        AsyncMock(return_value=workspace),
     )
     result = await console.post_console_upload(
-        object(), UploadFile(filename=name, file=io.BytesIO(payload))
+        object(),
+        UploadFile(filename=name, file=io.BytesIO(payload)),
     )
     stored = Path(result["url"])
     assert stored.read_bytes() == payload
@@ -62,7 +66,10 @@ async def test_upload_preserves_real_media_bytes_and_unicode_name(
     ],
 )
 def test_media_validation_has_precise_non_utf8_errors(
-    name: str, payload: bytes, status: int, detail: str
+    name: str,
+    payload: bytes,
+    status: int,
+    detail: str,
 ) -> None:
     with pytest.raises(HTTPException) as caught:
         console._validate_attachment_bytes(name, payload)
@@ -72,14 +79,14 @@ def test_media_validation_has_precise_non_utf8_errors(
 
 def test_safe_filename_blocks_only_windows_path_metacharacters() -> None:
     assert (
-        console._safe_filename(r"C:\tmp\附件 猫#100%+😀.png")
-        == "附件 猫#100%+😀.png"
+        console._safe_filename(r"C:\tmp\附件 猫#100%+😀.png") == "附件 猫#100%+😀.png"
     )
     assert console._safe_filename("../evil?.png") == "evil_.png"
 
 
 def test_preview_decodes_percent_encoded_unicode_path_exactly_once(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
 ) -> None:
     name = "附件 #100%2F+😀.png"
     target = tmp_path / name

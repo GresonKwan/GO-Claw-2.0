@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 import base64
 import json
 import time
@@ -32,8 +33,15 @@ def _public_key_pem(key: rsa.RSAPrivateKey) -> bytes:
     )
 
 
-def _signature(key: rsa.RSAPrivateKey, timestamp: str, nonce: str, body: bytes) -> str:
-    message = timestamp.encode() + b"\n" + nonce.encode() + b"\n" + body + b"\n"
+def _signature(
+    key: rsa.RSAPrivateKey,
+    timestamp: str,
+    nonce: str,
+    body: bytes,
+) -> str:
+    message = (
+        timestamp.encode() + b"\n" + nonce.encode() + b"\n" + body + b"\n"
+    )
     signed = key.sign(message, padding.PKCS1v15(), hashes.SHA256())
     return base64.b64encode(signed).decode()
 
@@ -57,12 +65,18 @@ def _client(
 
 @pytest.mark.asyncio
 async def test_client_requires_valid_signed_wechat_response() -> None:
-    merchant_key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+    merchant_key = rsa.generate_private_key(
+        public_exponent=65537,
+        key_size=2048,
+    )
     wechat_key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
 
     def handler(request: httpx.Request) -> httpx.Response:
         assert request.headers["Wechatpay-Serial"] == KEY_ID
-        body = json.dumps({"trade_state": "NOTPAY"}, separators=(",", ":")).encode()
+        body = json.dumps(
+            {"trade_state": "NOTPAY"},
+            separators=(",", ":"),
+        ).encode()
         timestamp = str(int(time.time()))
         nonce = "wechat-response-nonce"
         return httpx.Response(
@@ -72,7 +86,12 @@ async def test_client_requires_valid_signed_wechat_response() -> None:
                 "Wechatpay-Timestamp": timestamp,
                 "Wechatpay-Nonce": nonce,
                 "Wechatpay-Serial": KEY_ID,
-                "Wechatpay-Signature": _signature(wechat_key, timestamp, nonce, body),
+                "Wechatpay-Signature": _signature(
+                    wechat_key,
+                    timestamp,
+                    nonce,
+                    body,
+                ),
             },
         )
 
@@ -87,18 +106,22 @@ async def test_client_requires_valid_signed_wechat_response() -> None:
 
 @pytest.mark.asyncio
 async def test_client_rejects_unsigned_response_as_ambiguous() -> None:
-    merchant_key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+    merchant_key = rsa.generate_private_key(
+        public_exponent=65537,
+        key_size=2048,
+    )
     wechat_key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
     client = _client(
         merchant_key,
         wechat_key,
         httpx.MockTransport(
-            lambda _: httpx.Response(200, json={"trade_state": "SUCCESS"})
+            lambda _: httpx.Response(200, json={"trade_state": "SUCCESS"}),
         ),
     )
     try:
         with pytest.raises(
-            WeChatPayAmbiguousError, match="WECHAT_INVALID_RESPONSE_SIGNATURE"
+            WeChatPayAmbiguousError,
+            match="WECHAT_INVALID_RESPONSE_SIGNATURE",
         ):
             await client.query_order("GC20260903TEST")
     finally:
@@ -134,7 +157,8 @@ def test_notification_is_verified_then_decrypted() -> None:
     timestamp = str(int(time.time()))
     nonce = "notification-nonce"
     verifier = WeChatNotificationVerifier(
-        {KEY_ID: _public_key_pem(wechat_key)}, api_v3_key
+        {KEY_ID: _public_key_pem(wechat_key)},
+        api_v3_key,
     )
     decoded = verifier.verify_and_decrypt(
         raw_body=raw,
@@ -150,7 +174,8 @@ def test_notification_is_verified_then_decrypted() -> None:
 def test_notification_rejects_signature_probe() -> None:
     wechat_key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
     verifier = WeChatNotificationVerifier(
-        {KEY_ID: _public_key_pem(wechat_key)}, b"A" * 32
+        {KEY_ID: _public_key_pem(wechat_key)},
+        b"A" * 32,
     )
     with pytest.raises(WeChatVerificationError, match="signature test probe"):
         verifier.verify_and_decrypt(

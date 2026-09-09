@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 """PostgreSQL pool lifecycle and explicit migration readiness checks.
 
 Migrations are never run from application startup.  The API only verifies the

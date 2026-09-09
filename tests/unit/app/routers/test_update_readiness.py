@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 import hashlib
 from uuid import uuid4
 
@@ -8,7 +9,8 @@ from qwenpaw.app.routers.update_readiness import _binding, valid_quota
 
 
 def test_receipt_needs_engine_secret_and_exact_candidate(
-    tmp_path, monkeypatch
+    tmp_path,
+    monkeypatch,
 ):
     token = "test-only-" + "a" * 40
     data = b'{"version":"candidate"}'
@@ -36,7 +38,8 @@ def test_receipt_needs_engine_secret_and_exact_candidate(
 
 
 @pytest.mark.parametrize(
-    "bad", [None, -1, float("nan"), float("inf"), True, "1"]
+    "bad",
+    [None, -1, float("nan"), float("inf"), True, "1"],
 )
 def test_quota_requires_finite_nonnegative_numbers(bad):
     assert not valid_quota({"granted": bad, "remaining": 1, "percent": 50})
@@ -58,7 +61,7 @@ async def test_health_rejects_remote_or_browser_requests(host, origin):
 
     headers = [(b"origin", origin.encode())] if origin else []
     request = Request(
-        {"type": "http", "client": (host, 12345), "headers": headers}
+        {"type": "http", "client": (host, 12345), "headers": headers},
     )
     with pytest.raises(HTTPException) as error:
         await get_update_readiness(request, "not-an-engine-secret")
@@ -67,10 +70,12 @@ async def test_health_rejects_remote_or_browser_requests(host, origin):
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
-    "fault", [None, "employee", "plugin", "tool", "quota", "config"]
+    "fault",
+    [None, "employee", "plugin", "tool", "quota", "config"],
 )
 async def test_health_uses_runtime_registration_and_preserves_disabled_agents(
-    monkeypatch, fault
+    monkeypatch,
+    fault,
 ):
     from types import SimpleNamespace as NS
     from unittest.mock import AsyncMock
@@ -103,8 +108,8 @@ async def test_health_uses_runtime_registration_and_preserves_disabled_agents(
                 builtin_tools={
                     name: NS(name=name, enabled=True)
                     for name in module.MEDIA_TOOLS
-                }
-            )
+                },
+            ),
         ),
     )
     registry = NS(get=lambda name: None if fault == "tool" else object())
@@ -116,7 +121,7 @@ async def test_health_uses_runtime_registration_and_preserves_disabled_agents(
     manager = NS(
         get_agent_startup_status=status,
         get_agent=AsyncMock(
-            return_value=NS(plugins=NS(tool_registry=registry))
+            return_value=NS(plugins=NS(tool_registry=registry)),
         ),
     )
     app = FastAPI()
@@ -125,13 +130,13 @@ async def test_health_uses_runtime_registration_and_preserves_disabled_agents(
         get_all_loaded_plugins=lambda: {
             name: NS(enabled=fault != "plugin")
             for name in ("qwen-image-tool", "wan27-tool")
-        }
+        },
     )
     probe = AsyncMock(
         return_value=JSONResponse(
             {"granted": 10, "remaining": 0, "percent": 0},
             status_code=503 if fault == "quota" else 200,
-        )
+        ),
     )
     monkeypatch.setattr(quota, "get_console_quota", probe)
     monkeypatch.setattr(billing, "portable_billing_profile_path", lambda: None)
@@ -141,13 +146,15 @@ async def test_health_uses_runtime_registration_and_preserves_disabled_agents(
             "client": ("127.0.0.1", 12345),
             "headers": [],
             "app": app,
-        }
+        },
     )
     receipt = await module.get_update_readiness(request, "challenge")
     assert receipt["quota"] == (
         "ready"
         if fault is None
-        else "unavailable" if fault == "quota" else "pending"
+        else "unavailable"
+        if fault == "quota"
+        else "pending"
     )
     await module.get_update_readiness(request, "challenge")
     assert probe.await_count == (1 if fault in (None, "quota") else 0)

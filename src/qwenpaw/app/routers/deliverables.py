@@ -42,7 +42,7 @@ def _error(code: str, status: int, *, retryable: bool = False) -> JSONResponse:
                 "code": code,
                 "message": messages.get(code, "Request failed."),
                 "retryable": retryable,
-            }
+            },
         },
     )
 
@@ -61,7 +61,8 @@ async def _media_workspace(request: Request):
 async def _owned(workspace, artifact_id: str):
     try:
         found = DeliverablesStore().by_artifact(
-            workspace.agent_id, artifact_id
+            workspace.agent_id,
+            artifact_id,
         )
     except StoreError:
         return None
@@ -75,7 +76,8 @@ async def _owned(workspace, artifact_id: str):
 
 @router.post("/query")
 async def query_deliverables(
-    payload: QueryRequest, workspace=Depends(_workspace)
+    payload: QueryRequest,
+    workspace=Depends(_workspace),
 ):
     if await workspace.chat_manager.get_chat(payload.chatId) is None:
         return _error("ARTIFACT_NOT_FOUND", 404)
@@ -87,8 +89,9 @@ async def query_deliverables(
             if manifest is not None and manifest.chatId == payload.chatId:
                 turns.append(
                     store.envelope(
-                        manifest, workspace_root=workspace.workspace_dir
-                    ).model_dump(mode="json")
+                        manifest,
+                        workspace_root=workspace.workspace_dir,
+                    ).model_dump(mode="json"),
                 )
     except StoreError:
         return _error("ARTIFACT_NOT_FOUND", 404)
@@ -137,7 +140,9 @@ def _resolve_or_error(workspace, record, *, preview=False):
 
 @router.post("/{artifact_id}/open")
 async def open_deliverable(
-    artifact_id: str, payload: OpenRequest, workspace=Depends(_workspace)
+    artifact_id: str,
+    payload: OpenRequest,
+    workspace=Depends(_workspace),
 ):
     owned = await _owned(workspace, artifact_id)
     if owned is None:
@@ -187,7 +192,9 @@ def _media_headers() -> dict[str, str]:
 
 @router.get("/{artifact_id}/thumbnail")
 async def thumbnail(
-    request: Request, artifact_id: str, workspace=Depends(_media_workspace)
+    request: Request,
+    artifact_id: str,
+    workspace=Depends(_media_workspace),
 ):
     owned = await _media_owner(request, workspace, artifact_id)
     if owned is None:
@@ -253,7 +260,9 @@ def _stream(path: Path, start: int, length: int):
 
 @router.get("/{artifact_id}/content")
 async def content(
-    request: Request, artifact_id: str, workspace=Depends(_media_workspace)
+    request: Request,
+    artifact_id: str,
+    workspace=Depends(_media_workspace),
 ):
     owned = await _media_owner(request, workspace, artifact_id)
     if owned is None:

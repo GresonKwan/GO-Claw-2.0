@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# -*- coding: utf-8 -*-
 """Map systemd credentials to process environment without logging values."""
 
 from __future__ import annotations
@@ -51,7 +52,9 @@ def main() -> None:
 if __name__ == "__main__":
     try:
         main()
-    except Exception as exc:  # noqa: BLE001 - redact all secret bootstrap failures
+    except (
+        Exception
+    ) as exc:  # noqa: BLE001 - redact all secret bootstrap failures
         print(
             f"billing credential bootstrap failed: {type(exc).__name__}",
             file=sys.stderr,

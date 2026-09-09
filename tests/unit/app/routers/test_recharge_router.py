@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 """Tests for the credential-hiding local recharge proxy."""
 
 from __future__ import annotations
@@ -39,7 +40,9 @@ def test_unenrolled_returns_stable_404(monkeypatch) -> None:
     assert response.json()["detail"]["code"] == "RECHARGE_NOT_ENROLLED"
 
 
-def test_create_forwards_only_allowed_body_and_server_credential(monkeypatch) -> None:
+def test_create_forwards_only_allowed_body_and_server_credential(
+    monkeypatch,
+) -> None:
     captured: dict = {}
 
     async def handler(request: httpx.Request) -> httpx.Response:

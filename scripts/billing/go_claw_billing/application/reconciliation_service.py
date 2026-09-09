@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 """Reconciliation result types."""
 
 from dataclasses import dataclass

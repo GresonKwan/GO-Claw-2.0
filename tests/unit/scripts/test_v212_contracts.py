@@ -23,12 +23,12 @@ CONTRACTS = [
 
 def contract(folder, name):
     schema = json.loads(
-        (ROOT / folder / f"{name}.schema.json").read_text(encoding="utf-8")
+        (ROOT / folder / f"{name}.schema.json").read_text(encoding="utf-8"),
     )
     fixture = json.loads(
         (ROOT / folder / "fixtures" / f"{name}.valid.json").read_text(
-            encoding="utf-8"
-        )
+            encoding="utf-8",
+        ),
     )
     Draft202012Validator.check_schema(schema)
     return (
@@ -92,7 +92,9 @@ def test_no_premature_notification_clear_and_no_fake_completion():
     with pytest.raises(ValidationError):
         validator.validate(payload)
     payload.update(
-        enginePhase="SWITCH_PENDING", phase="installing", notifyAvailable=False
+        enginePhase="SWITCH_PENDING",
+        phase="installing",
+        notifyAvailable=False,
     )
     validator.validate(payload)
     payload["progressPercent"] = 101

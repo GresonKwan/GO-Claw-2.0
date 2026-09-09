@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 import json
 import sys
 from pathlib import Path
@@ -42,5 +43,7 @@ def test_catalog_limit_and_empty_catalog():
     }
     with pytest.raises(ValueError, match="CATALOG_TOO_LARGE"):
         build_catalog(
-            [(Path("not-opened"), "unused")] * 51, "unused", frozenset()
+            [(Path("not-opened"), "unused")] * 51,
+            "unused",
+            frozenset(),
         )

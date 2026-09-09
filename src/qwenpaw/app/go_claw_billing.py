@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 """Portable billing enrollment and credential storage for GO CLAW.
 
 This module deliberately sits outside the normal provider credential flow.
@@ -90,7 +91,9 @@ class BillingProfile(_StrictModel):
 class EnrollmentChallenge(_StrictModel):
     schema_version: Literal[1] = Field(alias="schemaVersion")
     challenge_id: str = Field(
-        alias="challengeId", min_length=36, max_length=36
+        alias="challengeId",
+        min_length=36,
+        max_length=36,
     )
     nonce: str = Field(min_length=43, max_length=43)
     expires_at: str = Field(alias="expiresAt", min_length=20, max_length=40)
@@ -195,7 +198,7 @@ async def ensure_billing_enrollment(
     """Best-effort idempotent enrollment for portable legacy instances."""
     try:
         return await _ensure_billing_enrollment(
-            http_post or _default_http_post
+            http_post or _default_http_post,
         )
     except (
         Exception
@@ -269,7 +272,7 @@ async def _ensure_billing_enrollment(http_post: HttpPost) -> bool:
         os.chmod(profile_path, 0o600)
     except OSError:
         logger.debug(
-            "Could not tighten billing profile mode on this filesystem"
+            "Could not tighten billing profile mode on this filesystem",
         )
     logger.info(
         "GO CLAW billing enrollment ready (account=%s...)",

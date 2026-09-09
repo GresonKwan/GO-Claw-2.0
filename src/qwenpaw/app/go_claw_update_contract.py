@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 """Public v2 update DTO. No filesystem paths or trust material reach the UI."""
 
 from __future__ import annotations
@@ -50,20 +51,21 @@ def status_dto(
 ) -> dict[str, Any]:
     """Project the frozen target throughout the transaction."""
     active = transaction is not None
-    if active:
-        phase = transaction["enginePhase"]
-        target = transaction["targetVersion"]
-        digest = transaction["targetManifestSha256"]
-        failure = transaction.get("failure")
-        download_bytes = transaction["downloadBytes"]
-        full_bytes = transaction["fullBytes"]
+    tx: dict[str, Any] = transaction or {}
+    if transaction is not None:
+        phase = tx["enginePhase"]
+        target = tx["targetVersion"]
+        digest = tx["targetManifestSha256"]
+        failure = tx.get("failure")
+        download_bytes = tx["downloadBytes"]
+        full_bytes = tx["fullBytes"]
     else:
         target = index["version"] if index else None
         digest = index["releaseManifest"]["sha256"] if index else None
         full_bytes = index["fullBytes"] if index else 0
         download_bytes = full_bytes
     confirmed = bool(target and newer(target, current_version))
-    started = bool(active and transaction["installationStarted"])
+    started = bool(active and tx["installationStarted"])
     result = {
         "schemaVersion": 2,
         "revision": revision,
@@ -82,22 +84,22 @@ def status_dto(
             else None
         ),
         "targetManifestSha256": digest,
-        "transactionId": transaction["transactionId"] if active else None,
+        "transactionId": tx["transactionId"] if active else None,
         "activeSlot": (
-            transaction["toSlot"]
+            tx["toSlot"]
             if phase == "COMMITTED"
-            else transaction["fromSlot"] if active else "legacy"
+            else tx["fromSlot"]
+            if active
+            else "legacy"
         ),
-        "targetSlot": transaction["toSlot"] if active else None,
-        "changedComponents": (
-            list(transaction["changedComponents"]) if active else []
-        ),
+        "targetSlot": tx["toSlot"] if active else None,
+        "changedComponents": (list(tx["changedComponents"]) if active else []),
         "downloadBytes": download_bytes,
         "fullBytes": full_bytes,
         "estimateOnly": not active,
-        "downloaded": transaction["downloaded"] if active else 0,
+        "downloaded": tx["downloaded"] if active else 0,
         "total": download_bytes if active else None,
-        "progressPercent": transaction["progressPercent"] if active else None,
+        "progressPercent": tx["progressPercent"] if active else None,
         "installationStarted": started,
         "notifyAvailable": enabled
         and confirmed
@@ -108,6 +110,7 @@ def status_dto(
     }
     if index and result["latest"] and index["version"] == target:
         result["latest"].update(
-            notes=index.get("notes", ""), pubDate=index.get("pubDate", "")
+            notes=index.get("notes", ""),
+            pubDate=index.get("pubDate", ""),
         )
     return result

@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 """Strict payment notification DTO and transaction boundary contract."""
 
 from dataclasses import dataclass
@@ -49,7 +50,10 @@ def parse_payment_notification(
         raise ValueError("unexpected transaction event type")
     if transaction.trade_state != "SUCCESS":
         raise ValueError("transaction is not successful")
-    if transaction.appid != expected_appid or transaction.mchid != expected_mchid:
+    if (
+        transaction.appid != expected_appid
+        or transaction.mchid != expected_mchid
+    ):
         raise ValueError("merchant binding mismatch")
     if transaction.amount.currency != "CNY":
         raise ValueError("currency mismatch")
@@ -71,4 +75,5 @@ class PaymentCommitter(Protocol):
         *,
         raw_body: bytes,
         serial: str,
-    ) -> bool: ...
+    ) -> bool:
+        ...

@@ -107,7 +107,8 @@ class DownloadRequest(BaseModel):
         max_length=128,
     )
     targetManifestSha256: str | None = Field(
-        default=None, pattern=r"^[0-9a-f]{64}$"
+        default=None,
+        pattern=r"^[0-9a-f]{64}$",
     )
 
 
@@ -115,7 +116,8 @@ class InstallRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
     transactionId: UUID | None = None
     targetManifestSha256: str | None = Field(
-        default=None, pattern=r"^[0-9a-f]{64}$"
+        default=None,
+        pattern=r"^[0-9a-f]{64}$",
     )
 
 
@@ -123,7 +125,9 @@ class InstallRequest(BaseModel):
 async def update_download(body: DownloadRequest | None = None) -> JSONResponse:
     body = body or DownloadRequest()
     return await _action(
-        "download", body.targetVersion, body.targetManifestSha256
+        "download",
+        body.targetVersion,
+        body.targetManifestSha256,
     )
 
 
@@ -147,7 +151,10 @@ class InstallVersionRequest(BaseModel):
 @router.post("/updates/install-version")
 async def update_install_version(body: InstallVersionRequest) -> JSONResponse:
     return await _action(
-        "install_version", body.version, body.url, body.signature
+        "install_version",
+        body.version,
+        body.url,
+        body.signature,
     )
 
 

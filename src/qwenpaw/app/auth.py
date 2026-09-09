@@ -705,7 +705,8 @@ class AuthMiddleware(BaseHTTPMiddleware):
 
             artifact_id = request.url.path.split("/")[-2]
             if verify_media_ticket(
-                request.query_params.get("ticket"), artifact_id
+                request.query_params.get("ticket"),
+                artifact_id,
             ):
                 request.state.media_ticket_authenticated = True
                 return await call_next(request)

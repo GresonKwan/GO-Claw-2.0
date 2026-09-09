@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 """Bounded, read-only recovery of engine journals for the local update API.
 
 The Rust engine remains the only install authority; these files grant no right
@@ -73,7 +74,8 @@ def decode_journal(raw: bytes) -> dict:
         raise ValueError("INVALID_JOURNAL")
     digest = suffix[:64].decode("ascii")
     if not HASH.fullmatch(digest) or not hmac.compare_digest(
-        hashlib.sha256(prefix + b"}").hexdigest(), digest
+        hashlib.sha256(prefix + b"}").hexdigest(),
+        digest,
     ):
         raise ValueError("JOURNAL_HASH_MISMATCH")
     value = json.loads(prefix + b"}")
@@ -129,7 +131,8 @@ def decode_journal(raw: bytes) -> dict:
                 not isinstance(failure, dict)
                 or not re.fullmatch(r"[A-Z0-9_]{1,128}", failure["code"])
                 or not re.fullmatch(
-                    r"[A-Za-z0-9_:/.-]{1,256}", failure["stage"]
+                    r"[A-Za-z0-9_:/.-]{1,256}",
+                    failure["stage"],
                 )
                 or type(failure["retryable"]) is not bool
             ):
@@ -153,7 +156,11 @@ def read_transaction(root: Path) -> dict | None:
         raise ValueError("INVALID_TRANSACTION") from exc
     for filename in ("transaction.json", "transaction.previous.json"):
         path = checked_path(
-            root, "updates", "transactions", transaction_id, filename
+            root,
+            "updates",
+            "transactions",
+            transaction_id,
+            filename,
         )
         try:
             transaction = decode_journal(read_bounded(path, 1024 * 1024))
@@ -187,7 +194,10 @@ class StatusStore:
 
     def _read(self, name: str) -> dict:
         data = json.loads(
-            read_bounded(checked_path(self.root, "updates", name), 1024 * 1024)
+            read_bounded(
+                checked_path(self.root, "updates", name),
+                1024 * 1024,
+            ),
         )
         snapshot = data["snapshot"]
         if (
@@ -197,7 +207,8 @@ class StatusStore:
         ):
             raise ValueError("INVALID_STATUS")
         if not hmac.compare_digest(
-            hashlib.sha256(self._encode(snapshot)).hexdigest(), data["sha256"]
+            hashlib.sha256(self._encode(snapshot)).hexdigest(),
+            data["sha256"],
         ):
             raise ValueError("INVALID_STATUS")
         return snapshot
@@ -223,14 +234,14 @@ class StatusStore:
             # This store is never a way to create a product in an arbitrary
             # directory inferred from a request or a stale drive letter.
             marker = json.loads(
-                read_bounded(checked_path(self.root, "portable.json"), 65536)
+                read_bounded(checked_path(self.root, "portable.json"), 65536),
             )
             if marker.get("schemaVersion") != 1:
                 raise ValueError("INVALID_PRODUCT_ROOT")
             if not stat.S_ISREG(
                 _regular_node(
-                    checked_path(self.root, "GO-CLAW-Portable.exe")
-                ).st_mode
+                    checked_path(self.root, "GO-CLAW-Portable.exe"),
+                ).st_mode,
             ):
                 raise ValueError("INVALID_PRODUCT_ROOT")
             updates = checked_path(self.root, "updates")
@@ -251,12 +262,14 @@ class StatusStore:
             if old is not None:
                 write_json_atomic(
                     checked_path(
-                        self.root, "updates", "status-v2.previous.json"
+                        self.root,
+                        "updates",
+                        "status-v2.previous.json",
                     ),
                     {
                         "snapshot": old,
                         "sha256": hashlib.sha256(
-                            self._encode(old)
+                            self._encode(old),
                         ).hexdigest(),
                     },
                 )
@@ -265,7 +278,7 @@ class StatusStore:
                 {
                     "snapshot": candidate,
                     "sha256": hashlib.sha256(
-                        self._encode(candidate)
+                        self._encode(candidate),
                     ).hexdigest(),
                 },
             )

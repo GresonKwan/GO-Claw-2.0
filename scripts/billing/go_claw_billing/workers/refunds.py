@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 """Reviewed refund worker: quota reversal always precedes WeChat refund."""
 
 from __future__ import annotations
@@ -32,11 +33,17 @@ class RefundWorker:
         if not isinstance(amount_fen, int):
             raise TypeError("invalid signed refund amount")
         raw = json.dumps(
-            result, sort_keys=True, separators=(",", ":"), ensure_ascii=False
+            result,
+            sort_keys=True,
+            separators=(",", ":"),
+            ensure_ascii=False,
         ).encode()
-        event_id = "refund-query-" + hashlib.sha256(
-            f"{refund.out_refund_no}:{refund_id}".encode()
-        ).hexdigest()[:45]
+        event_id = (
+            "refund-query-"
+            + hashlib.sha256(
+                f"{refund.out_refund_no}:{refund_id}".encode(),
+            ).hexdigest()[:45]
+        )
         await self.repository.commit_refund_notification(
             event_id=event_id,
             serial="SIGNED_QUERY_RESPONSE",
@@ -71,20 +78,31 @@ class RefundWorker:
                 provider_refund_id = result.get("refund_id")
                 await self.repository.record_wechat_accepted(
                     refund.refund_id,
-                    provider_refund_id if isinstance(provider_refund_id, str) else None,
+                    provider_refund_id
+                    if isinstance(provider_refund_id, str)
+                    else None,
                 )
         except WeChatPayAmbiguousError as exc:
             await self.repository.reschedule_refund(
-                refund.refund_id, delay_seconds=60, error_code=exc.code
+                refund.refund_id,
+                delay_seconds=60,
+                error_code=exc.code,
             )
         except WeChatPayError as exc:
-            if refund.state == "QUOTA_REVERSED" and exc.code == "WECHAT_CONNECT_FAILED":
+            if (
+                refund.state == "QUOTA_REVERSED"
+                and exc.code == "WECHAT_CONNECT_FAILED"
+            ):
                 await self.repository.retry_refund_creation(
-                    refund.refund_id, delay_seconds=120, error_code=exc.code
+                    refund.refund_id,
+                    delay_seconds=120,
+                    error_code=exc.code,
                 )
             elif exc.status_code is not None and exc.status_code >= 500:
                 await self.repository.reschedule_refund(
-                    refund.refund_id, delay_seconds=120, error_code=exc.code
+                    refund.refund_id,
+                    delay_seconds=120,
+                    error_code=exc.code,
                 )
             else:
                 await self.repository.mark_refund_review(refund.refund_id)
@@ -96,7 +114,11 @@ class RefundWorker:
             )
         return True
 
-    async def run(self, stop: asyncio.Event, idle_seconds: float = 5.0) -> None:
+    async def run(
+        self,
+        stop: asyncio.Event,
+        idle_seconds: float = 5.0,
+    ) -> None:
         while not stop.is_set():
             worked = await self.run_once()
             if not worked:

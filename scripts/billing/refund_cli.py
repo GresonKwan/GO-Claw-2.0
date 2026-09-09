@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# -*- coding: utf-8 -*-
 """Server-local customer-service entry point for reviewed refunds.
 
 This command is never packaged into the desktop product and the corresponding
@@ -22,7 +23,13 @@ def _amount_fen(value: str) -> int:
         amount = Decimal(value)
     except InvalidOperation as exc:
         raise argparse.ArgumentTypeError("金额格式无效") from exc
-    if amount.as_tuple().exponent < -2 or amount < Decimal("0.01"):
+    exponent = amount.as_tuple().exponent
+    if (
+        not amount.is_finite()
+        or not isinstance(exponent, int)
+        or exponent < -2
+        or amount < Decimal("0.01")
+    ):
         raise argparse.ArgumentTypeError("退款金额必须为正数且最多两位小数")
     fen = int(amount * 100)
     if fen > 10_000_000:
@@ -95,7 +102,7 @@ def main() -> int:
         return 3
     print(
         f"退款流程已受理：refundId={result['refundId']} "
-        f"amountFen={result['amountFen']} status={result['status']}"
+        f"amountFen={result['amountFen']} status={result['status']}",
     )
     return 0
 

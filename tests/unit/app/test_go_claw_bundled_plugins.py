@@ -308,14 +308,17 @@ def test_real_media_seeds_upgrade_v201_incompatible_plugins(
         ("wan27", "wan27-tool"),
     ):
         installed = _write_plugin(
-            plugins_dir, directory, plugin_id, marker="old installed plugin"
+            plugins_dir,
+            directory,
+            plugin_id,
+            marker="old installed plugin",
         )
         path = installed / "plugin.json"
         manifest = json.loads(path.read_text(encoding="utf-8"))
         manifest["qwenpaw_version"] = {"min": "1.1.6", "max": "2.1.0"}
         path.write_text(json.dumps(manifest), encoding="utf-8")
         assert not PluginLoader._check_version_compatibility(
-            PluginManifest.from_dict(manifest)
+            PluginManifest.from_dict(manifest),
         )[0]
 
     protected = {
@@ -330,7 +333,7 @@ def test_real_media_seeds_upgrade_v201_incompatible_plugins(
     for path in manifests:
         payload = json.loads(path.read_text(encoding="utf-8"))
         compatible, reason = PluginLoader._check_version_compatibility(
-            PluginManifest.from_dict(payload)
+            PluginManifest.from_dict(payload),
         )
         assert compatible, reason
         tool_names.update(tool["name"] for tool in payload["meta"]["tools"])

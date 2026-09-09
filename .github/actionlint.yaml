@@ -5,6 +5,8 @@ config-variables:
   - tauri_updater_endpoints
   - oss_bucket
   - oss_public_base_url
+  - go_claw_oss_bucket
+  - go_claw_oss_public_base_url
   - review_model
 paths:
   # Legacy build-windows / build-macos jobs are intentionally parked with

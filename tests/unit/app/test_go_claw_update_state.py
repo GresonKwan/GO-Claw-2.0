@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 import hashlib
 import json
 from pathlib import Path
@@ -64,7 +65,7 @@ def test_status_contract_phase_mapping_and_orange_dot(phase):
         (
             Path(__file__).parents[3]
             / "docs/contracts/v2.1.2/update-status.schema.json"
-        ).read_text("utf-8")
+        ).read_text("utf-8"),
     )
     jsonschema.validate(result, schema)
     assert result["phase"] == LEGACY_PHASE[phase]

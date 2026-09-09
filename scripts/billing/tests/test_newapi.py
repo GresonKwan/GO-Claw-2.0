@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 import httpx
 import pytest
 from go_claw_billing.adapters.newapi import NewAPIAdapter, NewAPIReadError
@@ -10,14 +11,20 @@ async def test_read_remaining_quota_requires_bound_id_and_strict_shape() -> None
         assert request.headers["New-Api-User"] == "1"
         return httpx.Response(
             200,
-            json={"success": True, "data": {"quota": 75000, "used_quota": 15000}},
+            json={
+                "success": True,
+                "data": {"quota": 75000, "used_quota": 15000},
+            },
         )
 
     client = httpx.AsyncClient(transport=httpx.MockTransport(handler))
     adapter = NewAPIAdapter("https://newapi.test", "secret", 1, client=client)
     try:
         snapshot = await adapter.read_quota_snapshot(42)
-        assert (snapshot.remaining_units, snapshot.used_units) == (75000, 15000)
+        assert (snapshot.remaining_units, snapshot.used_units) == (
+            75000,
+            15000,
+        )
     finally:
         await client.aclose()
 
@@ -26,8 +33,11 @@ async def test_read_remaining_quota_requires_bound_id_and_strict_shape() -> None
 async def test_read_remaining_quota_rejects_unrecognized_success() -> None:
     client = httpx.AsyncClient(
         transport=httpx.MockTransport(
-            lambda _request: httpx.Response(200, json={"success": True, "data": {}})
-        )
+            lambda _request: httpx.Response(
+                200,
+                json={"success": True, "data": {}},
+            ),
+        ),
     )
     adapter = NewAPIAdapter("https://newapi.test", "secret", 1, client=client)
     try:

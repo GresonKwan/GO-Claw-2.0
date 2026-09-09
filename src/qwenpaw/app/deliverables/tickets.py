@@ -31,7 +31,8 @@ def issue(agent_id: str, artifact_id: str) -> tuple[str, int]:
 
 
 def verify(
-    token: str | None, artifact_id: str | None = None
+    token: str | None,
+    artifact_id: str | None = None,
 ) -> tuple[str, str] | None:
     if not token:
         return None
@@ -42,7 +43,8 @@ def verify(
             _TICKETS.pop(token, None)
             return None
         if artifact_id is not None and not secrets.compare_digest(
-            value[2], artifact_id
+            value[2],
+            artifact_id,
         ):
             return None
         return value[1], value[2]

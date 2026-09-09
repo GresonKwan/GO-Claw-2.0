@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 """Quota worker policies shared by concrete workers."""
 
 from ..domain.adjustments import UpstreamResult

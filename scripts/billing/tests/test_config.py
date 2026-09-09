@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 import pytest
 from go_claw_billing.config import Settings
 from pydantic import ValidationError

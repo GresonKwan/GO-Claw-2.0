@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 """Strict NewAPI quota mutation adapter with ambiguity classification."""
 
 from __future__ import annotations
@@ -60,7 +61,9 @@ class NewAPIAdapter:
             body = response.json()
             data = body.get("data") if isinstance(body, dict) else None
             quota = data.get("quota") if isinstance(data, dict) else None
-            used_quota = data.get("used_quota") if isinstance(data, dict) else None
+            used_quota = (
+                data.get("used_quota") if isinstance(data, dict) else None
+            )
         except ValueError as exc:
             raise NewAPIReadError("NEWAPI_QUOTA_READ_INVALID") from exc
         if (
@@ -74,7 +77,11 @@ class NewAPIAdapter:
         return NewAPIQuotaSnapshot(quota, used_quota)
 
     async def adjust_quota(
-        self, user_id: int, units: int, *, subtract: bool = False
+        self,
+        user_id: int,
+        units: int,
+        *,
+        subtract: bool = False,
     ) -> NewAPIResult:
         payload = {
             "id": user_id,
@@ -92,10 +99,16 @@ class NewAPIAdapter:
                 headers=headers,
             )
         except httpx.ConnectError:
-            return NewAPIResult(UpstreamResult.SAFE_RETRY, error_code="CONNECT_FAILED")
+            return NewAPIResult(
+                UpstreamResult.SAFE_RETRY,
+                error_code="CONNECT_FAILED",
+            )
         except (httpx.TimeoutException, httpx.RemoteProtocolError):
             # The request may have reached NewAPI. Never blindly retry.
-            return NewAPIResult(UpstreamResult.AMBIGUOUS, error_code="RESULT_UNKNOWN")
+            return NewAPIResult(
+                UpstreamResult.AMBIGUOUS,
+                error_code="RESULT_UNKNOWN",
+            )
         finally:
             if owned_client:
                 await client.aclose()
@@ -118,7 +131,10 @@ class NewAPIAdapter:
             and isinstance(body, dict)
             and body.get("success") is True
         ):
-            return NewAPIResult(UpstreamResult.DEFINITE_SUCCESS, response.status_code)
+            return NewAPIResult(
+                UpstreamResult.DEFINITE_SUCCESS,
+                response.status_code,
+            )
         if response.is_success:
             return NewAPIResult(
                 UpstreamResult.AMBIGUOUS,

@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 import pytest
 from go_claw_billing.domain.ledger import JournalLine, validate_balanced
 

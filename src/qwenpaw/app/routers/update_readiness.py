@@ -33,7 +33,8 @@ def _binding(token: str | None) -> dict:
         not token
         or len(expected) < 32
         or not hmac.compare_digest(
-            token.encode("utf-8"), expected.encode("utf-8")
+            token.encode("utf-8"),
+            expected.encode("utf-8"),
         )
     ):
         raise HTTPException(404, "Not Found")
@@ -68,17 +69,18 @@ def _binding(token: str | None) -> dict:
 def valid_quota(value: object) -> bool:
     if not isinstance(value, dict):
         return False
-    fields = [value.get(key) for key in ("granted", "remaining", "percent")]
-    return (
-        all(
-            isinstance(v, (float, int))
-            and not isinstance(v, bool)
-            and math.isfinite(v)
-            and v >= 0
-            for v in fields
-        )
-        and fields[2] <= 100
-    )
+    fields: list[float] = []
+    for key in ("granted", "remaining", "percent"):
+        raw = value.get(key)
+        if (
+            not isinstance(raw, (float, int))
+            or isinstance(raw, bool)
+            or not math.isfinite(raw)
+            or raw < 0
+        ):
+            return False
+        fields.append(float(raw))
+    return fields[2] <= 100
 
 
 @router.get("/desktop/update-readiness")
@@ -107,7 +109,7 @@ async def get_update_readiness(
                 "mediaToolsReady": False,
                 "quota": "pending",
                 "billing": "unavailable",
-            }
+            },
         )
         return receipt
     manager = getattr(request.app.state, "multi_agent_manager", None)
@@ -187,6 +189,6 @@ async def get_update_readiness(
             "mediaToolsReady": tools_ok,
             "quota": quota_state,
             "billing": billing_state,
-        }
+        },
     )
     return receipt

@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 """Signed WeChat query recovery and safe order closing.
 
 The query result is treated as payment evidence only because ``WeChatPayClient``
@@ -20,38 +21,63 @@ from ..domain.orders import PaymentOrder, PaymentState
 
 class RecoveryOrders(Protocol):
     async def get_owned(
-        self, account_id: UUID, order_id: UUID
-    ) -> PaymentOrder | None: ...
+        self,
+        account_id: UUID,
+        order_id: UUID,
+    ) -> PaymentOrder | None:
+        ...
 
-    async def list_recoverable(self, limit: int) -> list[PaymentOrder]: ...
+    async def list_recoverable(self, limit: int) -> list[PaymentOrder]:
+        ...
 
     async def schedule_recovery(
-        self, order_id: UUID, *, delay_seconds: int, error_code: str | None = None
-    ) -> None: ...
+        self,
+        order_id: UUID,
+        *,
+        delay_seconds: int,
+        error_code: str | None = None,
+    ) -> None:
+        ...
 
     async def mark_unpaid(
-        self, order_id: UUID, state: PaymentState
-    ) -> PaymentOrder: ...
+        self,
+        order_id: UUID,
+        state: PaymentState,
+    ) -> PaymentOrder:
+        ...
 
-    async def mark_payment_review(self, order_id: UUID, error_code: str) -> None: ...
+    async def mark_payment_review(
+        self,
+        order_id: UUID,
+        error_code: str,
+    ) -> None:
+        ...
 
 
 class QueryablePaymentProvider(Protocol):
     mchid: str
     appid: str
 
-    async def query_order(self, out_trade_no: str) -> dict[str, Any]: ...
+    async def query_order(self, out_trade_no: str) -> dict[str, Any]:
+        ...
 
-    async def close_order(self, out_trade_no: str) -> None: ...
+    async def close_order(self, out_trade_no: str) -> None:
+        ...
 
 
 def confirmation_from_signed_query(
-    result: dict[str, Any], *, expected_appid: str, expected_mchid: str
+    result: dict[str, Any],
+    *,
+    expected_appid: str,
+    expected_mchid: str,
 ) -> PaymentConfirmation:
     """Validate a signed query result and produce a stable recovery event."""
     if result.get("trade_state") != "SUCCESS":
         raise ValueError("trade is not successful")
-    if result.get("appid") != expected_appid or result.get("mchid") != expected_mchid:
+    if (
+        result.get("appid") != expected_appid
+        or result.get("mchid") != expected_mchid
+    ):
         raise ValueError("merchant binding mismatch")
     amount = result.get("amount")
     if not isinstance(amount, dict) or amount.get("currency") != "CNY":
@@ -66,7 +92,7 @@ def confirmation_from_signed_query(
     if not isinstance(transaction_id, str) or not transaction_id:
         raise ValueError("missing transaction id")
     event_digest = hashlib.sha256(
-        f"{out_trade_no}:{transaction_id}".encode()
+        f"{out_trade_no}:{transaction_id}".encode(),
     ).hexdigest()[:48]
     return PaymentConfirmation(
         event_id=f"query-{event_digest}",
@@ -85,7 +111,12 @@ class PaymentRecoveryService:
     payment: QueryablePaymentProvider
     committer: PaymentCommitter
 
-    async def reconcile(self, order: PaymentOrder, *, close_unpaid: bool) -> PaymentOrder:
+    async def reconcile(
+        self,
+        order: PaymentOrder,
+        *,
+        close_unpaid: bool,
+    ) -> PaymentOrder:
         result = await self.payment.query_order(order.out_trade_no)
         trade_state = result.get("trade_state")
         if trade_state == "SUCCESS":
@@ -95,12 +126,20 @@ class PaymentRecoveryService:
                 expected_mchid=self.payment.mchid,
             )
             raw = json.dumps(
-                result, sort_keys=True, separators=(",", ":"), ensure_ascii=False
+                result,
+                sort_keys=True,
+                separators=(",", ":"),
+                ensure_ascii=False,
             ).encode()
             await self.committer.commit_transaction(
-                confirmation, raw_body=raw, serial="SIGNED_QUERY_RESPONSE"
+                confirmation,
+                raw_body=raw,
+                serial="SIGNED_QUERY_RESPONSE",
             )
-            refreshed = await self.orders.get_owned(order.account_id, order.order_id)
+            refreshed = await self.orders.get_owned(
+                order.account_id,
+                order.order_id,
+            )
             if refreshed is None:
                 raise RuntimeError("recovered order disappeared")
             return refreshed
@@ -125,17 +164,25 @@ class PaymentRecoveryService:
             return await self.orders.mark_unpaid(order.order_id, target)
 
         if trade_state in {"USERPAYING", "NOTPAY"}:
-            await self.orders.schedule_recovery(order.order_id, delay_seconds=30)
+            await self.orders.schedule_recovery(
+                order.order_id,
+                delay_seconds=30,
+            )
             return order
 
         # REFUND or an unknown provider state means money may have moved.  No
         # automated close or quota action is safe.
         await self.orders.mark_payment_review(
-            order.order_id, f"UNEXPECTED_TRADE_STATE_{str(trade_state)[:32]}"
+            order.order_id,
+            f"UNEXPECTED_TRADE_STATE_{str(trade_state)[:32]}",
         )
         return order
 
-    async def close_owned(self, account_id: UUID, order_id: UUID) -> PaymentOrder | None:
+    async def close_owned(
+        self,
+        account_id: UUID,
+        order_id: UUID,
+    ) -> PaymentOrder | None:
         order = await self.orders.get_owned(account_id, order_id)
         if order is None:
             return None

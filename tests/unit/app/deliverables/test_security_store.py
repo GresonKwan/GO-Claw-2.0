@@ -1,6 +1,6 @@
+# -*- coding: utf-8 -*-
 from __future__ import annotations
 
-import json
 from datetime import datetime, timezone
 from pathlib import Path
 from uuid import uuid4
@@ -47,8 +47,7 @@ def test_path_boundary_unicode_dangerous_and_changed_file(
     record = _record(workspace)
     assert record.relativePath == "报告.txt"
     assert (
-        resolve_stored(record, workspace_root=workspace).path.name
-        == "报告.txt"
+        resolve_stored(record, workspace_root=workspace).path.name == "报告.txt"
     )
 
     script = workspace / "run.cmd"
@@ -102,7 +101,7 @@ def test_manifest_replay_contains_no_absolute_path_and_delete_is_scoped(
     assert store.by_artifact("agent-a", record.id) == (manifest, record)
 
     persisted = (tmp_path / "manifests/agent-a/chat-a/turn-a.json").read_text(
-        encoding="utf-8"
+        encoding="utf-8",
     )
     assert str(workspace) not in persisted
     assert "报告.txt" in persisted

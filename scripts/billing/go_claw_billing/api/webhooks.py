@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 """WeChat callback endpoints: verify first, then commit atomically."""
 
 from fastapi import APIRouter, HTTPException, Request, Response
@@ -22,7 +23,10 @@ def _parse_refund(decoded: dict, *, expected_mchid: str) -> dict:
         "refund_status": decoded.get("refund_status"),
         "amount_fen": amount_fen,
     }
-    if not all(isinstance(value, str) and value for value in list(required.values())[:4]):
+    if not all(
+        isinstance(value, str) and value
+        for value in list(required.values())[:4]
+    ):
         raise ValueError("refund notification fields missing")
     if not isinstance(amount_fen, int) or amount_fen <= 0:
         raise ValueError("refund amount invalid")
@@ -51,7 +55,8 @@ async def transaction_notification(request: Request) -> Response:
         )
     except (ValueError, WeChatVerificationError) as exc:
         raise HTTPException(
-            401, detail={"code": "WECHATPAY_INVALID_NOTIFICATION"}
+            401,
+            detail={"code": "WECHATPAY_INVALID_NOTIFICATION"},
         ) from exc
     committer = getattr(request.app.state, "payment_committer", None)
     if committer is None:
@@ -65,7 +70,10 @@ async def transaction_notification(request: Request) -> Response:
     except Exception as exc:
         # WeChat must retry when the local transaction did not commit.  Never
         # acknowledge a partially processed payment.
-        raise HTTPException(500, detail={"code": "PAYMENT_COMMIT_FAILED"}) from exc
+        raise HTTPException(
+            500,
+            detail={"code": "PAYMENT_COMMIT_FAILED"},
+        ) from exc
     return Response(status_code=204)
 
 
@@ -86,11 +94,13 @@ async def refund_notification(request: Request) -> Response:
             signature_b64=request.headers.get("Wechatpay-Signature", ""),
         )
         refund = _parse_refund(
-            decoded, expected_mchid=request.app.state.settings.wechat_mchid
+            decoded,
+            expected_mchid=request.app.state.settings.wechat_mchid,
         )
     except (ValueError, WeChatVerificationError) as exc:
         raise HTTPException(
-            401, detail={"code": "WECHATPAY_INVALID_NOTIFICATION"}
+            401,
+            detail={"code": "WECHATPAY_INVALID_NOTIFICATION"},
         ) from exc
     try:
         await repository.commit_refund_notification(
@@ -103,5 +113,8 @@ async def refund_notification(request: Request) -> Response:
             amount_fen=refund["amount_fen"],
         )
     except Exception as exc:
-        raise HTTPException(500, detail={"code": "REFUND_COMMIT_FAILED"}) from exc
+        raise HTTPException(
+            500,
+            detail={"code": "REFUND_COMMIT_FAILED"},
+        ) from exc
     return Response(status_code=204)

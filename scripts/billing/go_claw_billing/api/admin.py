@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 """Private provisioning-to-billing enrollment endpoint."""
 
 from __future__ import annotations
@@ -28,7 +29,11 @@ class CreateRefundRequest(BaseModel):
     order_id: UUID = Field(alias="orderId")
     amount_fen: int = Field(alias="amountFen", ge=1, le=10_000_000)
     reason: str = Field(min_length=3, max_length=500)
-    evidence_refs: list[str] = Field(alias="evidenceRefs", min_length=1, max_length=20)
+    evidence_refs: list[str] = Field(
+        alias="evidenceRefs",
+        min_length=1,
+        max_length=20,
+    )
 
 
 @router.post("/enrollments")
@@ -50,7 +55,11 @@ async def enroll(
         account, token = result
     except ValueError as exc:
         raise HTTPException(409, detail={"code": "BINDING_CONFLICT"}) from exc
-    version_getter = getattr(request.app.state.accounts, "latest_token_version", None)
+    version_getter = getattr(
+        request.app.state.accounts,
+        "latest_token_version",
+        None,
+    )
     if version_getter is None:
         record = max(
             (
@@ -84,10 +93,20 @@ async def request_refund(
     body: CreateRefundRequest,
     authorization: str = Header(default=""),
     idempotency_key: str = Header(
-        alias="Idempotency-Key", min_length=16, max_length=64
+        alias="Idempotency-Key",
+        min_length=16,
+        max_length=64,
     ),
-    operator_id: str = Header(alias="X-Operator-Id", min_length=3, max_length=128),
-    approver_id: str = Header(alias="X-Approver-Id", min_length=3, max_length=128),
+    operator_id: str = Header(
+        alias="X-Operator-Id",
+        min_length=3,
+        max_length=128,
+    ),
+    approver_id: str = Header(
+        alias="X-Approver-Id",
+        min_length=3,
+        max_length=128,
+    ),
 ) -> dict:
     configured = request.app.state.settings.admin_token
     expected = configured.get_secret_value() if configured else ""
@@ -95,7 +114,10 @@ async def request_refund(
     if not expected or not hmac.compare_digest(supplied, expected):
         raise HTTPException(401, detail={"code": "UNAUTHORIZED"})
     if operator_id == approver_id:
-        raise HTTPException(409, detail={"code": "TWO_PERSON_APPROVAL_REQUIRED"})
+        raise HTTPException(
+            409,
+            detail={"code": "TWO_PERSON_APPROVAL_REQUIRED"},
+        )
     canonical = json.dumps(
         body.model_dump(mode="json", by_alias=True),
         sort_keys=True,
@@ -113,11 +135,17 @@ async def request_refund(
             request_hash=request_hash,
         )
     except IdempotencyConflict as exc:
-        raise HTTPException(409, detail={"code": "IDEMPOTENCY_CONFLICT"}) from exc
+        raise HTTPException(
+            409,
+            detail={"code": "IDEMPOTENCY_CONFLICT"},
+        ) from exc
     except LookupError as exc:
         raise HTTPException(404, detail={"code": "ORDER_NOT_FOUND"}) from exc
     except ValueError as exc:
-        raise HTTPException(409, detail={"code": "REFUND_NOT_ALLOWED"}) from exc
+        raise HTTPException(
+            409,
+            detail={"code": "REFUND_NOT_ALLOWED"},
+        ) from exc
     if not replayed:
         await request.app.state.audit.append(
             actor_type="OPERATOR",

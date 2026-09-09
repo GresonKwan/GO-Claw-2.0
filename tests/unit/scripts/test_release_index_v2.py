@@ -13,7 +13,8 @@ from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 from cryptography.hazmat.primitives.serialization import Encoding, PublicFormat
 
 sys.path.insert(
-    0, str(Path(__file__).resolve().parents[3] / "scripts/pack-tauri")
+    0,
+    str(Path(__file__).resolve().parents[3] / "scripts/pack-tauri"),
 )
 from update_components import canonical_json  # noqa: E402
 from build_component_packages import build_packages  # noqa: E402
@@ -30,12 +31,12 @@ def signer():
     pubkey = base64.b64encode(
         b"Ed"
         + key_id
-        + key.public_key().public_bytes(Encoding.Raw, PublicFormat.Raw)
+        + key.public_key().public_bytes(Encoding.Raw, PublicFormat.Raw),
     ).decode("ascii")
 
     def sign(data):
         raw_signature = key.sign(
-            hashlib.blake2b(data, digest_size=64).digest()
+            hashlib.blake2b(data, digest_size=64).digest(),
         )
         comment = b"fixture only"
         text = (
@@ -45,7 +46,7 @@ def signer():
                     base64.b64encode(b"ED" + key_id + raw_signature),
                     b"trusted comment: " + comment,
                     base64.b64encode(key.sign(raw_signature + comment)),
-                ]
+                ],
             )
             + b"\n"
         )
@@ -69,7 +70,7 @@ def release_fixture(tmp_path):
                 relativePath="binaries/core.exe",
                 component="backend-core",
                 mount="slot",
-            )
+            ),
         ],
         base,
         hosts,
@@ -95,7 +96,8 @@ def release_fixture(tmp_path):
     manifest_path = assets / "windows-x64.json"
     manifest_path.write_bytes(canonical_json(manifest))
     manifest_path.with_suffix(".json.sig").write_text(
-        sign(manifest_path.read_bytes()), encoding="ascii"
+        sign(manifest_path.read_bytes()),
+        encoding="ascii",
     )
     bridge = assets / "bridge.exe"
     bridge.write_bytes(b"MZ test bridge (not executable)")
@@ -108,7 +110,7 @@ def release_fixture(tmp_path):
             "windows-x86_64": {
                 "url": base + "/bridge.exe",
                 "signature": bridge_sig,
-            }
+            },
         },
     )
     args = (
@@ -136,7 +138,8 @@ def test_signed_assets_produce_deterministic_small_index(tmp_path):
 
 
 def test_changed_manifest_after_verification_is_not_parsed(
-    tmp_path, monkeypatch
+    tmp_path,
+    monkeypatch,
 ):
     import build_release_index_v2 as builder
 
@@ -165,7 +168,8 @@ def test_tampered_assets_fail_closed(tmp_path, target):
     }[target]
     path.write_bytes(path.read_bytes() + b"tampered")
     with pytest.raises(
-        ValueError, match="SIGNATURE_INVALID|ARCHIVE_HASH_MISMATCH"
+        ValueError,
+        match="SIGNATURE_INVALID|ARCHIVE_HASH_MISMATCH",
     ):
         build_index(*args)
 
@@ -214,7 +218,8 @@ def test_raw_legacy_algorithm_is_not_silently_reinterpreted(tmp_path):
 
 
 def test_comment_signature_verified_and_no_whole_archive_read(
-    tmp_path, monkeypatch
+    tmp_path,
+    monkeypatch,
 ):
     public_key, sign = signer()
     path = tmp_path / "asset"
@@ -222,13 +227,18 @@ def test_comment_signature_verified_and_no_whole_archive_read(
     path.write_bytes(data)
     signature = sign(data)
     monkeypatch.setattr(
-        Path, "read_bytes", lambda _: pytest.fail("must stream large assets")
+        Path,
+        "read_bytes",
+        lambda _: pytest.fail("must stream large assets"),
     )
     verify_signed_file(path, signature, public_key)
     decoded = base64.b64decode(signature).replace(
-        b"trusted comment: fixture only", b"trusted comment: changed"
+        b"trusted comment: fixture only",
+        b"trusted comment: changed",
     )
     with pytest.raises(ValueError, match="SIGNATURE_INVALID"):
         verify_signed_file(
-            path, base64.b64encode(decoded).decode("ascii"), public_key
+            path,
+            base64.b64encode(decoded).decode("ascii"),
+            public_key,
         )

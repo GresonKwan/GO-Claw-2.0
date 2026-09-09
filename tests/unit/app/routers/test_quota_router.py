@@ -88,7 +88,10 @@ def test_quota_passthrough(portable_env, monkeypatch):
     }
 
 
-@pytest.mark.parametrize("display_value", [None, -1, True, 9_007_199_254_740_992])
+@pytest.mark.parametrize(
+    "display_value",
+    [None, -1, True, 9_007_199_254_740_992],
+)
 def test_quota_omits_invalid_optional_display_balance(
     portable_env,
     monkeypatch,

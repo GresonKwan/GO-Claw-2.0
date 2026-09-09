@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 """Deterministic fake Native payment provider for tests and staging drills."""
 
 import hashlib

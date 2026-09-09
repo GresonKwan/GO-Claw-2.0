@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 import hashlib
 import io
 import json
@@ -57,7 +58,8 @@ def test_engine_refuses_invalid_product_before_writing(engine):
 
 
 def test_engine_spawn_is_argv_hidden_and_does_not_pass_customer_secret(
-    engine, monkeypatch
+    engine,
+    monkeypatch,
 ):
     monkeypatch.setenv("GO_CLAW_BILLING_TOKEN", "secret-never-child")
     launch = Mock()
@@ -69,7 +71,9 @@ def test_engine_spawn_is_argv_hidden_and_does_not_pass_customer_secret(
     assert "GO_CLAW_BILLING_TOKEN" not in kwargs["env"]
     assert kwargs["stdin"] == kwargs["stdout"] == subprocess.DEVNULL
     assert kwargs["creationflags"] == getattr(
-        subprocess, "CREATE_NO_WINDOW", 0
+        subprocess,
+        "CREATE_NO_WINDOW",
+        0,
     )
 
 
@@ -83,7 +87,11 @@ def test_engine_spawn_is_argv_hidden_and_does_not_pass_customer_secret(
     ids=["non-json", "redacted-error", "oversized"],
 )
 def test_engine_output_bounded_and_errors_redacted(
-    engine, monkeypatch, raw, code, error
+    engine,
+    monkeypatch,
+    raw,
+    code,
+    error,
 ):
     child = Mock(stdout=io.BytesIO(raw), returncode=code)
     monkeypatch.setattr(engine, "_spawn", Mock(return_value=child))
@@ -98,7 +106,7 @@ async def test_install_launch_is_detached_and_not_waited(engine, monkeypatch):
     monkeypatch.setattr(engine, "_spawn", spawn)
     assert (
         await engine.install(
-            {"transactionId": "id", "targetManifestSha256": "a" * 64}
+            {"transactionId": "id", "targetManifestSha256": "a" * 64},
         )
         is child
     )

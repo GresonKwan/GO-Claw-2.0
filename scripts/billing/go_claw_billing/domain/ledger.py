@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 """Balanced, single-asset double-entry journal validation."""
 
 from __future__ import annotations
@@ -16,7 +17,9 @@ class JournalLine:
         if self.debit < 0 or self.credit < 0:
             raise ValueError("journal amount cannot be negative")
         if (self.debit > 0) == (self.credit > 0):
-            raise ValueError("each journal line must be exactly debit or credit")
+            raise ValueError(
+                "each journal line must be exactly debit or credit",
+            )
 
 
 def validate_balanced(lines: list[JournalLine]) -> None:

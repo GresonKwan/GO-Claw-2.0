@@ -37,7 +37,7 @@ CONTRACT_ROOT = (
 
 def validate_schema(name: str, payload: dict) -> None:
     schema = json.loads(
-        (CONTRACT_ROOT / f"{name}.schema.json").read_text(encoding="utf-8")
+        (CONTRACT_ROOT / f"{name}.schema.json").read_text(encoding="utf-8"),
     )
     Draft202012Validator(schema).validate(payload)
 
@@ -54,7 +54,9 @@ def _decode(value: str) -> tuple[bytes, list[str] | None]:
 
 
 def verify_signed_file(
-    path: Path, signature: str, public_key: str
+    path: Path,
+    signature: str,
+    public_key: str,
 ) -> tuple[str, int]:
     """Stream modern minisign ED prehash; reject unsupported raw Ed formats.
 
@@ -95,10 +97,15 @@ def verify_signed_file(
 
 
 def verify_archive(
-    path: Path, component: dict, files: list[dict], public_key: str
+    path: Path,
+    component: dict,
+    files: list[dict],
+    public_key: str,
 ) -> None:
     digest, length = verify_signed_file(
-        path, component["signature"], public_key
+        path,
+        component["signature"],
+        public_key,
     )
     if length != component["archiveBytes"] or digest != component["sha256"]:
         raise ValueError("ARCHIVE_HASH_MISMATCH")
@@ -169,7 +176,10 @@ def verify_release(
             raise ValueError("CONTENT_DIGEST_MISMATCH")
         name = urlsplit(component["archiveUrl"]).path.rsplit("/", 1)[-1]
         verify_archive(
-            regular_source(assets_dir, name), component, owned, public_key
+            regular_source(assets_dir, name),
+            component,
+            owned,
+            public_key,
         )
 
 
@@ -198,7 +208,9 @@ def build_index(
     if manifest_path.stat().st_size > 32 * 1024 * 1024:
         raise ValueError("MANIFEST_TOO_LARGE")
     manifest_digest, manifest_length = verify_signed_file(
-        manifest_path, manifest_sig, public_key
+        manifest_path,
+        manifest_sig,
+        public_key,
     )
     with manifest_path.open("rb") as stream:
         manifest_bytes = stream.read(32 * 1024 * 1024 + 1)
@@ -210,7 +222,9 @@ def build_index(
     manifest = json.loads(manifest_bytes)
     verify_release(manifest, manifest_path.parent, public_key, trusted_hosts)
     bridge_digest, bridge_length = verify_signed_file(
-        bridge_path, bridge_sig, public_key
+        bridge_path,
+        bridge_sig,
+        public_key,
     )
     platform = legacy_latest.get("platforms", {}).get("windows-x86_64", {})
     if (
@@ -247,10 +261,16 @@ def build_index(
         ],
         fullBytes=sum(c["archiveBytes"] for c in manifest["components"]),
         releaseManifest=reference(
-            manifest_url, manifest_sig, manifest_digest, manifest_length
+            manifest_url,
+            manifest_sig,
+            manifest_digest,
+            manifest_length,
         ),
         legacyBridge=reference(
-            bridge_url, bridge_sig, bridge_digest, bridge_length
+            bridge_url,
+            bridge_sig,
+            bridge_digest,
+            bridge_length,
         ),
     )
     validate_schema("release-index", index)
@@ -290,8 +310,8 @@ def main() -> None:
                 "version": index["version"],
                 "fullBytes": index["fullBytes"],
                 "requiresDetachedIndexSignature": True,
-            }
-        )
+            },
+        ),
     )
 
 

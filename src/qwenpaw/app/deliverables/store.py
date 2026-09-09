@@ -36,7 +36,9 @@ def _atomic_json(path: Path, value: dict) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     temp = path.with_name(f".{path.name}.{os.getpid()}.tmp")
     payload = json.dumps(
-        value, ensure_ascii=False, separators=(",", ":")
+        value,
+        ensure_ascii=False,
+        separators=(",", ":"),
     ).encode("utf-8")
     try:
         with temp.open("xb") as handle:
@@ -66,7 +68,10 @@ class DeliverablesStore:
         return self.root / _identifier(agent_id)
 
     def _manifest_path(
-        self, agent_id: str, chat_id: str, turn_id: str
+        self,
+        agent_id: str,
+        chat_id: str,
+        turn_id: str,
     ) -> Path:
         return (
             self._agent_dir(agent_id)
@@ -94,9 +99,13 @@ class DeliverablesStore:
         return raw
 
     def save(self, manifest: DeliverablesManifest) -> DeliverablesManifest:
-        relative = f"{_identifier(manifest.chatId)}/{_identifier(manifest.turnId)}.json"
+        chat_id = _identifier(manifest.chatId)
+        turn_id = _identifier(manifest.turnId)
+        relative = f"{chat_id}/{turn_id}.json"
         path = self._manifest_path(
-            manifest.agentId, manifest.chatId, manifest.turnId
+            manifest.agentId,
+            manifest.chatId,
+            manifest.turnId,
         )
         with _LOCK:
             index = self._read_index(manifest.agentId)
@@ -109,8 +118,8 @@ class DeliverablesStore:
                 ):
                     raise StoreError("RESPONSE_ID_COLLISION")
                 return prior
-            # Validate every index mutation before publishing the manifest.  UUIDs
-            # make collisions extremely unlikely, but an injected/corrupt ID must
+            # Validate every index mutation before publishing the manifest.
+            # UUID collisions are unlikely, but an injected/corrupt ID must
             # never leave an unindexed manifest behind.
             artifact_rows: list[tuple[str, str]] = []
             for item in manifest.items:
@@ -129,7 +138,9 @@ class DeliverablesStore:
         return manifest
 
     def _load_relative(
-        self, agent_id: str, relative: str
+        self,
+        agent_id: str,
+        relative: str,
     ) -> DeliverablesManifest:
         rel = Path(relative)
         if rel.is_absolute() or ".." in rel.parts or len(rel.parts) != 2:
@@ -141,22 +152,26 @@ class DeliverablesStore:
             raise StoreError("CORRUPT_MANIFEST") from exc
 
     def by_response(
-        self, agent_id: str, response_id: str
+        self,
+        agent_id: str,
+        response_id: str,
     ) -> DeliverablesManifest | None:
         with _LOCK:
             relative = self._read_index(agent_id)["responses"].get(
-                _identifier(response_id)
+                _identifier(response_id),
             )
             return (
                 self._load_relative(agent_id, relative) if relative else None
             )
 
     def by_artifact(
-        self, agent_id: str, artifact_id: str
+        self,
+        agent_id: str,
+        artifact_id: str,
     ) -> tuple[DeliverablesManifest, StoredArtifact] | None:
         with _LOCK:
             relative = self._read_index(agent_id)["artifacts"].get(
-                _identifier(artifact_id)
+                _identifier(artifact_id),
             )
             if not relative:
                 return None
@@ -170,7 +185,10 @@ class DeliverablesStore:
             return manifest, artifact
 
     def envelope(
-        self, manifest: DeliverablesManifest, *, workspace_root: Path
+        self,
+        manifest: DeliverablesManifest,
+        *,
+        workspace_root: Path,
     ) -> DeliverablesEnvelope:
         items: list[DeliverableItem] = []
         for record in manifest.items:
@@ -193,7 +211,7 @@ class DeliverablesStore:
                     previewAllowed=exists and record.previewAllowed,
                     previewKind=record.previewKind if exists else None,
                     createdAt=record.createdAt,
-                )
+                ),
             )
         return DeliverablesEnvelope(
             schemaVersion=1,

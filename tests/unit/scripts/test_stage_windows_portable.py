@@ -187,10 +187,10 @@ def test_stage_portable_layout_manifest_zip_and_checksum(tmp_path):
     assert manifest["webView2"]["distribution"] == "evergreen-bootstrapper"
     assert manifest["webView2"]["requiresNetwork"] is True
     assert manifest["webView2"]["source"].startswith(
-        "https://go.microsoft.com/"
+        "https://go.microsoft.com/",
     )
     assert "Portable 2.0.1" in (root / "README-PORTABLE.zh-CN.txt").read_text(
-        "utf-8"
+        "utf-8",
     )
 
 
@@ -452,12 +452,12 @@ def test_windows_build_runs_tauri_hook_with_pinned_node_only_once():
     ).read_text(encoding="utf-8")
 
     explicit_hook = script.index(
-        "& $NODE_BIN $NPM_CLI run build:tauri-bootstrap"
+        "& $NODE_BIN $NPM_CLI run build:tauri-bootstrap",
     )
     tauri_build = script.index(
-        "& $NODE_BIN $NPM_CLI exec -- tauri build"
+        "& $NODE_BIN $NPM_CLI exec -- tauri build",
     )
     assert explicit_hook < tauri_build
-    assert '$TAURI_PREBUILT_FRONTEND_CONFIG = ' in script
-    assert '{\"build\":{\"beforeBuildCommand\":\"\"}}' in script
+    assert "$TAURI_PREBUILT_FRONTEND_CONFIG = " in script
+    assert '{"build":{"beforeBuildCommand":""}}' in script
     assert script.count("--config $TAURI_PREBUILT_FRONTEND_CONFIG") == 2

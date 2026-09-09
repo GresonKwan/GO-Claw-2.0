@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# -*- coding: utf-8 -*-
 """Recover one paid order from a signed WeChat query.
 
 This is intentionally an operator-only, server-local command.  A dry run is
@@ -56,7 +57,10 @@ def _load_server_environment(
         if not line or line.startswith("#") or "=" not in line:
             continue
         name, value = line.split("=", 1)
-        os.environ.setdefault(name.strip(), value.strip().strip('"').strip("'"))
+        os.environ.setdefault(
+            name.strip(),
+            value.strip().strip('"').strip("'"),
+        )
     for filename, variable in SECRET_MAPPING.items():
         value = (credential_dir / filename).read_text("utf-8").rstrip("\r\n")
         if not value:
@@ -99,7 +103,9 @@ async def recover(order_id: UUID, *, commit: bool) -> dict[str, object]:
     settings = Settings()  # type: ignore[call-arg]
     assert settings.database_dsn is not None
     database = Postgres(
-        settings.database_dsn.get_secret_value(), min_size=1, max_size=2
+        settings.database_dsn.get_secret_value(),
+        min_size=1,
+        max_size=2,
     )
     await database.open()
     try:
@@ -124,7 +130,9 @@ async def recover(order_id: UUID, *, commit: bool) -> dict[str, object]:
         payment = _wechat_client(settings)
         result = await payment.query_order(order["out_trade_no"])
         confirmation = confirmation_from_signed_query(
-            result, expected_appid=payment.appid, expected_mchid=payment.mchid
+            result,
+            expected_appid=payment.appid,
+            expected_mchid=payment.mchid,
         )
         if confirmation.out_trade_no != order["out_trade_no"]:
             raise ValueError("signed merchant order does not match database")
@@ -144,7 +152,8 @@ async def recover(order_id: UUID, *, commit: bool) -> dict[str, object]:
             return safe_result
 
         ledger = LedgerRepository(
-            database.pool, settings.audit_hmac_key.get_secret_value()
+            database.pool,
+            settings.audit_hmac_key.get_secret_value(),
         )
         committer = PaymentCommitterRepository(database.pool, ledger)
         changed = await committer.commit_transaction(
@@ -181,7 +190,7 @@ async def recover(order_id: UUID, *, commit: bool) -> dict[str, object]:
                 "databaseGrantStateAfter": after["grant_state"],
                 "creditAdjustmentCount": after["credits"],
                 "paymentJournalCount": after["journals"],
-            }
+            },
         )
         return safe_result
     finally:

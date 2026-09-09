@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 """One per-product HTTP/SSE coordinator; Rust owns all program mutations."""
 
 from __future__ import annotations
@@ -25,22 +26,23 @@ class ComponentUpdateManager:
         self.engine = engine or EngineClient(root)
         self.store = StatusStore(root)
         self.index_url = os.environ.get(
-            "GO_CLAW_UPDATE_INDEX_URL", DEFAULT_INDEX
+            "GO_CLAW_UPDATE_INDEX_URL",
+            DEFAULT_INDEX,
         )
-        self.index = None
-        self._cached_index = None
-        self.transaction = None
+        self.index: dict | None = None
+        self._cached_index: dict | None = None
+        self.transaction: dict | None = None
         self.snapshot = status_dto(version)
         self._lock = asyncio.Lock()
         self._publish_lock = asyncio.Lock()
         self._initialized = False
-        self._check_task = None
+        self._check_task: asyncio.Task[dict] | None = None
         self._task = None
         self._monitor = None
         self._install_child = None
         self._install_id = None
         self._dismissed = set()
-        self._planning_target = None
+        self._planning_target: dict | None = None
         self._catalog_task = None
         self._changed = asyncio.Event()
 
@@ -55,7 +57,8 @@ class ComponentUpdateManager:
             try:
                 saved, _ = await asyncio.to_thread(self.store.load)
                 transaction = await asyncio.to_thread(
-                    read_transaction, self.root
+                    read_transaction,
+                    self.root,
                 )
                 if transaction and transaction["enginePhase"] in {
                     "PLANNING",
@@ -63,7 +66,8 @@ class ComponentUpdateManager:
                 }:
                     await self.engine.run("reconcile", root=str(self.root))
                     transaction = await asyncio.to_thread(
-                        read_transaction, self.root
+                        read_transaction,
+                        self.root,
                     )
                 if saved:
                     self.snapshot = saved
@@ -72,7 +76,7 @@ class ComponentUpdateManager:
                             **saved["latest"],
                             "fullBytes": saved["fullBytes"],
                             "releaseManifest": {
-                                "sha256": saved["targetManifestSha256"]
+                                "sha256": saved["targetManifestSha256"],
                             },
                         }
                 self.transaction = transaction
@@ -176,7 +180,7 @@ class ComponentUpdateManager:
         return bool(
             (self._task and not self._task.done())
             or self._install_child is not None
-            or self.snapshot["enginePhase"] in ACTIVE_PHASES
+            or self.snapshot["enginePhase"] in ACTIVE_PHASES,
         )
 
     async def check(self) -> dict:
@@ -190,7 +194,7 @@ class ComponentUpdateManager:
         # A disconnected request must not cancel the shared check.
         return await asyncio.shield(task)
 
-    async def _check(self):
+    async def _check(self) -> dict:
         if (
             self.transaction
             and self.transaction["enginePhase"] in TERMINAL
@@ -200,12 +204,16 @@ class ComponentUpdateManager:
             self.transaction = None
         await self._publish(phase="CHECKING")
         try:
-            self.index = await self.engine.run(
-                "discover", **{"index-url": self.index_url}
+            discovered = await self.engine.run(
+                "discover",
+                **{"index-url": self.index_url},
             )
+            if not isinstance(discovered, dict):
+                raise UpdateError("INVALID_ENGINE_RESPONSE", "discover", 502)
+            self.index = discovered
             phase = (
                 "AVAILABLE"
-                if newer(self.index["version"], self.version)
+                if newer(discovered["version"], self.version)
                 else "IDLE"
             )
             await self._publish(phase=phase)
@@ -215,7 +223,9 @@ class ComponentUpdateManager:
         return self.status()
 
     async def download(
-        self, target_version=None, target_manifest=None
+        self,
+        target_version=None,
+        target_manifest=None,
     ) -> dict:
         await self.initialize()
         if self.snapshot["enginePhase"] == "BLOCKED":
@@ -226,12 +236,13 @@ class ComponentUpdateManager:
             await self.check()
             target_version = target_version or cached["latest"]["version"]
             target_manifest = target_manifest or cached["targetManifestSha256"]
+        checked_index = self.index or {}
         async with self._lock:
             await self._refresh()
             if self.snapshot["enginePhase"] == "BLOCKED":
                 raise UpdateError("UPDATE_BUSY", "restore")
             target = self.transaction if self._busy() else None
-            index = self._planning_target or self.index or {}
+            index = self._planning_target or checked_index
             version = (
                 target["targetVersion"] if target else index.get("version")
             )
@@ -263,7 +274,11 @@ class ComponentUpdateManager:
             return self.status()
 
     async def _stage(
-        self, version, digest, index_url=None, install_after=False
+        self,
+        version,
+        digest,
+        index_url=None,
+        install_after=False,
     ):
         try:
             await self.engine.run(
@@ -289,7 +304,8 @@ class ComponentUpdateManager:
             try:
                 await self.engine.run("reconcile", root=str(self.root))
             except UpdateError:
-                pass  # Preserve the first failed stage, not the observer error.
+                # Preserve the first failed stage, not the observer error.
+                pass
             try:
                 await self._refresh()
             except (OSError, ValueError, KeyError, TypeError):
@@ -378,10 +394,11 @@ class ComponentUpdateManager:
                         "catalog",
                         **{
                             "index-url": os.environ.get(
-                                "GO_CLAW_UPDATE_CATALOG_URL", DEFAULT_CATALOG
-                            )
+                                "GO_CLAW_UPDATE_CATALOG_URL",
+                                DEFAULT_CATALOG,
+                            ),
                         },
-                    )
+                    ),
                 )
             task = self._catalog_task
         return await asyncio.shield(task)
@@ -418,7 +435,7 @@ class ComponentUpdateManager:
                     entry["release"]["releaseManifest"]["sha256"],
                     entry["indexUrl"],
                     install_after=True,
-                )
+                ),
             )
         return self.status()
 

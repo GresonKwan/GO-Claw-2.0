@@ -38,7 +38,7 @@ def build_packages(
     # Check both directions: no nesting or alias through an existing symlink.
     resolved_root, resolved_output = root.resolve(), output.resolve()
     if resolved_output.is_relative_to(
-        resolved_root
+        resolved_root,
     ) or resolved_root.is_relative_to(resolved_output):
         raise ValueError("OUTPUT_OVERLAPS_SOURCE")
     validate_archive_url(base_url, trusted_hosts)
@@ -66,7 +66,8 @@ def build_packages(
             for row in owned:
                 source = regular_source(root, row["relativePath"])
                 info = zipfile.ZipInfo(
-                    row["relativePath"], (1980, 1, 1, 0, 0, 0)
+                    row["relativePath"],
+                    (1980, 1, 1, 0, 0, 0),
                 )
                 info.create_system = 3
                 info.external_attr = 0o100644 << 16
@@ -94,7 +95,7 @@ def build_packages(
                 "unpackedBytes": sum(r["sizeBytes"] for r in owned),
                 "sha256": sha256_file(archive),
                 "contentDigest": digest,
-            }
+            },
         )
     draft = {
         "schemaVersion": 2,
@@ -110,7 +111,8 @@ def build_packages(
 
 
 def download_report(
-    components: list[dict], verified_digests: dict[str, str]
+    components: list[dict],
+    verified_digests: dict[str, str],
 ) -> dict:
     """Input digests must come from verified manifests/trees, never size/mtime."""
     changed = [

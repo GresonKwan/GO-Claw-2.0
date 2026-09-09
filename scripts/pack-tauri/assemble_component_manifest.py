@@ -91,7 +91,9 @@ def main() -> None:
     for name in ("version", "commit"):
         parser.add_argument(f"--{name}", required=True)
     parser.add_argument(
-        "--channel", choices=["stable", "staging"], required=True
+        "--channel",
+        choices=["stable", "staging"],
+        required=True,
     )
     parser.add_argument("--trusted-host", action="append", required=True)
     args = parser.parse_args()
@@ -115,8 +117,8 @@ def main() -> None:
                 "version": args.version,
                 "components": len(manifest["components"]),
                 "requiresDetachedManifestSignature": True,
-            }
-        )
+            },
+        ),
     )
 
 

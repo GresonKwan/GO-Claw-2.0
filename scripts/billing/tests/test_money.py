@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 import pytest
 from go_claw_billing.domain.money import (
     DISPLAY_UNITS_PER_FEN,

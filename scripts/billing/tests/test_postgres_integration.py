@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 import hashlib
 import os
 from uuid import uuid4
@@ -37,7 +38,7 @@ async def test_migrated_postgres_schema_is_ready() -> None:
                             AND column_name='refunded_at'
                        )
                   FROM billing_schema_version
-                """
+                """,
             )
             row = await cursor.fetchone()
         assert row == (4, True, True, True)
@@ -62,7 +63,7 @@ async def test_partial_refunds_are_exact_and_capped_by_original_order() -> None:
             connection.cursor() as cursor,
         ):
             await cursor.execute(
-                "SELECT policy_id FROM pricing_policy WHERE version='cny-v1'"
+                "SELECT policy_id FROM pricing_policy WHERE version='cny-v1'",
             )
             policy_id = (await cursor.fetchone())[0]
             await cursor.execute(
@@ -100,7 +101,8 @@ async def test_partial_refunds_are_exact_and_capped_by_original_order() -> None:
             )
             await connection.commit()
         repository = RefundRepository(
-            database.pool, LedgerRepository(database.pool, "test-hmac-key" * 4)
+            database.pool,
+            LedgerRepository(database.pool, "test-hmac-key" * 4),
         )
         first, _ = await repository.request_refund(
             order_id=order_id,
@@ -120,7 +122,10 @@ async def test_partial_refunds_are_exact_and_capped_by_original_order() -> None:
             idempotency_key="partial-refund-key-0002",
             request_hash=hashlib.sha256(b"two").digest(),
         )
-        assert (first.newapi_quota_units, second.newapi_quota_units) == (18750, 56250)
+        assert (first.newapi_quota_units, second.newapi_quota_units) == (
+            18750,
+            56250,
+        )
         with pytest.raises(ValueError, match="exceeds"):
             await repository.request_refund(
                 order_id=order_id,
@@ -154,7 +159,7 @@ async def test_reviewed_payment_recovery_commits_credit_exactly_once() -> None:
             connection.cursor() as cursor,
         ):
             await cursor.execute(
-                "SELECT policy_id FROM pricing_policy WHERE version='cny-v1'"
+                "SELECT policy_id FROM pricing_policy WHERE version='cny-v1'",
             )
             policy_id = (await cursor.fetchone())[0]
             await cursor.execute(
@@ -186,14 +191,25 @@ async def test_reviewed_payment_recovery_commits_credit_exactly_once() -> None:
             amount_fen=100,
         )
         committer = PaymentCommitterRepository(
-            database.pool, LedgerRepository(database.pool, "test-hmac-key" * 4)
+            database.pool,
+            LedgerRepository(database.pool, "test-hmac-key" * 4),
         )
-        assert await committer.commit_transaction(
-            confirmation, raw_body=b'{"trade_state":"SUCCESS"}', serial="SIGNED_QUERY_RESPONSE"
-        ) is True
-        assert await committer.commit_transaction(
-            confirmation, raw_body=b'{"trade_state":"SUCCESS"}', serial="SIGNED_QUERY_RESPONSE"
-        ) is False
+        assert (
+            await committer.commit_transaction(
+                confirmation,
+                raw_body=b'{"trade_state":"SUCCESS"}',
+                serial="SIGNED_QUERY_RESPONSE",
+            )
+            is True
+        )
+        assert (
+            await committer.commit_transaction(
+                confirmation,
+                raw_body=b'{"trade_state":"SUCCESS"}',
+                serial="SIGNED_QUERY_RESPONSE",
+            )
+            is False
+        )
 
         async with (
             database.pool.connection() as connection,

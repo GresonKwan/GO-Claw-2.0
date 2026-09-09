@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# -*- coding: utf-8 -*-
 """Explicit, fail-closed GO CLAW Billing migration runner.
 
 Application startup never invokes this command. Operations runs it as a
@@ -42,7 +43,9 @@ def _dsn(args: argparse.Namespace) -> str:
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="Apply reviewed Billing migrations")
+    parser = argparse.ArgumentParser(
+        description="Apply reviewed Billing migrations",
+    )
     parser.add_argument("--dsn-file", type=Path)
     parser.add_argument(
         "--migrations",
@@ -55,21 +58,21 @@ def main() -> int:
         connection.execute("SELECT pg_advisory_lock(%s)", (LOCK_ID,))
         try:
             payment_exists = connection.execute(
-                "SELECT to_regclass('public.payment_order') IS NOT NULL"
+                "SELECT to_regclass('public.payment_order') IS NOT NULL",
             ).fetchone()[0]
             marker_exists = connection.execute(
-                "SELECT to_regclass('public.billing_schema_version') IS NOT NULL"
+                "SELECT to_regclass('public.billing_schema_version') IS NOT NULL",
             ).fetchone()[0]
             if payment_exists and not marker_exists:
                 raise RuntimeError(
-                    "unversioned billing schema detected; manual review required"
+                    "unversioned billing schema detected; manual review required",
                 )
             current = 0
             if marker_exists:
                 current = int(
                     connection.execute(
-                        "SELECT COALESCE(max(version),0) FROM billing_schema_version"
-                    ).fetchone()[0]
+                        "SELECT COALESCE(max(version),0) FROM billing_schema_version",
+                    ).fetchone()[0],
                 )
             for version, path in migrations:
                 if version <= current:
@@ -90,5 +93,8 @@ if __name__ == "__main__":
     try:
         raise SystemExit(main())
     except Exception as exc:  # noqa: BLE001 - never print DSN or SQL payload
-        print(f"billing migration failed: {type(exc).__name__}", file=sys.stderr)
+        print(
+            f"billing migration failed: {type(exc).__name__}",
+            file=sys.stderr,
+        )
         raise SystemExit(1) from None

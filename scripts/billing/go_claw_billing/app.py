@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 """GO CLAW Billing ASGI application."""
 
 from __future__ import annotations
@@ -5,6 +6,7 @@ from __future__ import annotations
 import asyncio
 import logging
 from contextlib import asynccontextmanager
+from typing import cast
 
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
@@ -28,7 +30,10 @@ from .adapters.wechatpay import WeChatNotificationVerifier, WeChatPayClient
 from .api import admin, customer, webhooks
 from .application.accounts import InMemoryAccountStore
 from .application.order_service import InMemoryOrders, OrderService
-from .application.payment_recovery import PaymentRecoveryService
+from .application.payment_recovery import (
+    PaymentRecoveryService,
+    RecoveryOrders,
+)
 from .config import Settings, get_settings
 from .workers.outbox import OutboxWorker
 from .workers.payment_recovery import PaymentRecoveryWorker
@@ -50,7 +55,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         if resolved.environment == "development":
             repository = InMemoryOrders()
             app.state.accounts = InMemoryAccountStore(
-                resolved.token_pepper.get_secret_value()
+                resolved.token_pepper.get_secret_value(),
             )
             app.state.order_repository = repository
             app.state.orders = OrderService(
@@ -71,12 +76,15 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             )
             app.state.ledger_repository = ledger
             app.state.audit = AuditRepository(
-                pool, resolved.audit_hmac_key.get_secret_value()
+                pool,
+                resolved.audit_hmac_key.get_secret_value(),
             )
             app.state.refunds = RefundRepository(pool, ledger)
             repository = PostgresOrderRepository(
                 pool,
-                CodeUrlCipher(resolved.code_url_encryption_key.get_secret_value()),
+                CodeUrlCipher(
+                    resolved.code_url_encryption_key.get_secret_value(),
+                ),
                 resolved.daily_limit_fen,
             )
             app.state.accounts = PostgresAccountStore(
@@ -96,7 +104,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 verification_keys = {
                     resolved.wechat_verification_key_id: resolved.wechat_verification_public_key_pem.get_secret_value()
                     .replace("\\n", "\n")
-                    .encode()
+                    .encode(),
                 }
                 payment = WeChatPayClient(
                     mchid=resolved.wechat_mchid,
@@ -115,9 +123,12 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                     verification_keys,
                     resolved.wechat_api_v3_key.get_secret_value().encode(),
                 )
-                app.state.payment_committer = PaymentCommitterRepository(pool, ledger)
+                app.state.payment_committer = PaymentCommitterRepository(
+                    pool,
+                    ledger,
+                )
                 app.state.payment_recovery = PaymentRecoveryService(
-                    repository,
+                    cast(RecoveryOrders, repository),
                     payment,
                     app.state.payment_committer,
                 )
@@ -144,23 +155,28 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 )
                 tasks.append(asyncio.create_task(quota_worker.run(stop)))
             if resolved.run_workers and hasattr(app.state, "payment_recovery"):
-                recovery_worker = PaymentRecoveryWorker(app.state.payment_recovery)
+                recovery_worker = PaymentRecoveryWorker(
+                    app.state.payment_recovery,
+                )
                 tasks.append(asyncio.create_task(recovery_worker.run(stop)))
                 tasks.append(
                     asyncio.create_task(
-                        RefundWorker(app.state.refunds, payment).run(stop)
-                    )
+                        RefundWorker(app.state.refunds, payment).run(stop),
+                    ),
                 )
                 tasks.append(
                     asyncio.create_task(
                         ReconciliationWorker(
-                            ReconciliationRepository(pool), payment
-                        ).run(stop)
-                    )
+                            ReconciliationRepository(pool),
+                            payment,
+                        ).run(stop),
+                    ),
                 )
             if resolved.run_workers:
                 tasks.append(
-                    asyncio.create_task(OutboxWorker(OutboxRepository(pool)).run(stop))
+                    asyncio.create_task(
+                        OutboxWorker(OutboxRepository(pool)).run(stop),
+                    ),
                 )
         app.state.database = database
         try:
@@ -180,7 +196,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         lifespan=lifespan,
     )
     app.state.settings = resolved
-    app.state.internal_token = resolved.internal_enrollment_token.get_secret_value()
+    app.state.internal_token = (
+        resolved.internal_enrollment_token.get_secret_value()
+    )
     app.state.public_base_url = resolved.public_base_url.rstrip("/")
 
     @app.middleware("http")

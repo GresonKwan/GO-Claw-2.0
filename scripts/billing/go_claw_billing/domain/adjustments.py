@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 """Quota adjustment result classification."""
 
 from enum import StrEnum

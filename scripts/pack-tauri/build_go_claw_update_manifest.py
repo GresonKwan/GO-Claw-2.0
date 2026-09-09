@@ -70,7 +70,7 @@ def main() -> None:
             char not in "0123456789abcdef" for char in args.build_commit
         ):
             raise SystemExit(
-                "--build-commit must be a lowercase 40-character SHA"
+                "--build-commit must be a lowercase 40-character SHA",
             )
         manifest["buildCommit"] = args.build_commit
     Path(args.output).write_text(

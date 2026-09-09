@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 """Exercise the real package/signature assembly with throwaway signing keys."""
 
 import copy
@@ -8,7 +9,8 @@ from pathlib import Path
 import pytest
 
 sys.path.insert(
-    0, str(Path(__file__).resolve().parents[3] / "scripts/pack-tauri")
+    0,
+    str(Path(__file__).resolve().parents[3] / "scripts/pack-tauri"),
 )
 from assemble_component_manifest import (  # noqa: E402
     assemble,
@@ -43,7 +45,8 @@ def test_assemble_requires_programs_seeds_and_valid_signatures(tmp_path):
     for c in draft["components"]:
         package = assets / c["archiveUrl"].rsplit("/", 1)[-1]
         package.with_suffix(".zip.sig").write_text(
-            sign(package.read_bytes()), encoding="ascii"
+            sign(package.read_bytes()),
+            encoding="ascii",
         )
     options = dict(
         version="2.1.2",

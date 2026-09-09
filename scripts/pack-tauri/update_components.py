@@ -39,13 +39,14 @@ MUTABLE_ROOTS = frozenset(
         "go-claw-config",
         "portable.json",
         "runtime",
-    }
+    },
 )
 ROOT_DOCS = frozenset({"LICENSE", "README-PORTABLE.zh-CN.txt"})
 ROOT_BOOTSTRAP = frozenset({"MANIFEST.json", "SHA256SUMS.txt"})
 WEBVIEW2_BOOTSTRAPPER = "WebView2/MicrosoftEdgeWebview2Setup.exe"
 _DEVICE = re.compile(
-    r"^(con|prn|aux|nul|com[1-9¹²³]|lpt[1-9¹²³]|conin\$|conout\$)$", re.I
+    r"^(con|prn|aux|nul|com[1-9¹²³]|lpt[1-9¹²³]|conin\$|conout\$)$",
+    re.I,
 )
 _SHA = re.compile(r"^[0-9a-f]{64}$")
 _FORBIDDEN_NAMES = frozenset(
@@ -58,7 +59,7 @@ _FORBIDDEN_NAMES = frozenset(
         "id_rsa",
         "id_ed25519",
         ".env",
-    }
+    },
 )
 
 
@@ -183,7 +184,7 @@ def validate_file_records(records: Iterable[dict]) -> list[dict]:
         if type(row["sizeBytes"]) is not int or row["sizeBytes"] < 0:
             raise ValueError("INVALID_SIZE")
         if not isinstance(row["sha256"], str) or not _SHA.fullmatch(
-            row["sha256"]
+            row["sha256"],
         ):
             raise ValueError("INVALID_HASH")
     if seen & directories:
@@ -258,7 +259,7 @@ HEAVY_PACKAGES = frozenset(
         "nvidia",
         "cv2",
         "opencv_python",
-    }
+    },
 )
 
 
@@ -270,7 +271,8 @@ def build_assignments(root: Path) -> list[dict]:
     """
     rows = []
     for relative in sorted(
-        program_paths(root), key=lambda p: p.encode("utf-8")
+        program_paths(root),
+        key=lambda p: p.encode("utf-8"),
     ):
         safe_relative_path(relative)
         parts = relative.split("/")
@@ -300,7 +302,7 @@ def build_assignments(root: Path) -> list[dict]:
             raise ValueError("UNKNOWN_PROGRAM_LAYOUT")
         validate_assignment(relative, component, mount)
         rows.append(
-            {"relativePath": relative, "component": component, "mount": mount}
+            {"relativePath": relative, "component": component, "mount": mount},
         )
     return rows
 
@@ -310,12 +312,14 @@ def inventory(root: Path, assignments: list[dict]) -> list[dict]:
     actual = program_paths(root)
     # Reject duplicate assignment before comparing sets.
     if len({r["relativePath"].casefold() for r in assignments}) != len(
-        assignments
+        assignments,
     ):
         raise ValueError("DUPLICATE_PATH")
     for row in assignments:
         validate_assignment(
-            row["relativePath"], row["component"], row["mount"]
+            row["relativePath"],
+            row["component"],
+            row["mount"],
         )
     if actual != {row["relativePath"] for row in assignments}:
         raise ValueError("INCOMPLETE_OWNERSHIP")
@@ -329,6 +333,6 @@ def inventory(root: Path, assignments: list[dict]) -> list[dict]:
                 "mount": row["mount"],
                 "sizeBytes": path.stat().st_size,
                 "sha256": sha256_file(path),
-            }
+            },
         )
     return validate_file_records(records)

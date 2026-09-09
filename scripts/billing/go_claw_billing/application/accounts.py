@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 """Billing account and opaque access-token lifecycle."""
 
 from __future__ import annotations
@@ -35,12 +36,16 @@ class InMemoryAccountStore:
     """Development/test store; production startup rejects this mode."""
 
     pepper: str
-    accounts_by_instance: dict[UUID, AccountRecord] = field(default_factory=dict)
+    accounts_by_instance: dict[UUID, AccountRecord] = field(
+        default_factory=dict,
+    )
     tokens_by_id: dict[UUID, AccessTokenRecord] = field(default_factory=dict)
     hasher: PasswordHasher = field(default_factory=PasswordHasher)
 
     def enroll(
-        self, instance_id: UUID, newapi_user_id: int
+        self,
+        instance_id: UUID,
+        newapi_user_id: int,
     ) -> tuple[AccountRecord, str]:
         account = self.accounts_by_instance.get(instance_id)
         if account is not None and account.newapi_user_id != newapi_user_id:
@@ -84,7 +89,10 @@ class InMemoryAccountStore:
         record = self.tokens_by_id.get(token_id)
         if record is None or record.status not in {"ISSUED", "ACTIVE"}:
             return None
-        if record.status == "ISSUED" and record.issued_expires_at <= datetime.now(UTC):
+        if (
+            record.status == "ISSUED"
+            and record.issued_expires_at <= datetime.now(UTC)
+        ):
             return None
         try:
             self.hasher.verify(record.token_hash, secret + self.pepper)

@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 from __future__ import annotations
 
 from pathlib import Path
@@ -7,7 +8,8 @@ from qwenpaw.app.deliverables.store import DeliverablesStore
 
 
 def test_candidate_requires_final_reference_and_published_is_deduplicated(
-    tmp_path: Path, monkeypatch
+    tmp_path: Path,
+    monkeypatch,
 ) -> None:
     workspace = tmp_path / "workspace"
     workspace.mkdir()

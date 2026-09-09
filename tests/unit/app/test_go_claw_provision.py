@@ -207,7 +207,8 @@ async def test_damaged_identity_is_never_regenerated(portable_env, original):
     ],
 )
 async def test_missing_old_identity_does_not_create_new_account(
-    portable_env, marker
+    portable_env,
+    marker,
 ):
     path = portable_env / marker
     path.parent.mkdir(parents=True, exist_ok=True)

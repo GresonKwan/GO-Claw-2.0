@@ -9,7 +9,13 @@ from typing import Literal
 from pydantic import BaseModel, ConfigDict, Field
 
 DeliverableKind = Literal[
-    "document", "image", "video", "audio", "archive", "code", "other"
+    "document",
+    "image",
+    "video",
+    "audio",
+    "archive",
+    "code",
+    "other",
 ]
 
 

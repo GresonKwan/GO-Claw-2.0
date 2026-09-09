@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 from uuid import uuid4
 
 from go_claw_billing.application.accounts import InMemoryAccountStore

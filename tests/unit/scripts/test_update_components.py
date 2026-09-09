@@ -92,18 +92,18 @@ def test_collisions_and_stable_content_digest():
         validate_file_records([record(), record("binaries/CORE.exe")])
     with pytest.raises(ValueError, match="CASE_COLLISION"):
         validate_file_records(
-            [record("binaries/Foo/a"), record("binaries/foo/b")]
+            [record("binaries/Foo/a"), record("binaries/foo/b")],
         )
     with pytest.raises(ValueError, match="FILE_DIRECTORY_COLLISION"):
         validate_file_records(
-            [record("binaries/file"), record("binaries/file/child")]
+            [record("binaries/file"), record("binaries/file/child")],
         )
     rows = [record("binaries/中文.txt"), record()]
     assert content_digest(rows) == content_digest(reversed(rows))
     extended = [dict(r, buildTimestamp="ignored") for r in rows]
     assert content_digest(rows) == content_digest(extended)
     assert content_digest(rows) != content_digest(
-        [dict(rows[0], sha256="b" * 64), rows[1]]
+        [dict(rows[0], sha256="b" * 64), rows[1]],
     )
 
 
@@ -282,7 +282,8 @@ def test_reparse_attribute_rejected_without_following_link(monkeypatch):
         Path,
         "lstat",
         lambda _: SimpleNamespace(
-            st_mode=stat.S_IFDIR, st_file_attributes=0x400
+            st_mode=stat.S_IFDIR,
+            st_file_attributes=0x400,
         ),
     )
     with pytest.raises(ValueError, match="REPARSE_POINT"):

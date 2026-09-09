@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 """Idempotent recharge order creation."""
 
 from __future__ import annotations
@@ -28,23 +29,37 @@ class Orders(Protocol):
         key: str,
         request_hash: bytes,
         order: PaymentOrder,
-    ) -> tuple[PaymentOrder, bool]: ...
+    ) -> tuple[PaymentOrder, bool]:
+        ...
 
-    async def save_qr(self, order_id: UUID, code_url: str) -> PaymentOrder: ...
+    async def save_qr(self, order_id: UUID, code_url: str) -> PaymentOrder:
+        ...
 
     async def get_owned(
-        self, account_id: UUID, order_id: UUID
-    ) -> PaymentOrder | None: ...
+        self,
+        account_id: UUID,
+        order_id: UUID,
+    ) -> PaymentOrder | None:
+        ...
 
-    async def list_owned(self, account_id: UUID, limit: int) -> list[PaymentOrder]: ...
+    async def list_owned(
+        self,
+        account_id: UUID,
+        limit: int,
+    ) -> list[PaymentOrder]:
+        ...
 
     async def close_owned(
-        self, account_id: UUID, order_id: UUID
-    ) -> PaymentOrder | None: ...
+        self,
+        account_id: UUID,
+        order_id: UUID,
+    ) -> PaymentOrder | None:
+        ...
 
 
 class PaymentProvider(Protocol):
-    async def create_native_order(self, order: PaymentOrder) -> str: ...
+    async def create_native_order(self, order: PaymentOrder) -> str:
+        ...
 
 
 def _trade_no() -> str:
@@ -55,7 +70,9 @@ def _trade_no() -> str:
 @dataclass(slots=True)
 class InMemoryOrders:
     by_id: dict[UUID, PaymentOrder] = field(default_factory=dict)
-    idem: dict[tuple[UUID, str], tuple[bytes, UUID]] = field(default_factory=dict)
+    idem: dict[tuple[UUID, str], tuple[bytes, UUID]] = field(
+        default_factory=dict,
+    )
 
     async def create_idempotent(
         self,
@@ -82,23 +99,40 @@ class InMemoryOrders:
         order.updated_at = order.created_at
         return order
 
-    async def get_owned(self, account_id: UUID, order_id: UUID) -> PaymentOrder | None:
+    async def get_owned(
+        self,
+        account_id: UUID,
+        order_id: UUID,
+    ) -> PaymentOrder | None:
         order = self.by_id.get(order_id)
         return order if order and order.account_id == account_id else None
 
-    async def list_owned(self, account_id: UUID, limit: int) -> list[PaymentOrder]:
+    async def list_owned(
+        self,
+        account_id: UUID,
+        limit: int,
+    ) -> list[PaymentOrder]:
         values = [
-            order for order in self.by_id.values() if order.account_id == account_id
+            order
+            for order in self.by_id.values()
+            if order.account_id == account_id
         ]
-        return sorted(values, key=lambda item: item.created_at, reverse=True)[:limit]
+        return sorted(values, key=lambda item: item.created_at, reverse=True)[
+            :limit
+        ]
 
     async def close_owned(
-        self, account_id: UUID, order_id: UUID
+        self,
+        account_id: UUID,
+        order_id: UUID,
     ) -> PaymentOrder | None:
         order = await self.get_owned(account_id, order_id)
         if order is None:
             return None
-        if order.payment_state in {PaymentState.CREATED, PaymentState.QR_READY}:
+        if order.payment_state in {
+            PaymentState.CREATED,
+            PaymentState.QR_READY,
+        }:
             order.payment_state = PaymentState.CLOSED
             order.updated_at = order.created_at
         return order
@@ -144,5 +178,7 @@ class OrderService:
             return stored, replayed
         code_url = await self.payment.create_native_order(stored)
         if not code_url.startswith("weixin://"):
-            raise ValueError("payment provider returned an invalid Native code URL")
+            raise ValueError(
+                "payment provider returned an invalid Native code URL",
+            )
         return await self.orders.save_qr(stored.order_id, code_url), replayed

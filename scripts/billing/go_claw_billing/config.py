@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 """Fail-closed billing service configuration."""
 
 from __future__ import annotations
@@ -19,7 +20,11 @@ class Settings(BaseSettings):
         extra="ignore",
     )
 
-    environment: Literal["development", "staging", "production"] = "development"
+    environment: Literal[
+        "development",
+        "staging",
+        "production",
+    ] = "development"
     enabled: bool = False
     payment_provider: Literal["fake", "wechatpay"] = "fake"
     database_dsn: SecretStr | None = None
@@ -29,7 +34,11 @@ class Settings(BaseSettings):
     internal_enrollment_token: SecretStr = Field(min_length=32)
     admin_token: SecretStr | None = None
     public_base_url: str = "https://goclaw.host/go-claw/billing"
-    daily_limit_fen: int = Field(default=10_000_000, ge=10_000_000, le=10_000_000)
+    daily_limit_fen: int = Field(
+        default=10_000_000,
+        ge=10_000_000,
+        le=10_000_000,
+    )
     terms_version: str = "2026-09-v1"
     merchant_display_name: str = "兆流智能"
     customer_service_url: str | None = None
@@ -74,24 +83,30 @@ class Settings(BaseSettings):
                 if getattr(self, name) is None
             ]
             if missing:
-                raise ValueError("missing WeChat Pay settings: " + ", ".join(missing))
+                raise ValueError(
+                    "missing WeChat Pay settings: " + ", ".join(missing),
+                )
             if not self.wechat_notify_url.startswith("https://"):
                 raise ValueError("wechat_notify_url must use HTTPS")
             if not self.wechat_verification_key_id.startswith("PUB_KEY_ID_"):
-                raise ValueError("wechat_verification_key_id must be a public key ID")
+                raise ValueError(
+                    "wechat_verification_key_id must be a public key ID",
+                )
             if self.environment != "development":
                 if self.wechat_mchid != APPROVED_WECHAT_MCHID:
                     raise ValueError(
-                        "wechat_mchid does not match the approved merchant"
+                        "wechat_mchid does not match the approved merchant",
                     )
                 if self.wechat_appid != APPROVED_WECHAT_APPID:
                     raise ValueError(
-                        "wechat_appid does not match the approved mini-program"
+                        "wechat_appid does not match the approved mini-program",
                     )
         if self.enabled and (
             self.newapi_base_url is None or self.newapi_admin_token is None
         ):
-            raise ValueError("NewAPI settings are required when recharge is enabled")
+            raise ValueError(
+                "NewAPI settings are required when recharge is enabled",
+            )
         if (
             self.environment != "development"
             and self.enabled

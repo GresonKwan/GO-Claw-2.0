@@ -106,6 +106,14 @@ repos:
           --disable=W0632,
           --disable=W0123,
           --disable=C3001,
+          # Cross-platform/generated-code idioms already covered by black,
+          # flake8, tests, and the update-contract suite.
+          --disable=C0301,  # line-too-long (flake8 remains authoritative)
+          --disable=C0327,  # mixed-line-endings (Git normalizes sources)
+          --disable=C0413,  # wrong-import-position (test path bootstraps)
+          --disable=E1102,  # false positives on structured error bodies
+          --disable=R1732,  # streaming responses retain file handles
+          --disable=R1735,  # dict() style is not a correctness issue
           --disable=W0201,
           --disable=C0302,
           --disable=W1203,

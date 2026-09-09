@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 """Customer API matching the checked-in OpenAPI contract."""
 
 from __future__ import annotations
@@ -7,7 +8,15 @@ from datetime import UTC, datetime
 from typing import Annotated
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request, Response
+from fastapi import (
+    APIRouter,
+    Depends,
+    Header,
+    HTTPException,
+    Query,
+    Request,
+    Response,
+)
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -26,15 +35,24 @@ bearer = HTTPBearer(auto_error=False)
 
 class CreateOrder(BaseModel):
     model_config = ConfigDict(extra="forbid", populate_by_name=True)
-    amount_fen: int = Field(alias="amountFen", ge=MIN_AMOUNT_FEN, le=MAX_AMOUNT_FEN)
+    amount_fen: int = Field(
+        alias="amountFen",
+        ge=MIN_AMOUNT_FEN,
+        le=MAX_AMOUNT_FEN,
+    )
     accepted_terms_version: str = Field(
-        alias="acceptedTermsVersion", min_length=1, max_length=64
+        alias="acceptedTermsVersion",
+        min_length=1,
+        max_length=64,
     )
 
 
 async def account_id(
     request: Request,
-    credential: Annotated[HTTPAuthorizationCredentials | None, Depends(bearer)],
+    credential: Annotated[
+        HTTPAuthorizationCredentials | None,
+        Depends(bearer),
+    ],
 ) -> UUID:
     if credential is None:
         raise HTTPException(401, detail={"code": "UNAUTHORIZED"})
@@ -48,7 +66,8 @@ async def account_id(
 
 @router.get("/config")
 async def config(
-    request: Request, _account: Annotated[UUID, Depends(account_id)]
+    request: Request,
+    _account: Annotated[UUID, Depends(account_id)],
 ) -> dict:
     settings = request.app.state.settings
     return {
@@ -71,7 +90,8 @@ async def config(
 
 @router.get("/balance")
 async def balance(
-    request: Request, account: Annotated[UUID, Depends(account_id)]
+    request: Request,
+    account: Annotated[UUID, Depends(account_id)],
 ) -> dict:
     newapi = getattr(request.app.state, "newapi", None)
     ledger = getattr(request.app.state, "ledger_repository", None)
@@ -83,17 +103,20 @@ async def balance(
         granted = remaining = 0
     else:
         try:
-            newapi_user_id = await request.app.state.accounts.newapi_user_id(account)
+            newapi_user_id = await request.app.state.accounts.newapi_user_id(
+                account,
+            )
             snapshot = await newapi.read_quota_snapshot(newapi_user_id)
             remaining = snapshot.remaining_units * 200 // 3
             observed_total = (
-                snapshot.remaining_units + snapshot.used_units
-            ) * 200 // 3
+                (snapshot.remaining_units + snapshot.used_units) * 200 // 3
+            )
             ledger_granted = await ledger.granted_display_units(account)
             granted = max(ledger_granted, observed_total)
         except (LookupError, NewAPIReadError) as exc:
             raise HTTPException(
-                503, detail={"code": "BALANCE_UNAVAILABLE"}
+                503,
+                detail={"code": "BALANCE_UNAVAILABLE"},
             ) from exc
     percent = min(100, remaining * 100 // granted) if granted else 0
     return {
@@ -130,9 +153,15 @@ async def create_order(
             idempotency_key=idempotency_key,
         )
     except IdempotencyConflict as exc:
-        raise HTTPException(409, detail={"code": "IDEMPOTENCY_CONFLICT"}) from exc
+        raise HTTPException(
+            409,
+            detail={"code": "IDEMPOTENCY_CONFLICT"},
+        ) from exc
     except DailyLimitExceeded as exc:
-        raise HTTPException(409, detail={"code": "DAILY_LIMIT_EXCEEDED"}) from exc
+        raise HTTPException(
+            409,
+            detail={"code": "DAILY_LIMIT_EXCEEDED"},
+        ) from exc
     response.headers["Idempotency-Replayed"] = "true" if replayed else "false"
     if replayed:
         response.status_code = 200
@@ -145,7 +174,10 @@ async def get_order(
     order_id: UUID,
     account: Annotated[UUID, Depends(account_id)],
 ) -> dict:
-    order = await request.app.state.order_repository.get_owned(account, order_id)
+    order = await request.app.state.order_repository.get_owned(
+        account,
+        order_id,
+    )
     if order is None:
         raise HTTPException(404, detail={"code": "ORDER_NOT_FOUND"})
     return order.public_dict()
@@ -169,7 +201,10 @@ async def close_order(
     del idempotency_key
     recovery = getattr(request.app.state, "payment_recovery", None)
     if recovery is None:
-        order = await request.app.state.order_repository.close_owned(account, order_id)
+        order = await request.app.state.order_repository.close_owned(
+            account,
+            order_id,
+        )
     else:
         try:
             order = await recovery.close_owned(account, order_id)
@@ -177,7 +212,8 @@ async def close_order(
             # Never tell the customer an order was closed when the signed
             # WeChat query/close result is unknown.
             raise HTTPException(
-                503, detail={"code": "ORDER_CLOSE_RESULT_UNKNOWN"}
+                503,
+                detail={"code": "ORDER_CLOSE_RESULT_UNKNOWN"},
             ) from exc
     if order is None:
         raise HTTPException(404, detail={"code": "ORDER_NOT_FOUND"})
@@ -194,8 +230,14 @@ async def list_orders(
     cursor: str | None = Query(default=None, max_length=256),
 ) -> dict:
     del cursor
-    items = await request.app.state.order_repository.list_owned(account, page_size)
-    return {"items": [item.public_dict() for item in items], "nextCursor": None}
+    items = await request.app.state.order_repository.list_owned(
+        account,
+        page_size,
+    )
+    return {
+        "items": [item.public_dict() for item in items],
+        "nextCursor": None,
+    }
 
 
 @router.get("/ledger")

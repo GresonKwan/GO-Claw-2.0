@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 """Quota delivery worker with fail-closed ambiguity handling."""
 
 from __future__ import annotations
@@ -48,7 +49,11 @@ class QuotaWorker:
                 extra={"adjustment_id": str(item.adjustment_id)},
             )
             return True
-        await self.repository.complete(item, result.classification, result.error_code)
+        await self.repository.complete(
+            item,
+            result.classification,
+            result.error_code,
+        )
         if result.classification is UpstreamResult.AMBIGUOUS:
             logger.error(
                 "P0 quota result is ambiguous",
@@ -56,7 +61,11 @@ class QuotaWorker:
             )
         return True
 
-    async def run(self, stop: asyncio.Event, idle_seconds: float = 1.0) -> None:
+    async def run(
+        self,
+        stop: asyncio.Event,
+        idle_seconds: float = 1.0,
+    ) -> None:
         while not stop.is_set():
             worked = await self.run_once()
             if not worked:

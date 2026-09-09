@@ -187,7 +187,11 @@ def test_legacy_billing_enrollment_proves_existing_token(
     instance_id = str(uuid.uuid4())
     module.insert_pending(instance_id, "gc-test", "pw", "127.0.0.1")
     module.finalize_provision(instance_id, 42, ISSUED_KEY, "{}")
-    monkeypatch.setattr(module, "BILLING_INTERNAL_URL", "https://billing.example")
+    monkeypatch.setattr(
+        module,
+        "BILLING_INTERNAL_URL",
+        "https://billing.example",
+    )
     monkeypatch.setattr(module, "BILLING_INTERNAL_TOKEN", "internal-token")
 
     class Result:
@@ -232,7 +236,9 @@ def test_legacy_billing_enrollment_proves_existing_token(
             f"{challenge['expiresAt']}"
         )
         proof = hmac.new(
-            ISSUED_KEY.encode(), canonical.encode(), hashlib.sha256,
+            ISSUED_KEY.encode(),
+            canonical.encode(),
+            hashlib.sha256,
         ).hexdigest()
         enrolled = client.post(
             "/go-claw/provision/billing/enrollments",
@@ -295,7 +301,11 @@ def test_billing_enrollment_resolves_unrecorded_legacy_token(
             (73, stored_key),
         )
     monkeypatch.setattr(module, "NEWAPI_DB_PATH", str(newapi_db))
-    monkeypatch.setattr(module, "BILLING_INTERNAL_URL", "https://billing.example")
+    monkeypatch.setattr(
+        module,
+        "BILLING_INTERNAL_URL",
+        "https://billing.example",
+    )
     monkeypatch.setattr(module, "BILLING_INTERNAL_TOKEN", "internal-token")
 
     class Result:
@@ -425,9 +435,7 @@ def test_quota_reports_granted_and_remaining(service, tmp_path, monkeypatch):
         module.QUOTA_UNITS_PER_DOLLAR
     )
     assert body["percent"] == 50
-    assert body["displayRemaining"] == (
-        module.GIFT_QUOTA // 2 * 200 // 3
-    )
+    assert body["displayRemaining"] == (module.GIFT_QUOTA // 2 * 200 // 3)
 
 
 def test_quota_rejects_bad_signature_and_unknown_instance(
@@ -492,9 +500,12 @@ def test_display_remaining_uses_integer_floor_and_rejects_invalid(service):
     assert module._display_remaining(1) == 66
     assert module._display_remaining(-1) is None
     assert module._display_remaining(True) is None
-    assert module._display_remaining(
-        module.MAX_DISPLAY_REMAINING * 3 // 200 + 1,
-    ) is None
+    assert (
+        module._display_remaining(
+            module.MAX_DISPLAY_REMAINING * 3 // 200 + 1,
+        )
+        is None
+    )
 
 
 def test_quota_topup_increases_balance_without_faking_full_percent(

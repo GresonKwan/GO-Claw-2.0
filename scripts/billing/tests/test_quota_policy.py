@@ -1,4 +1,7 @@
-from go_claw_billing.application.quota_service import should_automatically_retry
+# -*- coding: utf-8 -*-
+from go_claw_billing.application.quota_service import (
+    should_automatically_retry,
+)
 from go_claw_billing.domain.adjustments import UpstreamResult
 from go_claw_billing.workers.quota import next_state
 

@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 """Compatibility and security tests for portable billing enrollment."""
 
 from __future__ import annotations

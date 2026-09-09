@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 import hashlib
 import json
 from pathlib import Path
@@ -26,12 +27,18 @@ def test_versioned_initial_migration_exactly_matches_frozen_contract() -> None:
     migration = (
         ROOT / "scripts" / "billing" / "migrations" / "0001_initial.sql"
     ).read_bytes()
-    assert hashlib.sha256(migration).digest() == hashlib.sha256(contract).digest()
+    assert (
+        hashlib.sha256(migration).digest() == hashlib.sha256(contract).digest()
+    )
 
 
-def test_customer_console_has_no_refund_action_or_internal_admin_route() -> None:
-    recharge_api = (ROOT / "console" / "src" / "api" / "modules" / "recharge.ts").read_text(
-        "utf-8"
+def test_customer_console_has_no_refund_action_or_internal_admin_route() -> (
+    None
+):
+    recharge_api = (
+        ROOT / "console" / "src" / "api" / "modules" / "recharge.ts"
+    ).read_text(
+        "utf-8",
     )
     recharge_page = (
         ROOT

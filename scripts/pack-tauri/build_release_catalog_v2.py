@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 """Build a bounded history catalog from signed immutable release indexes.
 
 Offline only. Sign the exact output with the existing release key afterwards.
@@ -78,8 +79,8 @@ def main():
             {
                 "releaseCount": len(catalog["releases"]),
                 "requiresDetachedCatalogSignature": True,
-            }
-        )
+            },
+        ),
     )
 
 
