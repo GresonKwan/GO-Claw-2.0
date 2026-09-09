@@ -11,10 +11,10 @@
 
 | 改动 | 原因 | commit | 验证 | 关联文档 |
 | --- | --- | --- | --- | --- |
-| 启动器新增 WebView2 HKLM/HKCU 检测、产品根/Manifest/哈希/WinTrust/微软文件身份校验、单次静默安装、300 秒超时、复检及一次浏览器回退；构建把真实 Bootstrapper 放进 portable 根并生成 Manifest/SHA256SUMS | 满足标准联网 Windows 10/11 x64 单 EXE 开箱启动，同时拒绝缺失、篡改、换包和循环安装 | 本地待提交 | 真实微软文件 1,783,000 字节、Authenticode Valid、内部 `MicrosoftEdgeUpdateSetup.exe`；Rust WebView2 4 项、全量 67+22+38 项；本地 Main Build、13,266 条校验和及换盘符启动通过；正式缺运行时 VM 待验收 | `contracts/v2.1.3/README.zh-CN.md`、Windows 产品 U 盘交付标准、实施计划 WV2-01 |
-| A/B 新增 `bootstrap-root`，覆盖 WebView2、根 Manifest 与 SHA256SUMS；旧盘原本缺文件时快照为缺失，失败回滚删除新文件；同步 Python/Rust 分配、schema、Full ZIP 与 CI | 在线增量更新也必须获得启动 prerequisite，并保持 v2.1.2 老盘可回滚 | 本地待提交 | A/B 38 项含 11 个持久化中断点全部通过；组件/装配 46 项、包装合同和最终 Portable 逐文件校验通过 | update-v2 schema、运行时序 §6A、v2.1.3 合同 |
-| 会话 LRU 命中补持久交付物索引恢复；瞬态失败下次只重试索引；图片/视频 ticket 首次失效只续签一次，最终失败保留卡片并明确提示 | 分别修复切回会话后交付物消失的 Stage C 和短期票据失效的 Stage D，不用缓存清空或全盘扫描掩盖 | 本地待提交 | 定向回归、前端全量 169 文件/1261 项、production build 通过；真实媒体仍待已激活设备验收 | `incidents/2026-09-09-v212-deliverables-preview-history.zh.md`、DL-213 |
-| quota 只增安全整数 `displayRemaining`；侧边栏改为剩余算力数字、状态、充值入口、折叠状态点和约 3 秒到账反馈；旧三字段回退百分比 | 随用随充没有稳定百分比分母，让用户直接看到权威余额变化且不改变计费 | 本地待提交 | Python provisioning/router 23 项、前端 quota 19 项及全量测试通过 | QT-213、compute-recharge 合同、实施计划 UX-01 |
+| 启动器新增 WebView2 HKLM/HKCU 检测、产品根/Manifest/哈希/WinTrust/微软文件身份校验、单次静默安装、300 秒超时、复检及一次浏览器回退；构建把真实 Bootstrapper 放进 portable 根并生成 Manifest/SHA256SUMS | 满足标准联网 Windows 10/11 x64 单 EXE 开箱启动，同时拒绝缺失、篡改、换包和循环安装 | `02c4c6b` | 真实微软文件 1,783,000 字节、Authenticode Valid、内部 `MicrosoftEdgeUpdateSetup.exe`；Rust WebView2 4 项、全量 67+22+38 项；本地 Main Build、13,266 条校验和及换盘符启动通过；正式缺运行时 VM 待验收 | `contracts/v2.1.3/README.zh-CN.md`、Windows 产品 U 盘交付标准、实施计划 WV2-01 |
+| A/B 新增 `bootstrap-root`，覆盖 WebView2、根 Manifest 与 SHA256SUMS；旧盘原本缺文件时快照为缺失，失败回滚删除新文件；同步 Python/Rust 分配、schema、Full ZIP 与 CI | 在线增量更新也必须获得启动 prerequisite，并保持 v2.1.2 老盘可回滚 | `02c4c6b` | A/B 38 项含 11 个持久化中断点全部通过；组件/装配 46 项、包装合同和最终 Portable 逐文件校验通过 | update-v2 schema、运行时序 §6A、v2.1.3 合同 |
+| 会话 LRU 命中补持久交付物索引恢复；瞬态失败下次只重试索引；图片/视频 ticket 首次失效只续签一次，最终失败保留卡片并明确提示 | 分别修复切回会话后交付物消失的 Stage C 和短期票据失效的 Stage D，不用缓存清空或全盘扫描掩盖 | `02c4c6b` | 定向回归、前端全量 169 文件/1261 项、production build 通过；真实媒体仍待已激活设备验收 | `incidents/2026-09-09-v212-deliverables-preview-history.zh.md`、DL-213 |
+| quota 只增安全整数 `displayRemaining`；侧边栏改为剩余算力数字、状态、充值入口、折叠状态点和约 3 秒到账反馈；旧三字段回退百分比 | 随用随充没有稳定百分比分母，让用户直接看到权威余额变化且不改变计费 | `02c4c6b` | Python provisioning/router 23 项、前端 quota 19 项及全量测试通过 | QT-213、compute-recharge 合同、实施计划 UX-01 |
 
 本节只表示恢复工作区 `D:\GO-CLAW-v212-build-work\v213-recovered-20260909` 的代码、本地完整 Main Build 与迁移启动测试状态。尚未完成签名 CI、缺少 WebView2 的干净 Windows、真实媒体、v2.1.3 Release 或生产更新切换；没有向 QwenPaw 上游提交。
 
@@ -22,7 +22,7 @@
 
 | 改动 | 原因 | commit | 验证 | 关联文档 |
 | --- | --- | --- | --- | --- |
-| 新增可审核的 8443 Nginx allowlist 与合同测试；生产只公开 `/v1`、exact provision/quota/enrollment 和 updates，拒绝 `/api/*`、管理 UI、healthz、`/v1beta/*` 与未知路径；客户 billing/微信回调保持 443，后台改用 SSH 隧道 | 生产通配 `location /` 暴露 New API 控制面并持续遭到注册/登录及路径枚举；单点收口公网边界，不扩大到账户、数据库、客户端或制盘 | 未提交 | 新增 5 项路由合同通过；维护合同 10 顺序/7 图通过（origin 因 H 盘链路不稳暂用 `--skip-origin-check`）；隔离 `127.0.0.1:18443` 12 项 smoke、两次 `nginx -t`、reload、公网 12 项回归、更新清单前后 SHA-256、SSH 隧道启停均通过 | `deploy/nginx/go-claw-newapi-public.conf`、运行时序 §6B、事故文档、v2.1.3 TODO/实施计划 |
+| 新增可审核的 8443 Nginx allowlist 与合同测试；生产只公开 `/v1`、exact provision/quota/enrollment 和 updates，拒绝 `/api/*`、管理 UI、healthz、`/v1beta/*` 与未知路径；客户 billing/微信回调保持 443，后台改用 SSH 隧道 | 生产通配 `location /` 暴露 New API 控制面并持续遭到注册/登录及路径枚举；单点收口公网边界，不扩大到账户、数据库、客户端或制盘 | `02c4c6b` | 新增 5 项路由合同通过；维护合同 10 顺序/7 图通过；隔离 `127.0.0.1:18443` 12 项 smoke、两次 `nginx -t`、reload、公网 12 项回归、更新清单前后 SHA-256、SSH 隧道启停均通过 | `deploy/nginx/go-claw-newapi-public.conf`、运行时序 §6B、事故文档、v2.1.3 TODO/实施计划 |
 
 生产旧配置 SHA-256 `cc999c01bdd8e993f5a3a21c39a6631c83a108d9e4e54b5f979353fa522ead94`，新配置 SHA-256 `7176a90c54148753b952956b37d41825595a8526d9a2de779df16418beef27d5`；回滚文件为 `/root/go-claw-nginx-backups/newapi-8443.conf.before-allowlist-20260909-133903`。未重启 New API、provisioning 或 billing，未修改数据库、账户、产品盘、Release 或生产更新资产。
 
