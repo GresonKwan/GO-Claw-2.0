@@ -74,7 +74,7 @@
         "additionalProperties": true
       },
       "minItems": 1,
-      "maxItems": 7
+      "maxItems": 8
     },
     "fullBytes": {
       "type": "integer",

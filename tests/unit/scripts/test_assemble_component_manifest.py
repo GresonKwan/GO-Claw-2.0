@@ -1,6 +1,7 @@
 """Exercise the real package/signature assembly with throwaway signing keys."""
 
 import copy
+import json
 import sys
 from pathlib import Path
 
@@ -14,7 +15,7 @@ from assemble_component_manifest import (  # noqa: E402
     REQUIRED_PROGRAMS,
 )
 from build_component_packages import build_packages  # noqa: E402
-from update_components import build_assignments  # noqa: E402
+from update_components import COMPONENTS, build_assignments  # noqa: E402
 from test_release_index_v2 import signer  # noqa: E402
 
 
@@ -75,3 +76,14 @@ def test_assemble_requires_programs_seeds_and_valid_signatures(tmp_path):
     package.write_bytes(b"changed since signing")
     with pytest.raises(ValueError):
         assemble(draft, assets, **options)
+
+
+def test_release_schemas_allow_every_owned_component():
+    contracts = Path(__file__).parents[3] / "docs" / "contracts" / "update-v2"
+    properties = {
+        "windows-release.schema.json": "components",
+        "release-index.schema.json": "componentDigests",
+    }
+    for name, property_name in properties.items():
+        schema = json.loads((contracts / name).read_text(encoding="utf-8"))
+        assert schema["properties"][property_name]["maxItems"] == len(COMPONENTS)
