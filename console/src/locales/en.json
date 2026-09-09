@@ -144,6 +144,15 @@
     "amount": "Amount",
     "computeUnits": "Compute units"
   },
+  "quotaDisplay": {
+    "balance": "Compute balance",
+    "sufficient": "Balance available",
+    "low": "Low balance",
+    "recharge": "Recharge",
+    "credited": "credited",
+    "unavailable": "Temporarily unavailable",
+    "legacy": "Compatibility view"
+  },
   "sidebar": {
     "newVersion": "New version available: v{{version}}, click to upgrade",
     "updateModal": {
@@ -3157,6 +3166,7 @@
   "deliverables": {
     "title": "Deliverables",
     "loading": "Loading preview…",
+    "previewFailed": "Preview failed; open the original file from its folder",
     "open": "Open",
     "reveal": "Show in folder",
     "previewNamed": "Preview {{name}}",

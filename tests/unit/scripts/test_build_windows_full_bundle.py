@@ -40,6 +40,9 @@ def _fixture(tmp_path: Path) -> dict[str, Path | str]:
         '{"schemaVersion":1,"clientMode":"auto"}\n',
         encoding="utf-8",
     )
+    webview = portable / "WebView2/MicrosoftEdgeWebview2Setup.exe"
+    webview.parent.mkdir()
+    webview.write_bytes(b"MZ-webview")
     provision = {
         "provisionUrl": "https://goclaw.host:8443/go-claw/provision",
         "hmacSecret": "unit-test-provision-secret",
@@ -57,15 +60,28 @@ def _fixture(tmp_path: Path) -> dict[str, Path | str]:
     # Keep the fixture byte-identical across platforms.  ``write_text`` uses
     # CRLF translation on Windows, while the tracked updater key is LF-only.
     (config / "update-pubkey.txt").write_bytes(b"PUBLIC-KEY\n")
-    webview = tmp_path / "MicrosoftEdgeWebView2RuntimeInstallerX64.exe"
-    webview.write_bytes(b"MZ-webview")
+    (portable / "MANIFEST.json").write_text(
+        json.dumps(
+            {
+                "schemaVersion": 3,
+                "webView2": {
+                    "path": "WebView2/MicrosoftEdgeWebview2Setup.exe",
+                    "distribution": "evergreen-bootstrapper",
+                    "requiresNetwork": True,
+                    "source": "https://go.microsoft.com/fwlink/p/?LinkId=2124703",
+                    "sha256": hashlib.sha256(b"MZ-webview").hexdigest(),
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+    (portable / "SHA256SUMS.txt").write_text("fixture\n", encoding="ascii")
     start_here = tmp_path / "START-HERE.zh-CN.txt"
     start_here.write_text("先运行便携版。\n", encoding="utf-8")
     return {
         "version": "2.1.0",
         "source_commit": "a" * 40,
         "portable_stage": portable,
-        "webview2_installer": webview,
         "pubkey_config": pubkey,
         "start_here": start_here,
         "dist": tmp_path / "dist",
@@ -98,7 +114,9 @@ def test_builds_exact_root_contract_manifest_and_sorted_checksums(
             f"{root}/Portable/LICENSE",
             f"{root}/Portable/README-PORTABLE.zh-CN.txt",
             f"{root}/Portable/portable.json",
-            f"{root}/WebView2/MicrosoftEdgeWebView2RuntimeInstallerX64.exe",
+            f"{root}/Portable/WebView2/MicrosoftEdgeWebview2Setup.exe",
+            f"{root}/Portable/MANIFEST.json",
+            f"{root}/Portable/SHA256SUMS.txt",
             f"{root}/MANIFEST.json",
             f"{root}/SHA256SUMS.txt",
         }
@@ -198,7 +216,10 @@ def test_rejects_symlink_in_portable_stage(tmp_path):
 
 def test_rejects_missing_asset_and_wrong_provision_url(tmp_path):
     args = _fixture(tmp_path)
-    Path(args["webview2_installer"]).unlink()
+    (
+        Path(args["portable_stage"])
+        / "WebView2/MicrosoftEdgeWebview2Setup.exe"
+    ).unlink()
     with pytest.raises(FileNotFoundError, match="WebView2"):
         MODULE.build_full_bundle(**args)
 

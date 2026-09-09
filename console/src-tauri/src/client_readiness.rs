@@ -19,6 +19,7 @@ pub(crate) enum ClientPhase {
 pub(crate) enum BrowserFallbackReason {
     ExplicitBrowserMode,
     WebviewBuildFailed,
+    WebviewRuntimeUnavailable,
     BootstrapReadyTimeout,
     ConsoleNavigationFailed,
     ConsoleReadyTimeout,

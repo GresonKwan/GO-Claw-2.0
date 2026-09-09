@@ -7,6 +7,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import re
 import shutil
 import sys
 import zipfile
@@ -21,6 +22,8 @@ REQUIRED_RUNTIME_ENTRIES = (
     Path("go-claw-update-engine.exe"),
 )
 EXPECTED_PROVISION_URL = "https://goclaw.host:8443/go-claw/provision"
+WEBVIEW2_NAME = "MicrosoftEdgeWebview2Setup.exe"
+WEBVIEW2_SOURCE = "https://go.microsoft.com/fwlink/p/?LinkId=2124703"
 
 
 @dataclass(frozen=True)
@@ -126,6 +129,13 @@ def _sha256(path: Path) -> str:
     return digest.hexdigest()
 
 
+def _regular_files(root: Path) -> list[Path]:
+    return sorted(
+        (path for path in root.rglob("*") if path.is_file()),
+        key=lambda path: path.relative_to(root).as_posix().encode("utf-8"),
+    )
+
+
 def stage_portable(
     *,
     version: str,
@@ -135,6 +145,7 @@ def stage_portable(
     license_file: Path,
     readme_file: Path,
     credentials_example_file: Path,
+    webview2_installer: Path,
     credentials_file: Path | None = None,
     provision_file: Path | None = None,
     repository_root: Path | None = None,
@@ -152,6 +163,10 @@ def stage_portable(
     credentials_example_file = _require_file(
         credentials_example_file,
         "credential example",
+    )
+    webview2_installer = _require_file(
+        webview2_installer,
+        "WebView2 Evergreen Bootstrapper",
     )
     binaries = binaries.expanduser().resolve()
     for relative in REQUIRED_RUNTIME_ENTRIES:
@@ -177,6 +192,21 @@ def stage_portable(
     shutil.copytree(binaries, stage_dir / "binaries")
     shutil.copy2(license_file, stage_dir / "LICENSE")
     shutil.copy2(readme_file, stage_dir / "README-PORTABLE.zh-CN.txt")
+    staged_readme = stage_dir / "README-PORTABLE.zh-CN.txt"
+    readme_text = staged_readme.read_text(encoding="utf-8-sig")
+    readme_text, replacements = re.subn(
+        r"GO CLAW Portable [^（\r\n]+",
+        f"GO CLAW Portable {version}",
+        readme_text,
+        count=1,
+    )
+    if replacements != 1:
+        raise ValueError("portable README version heading is missing")
+    staged_readme.write_text(readme_text, encoding="utf-8", newline="\n")
+    webview_dir = stage_dir / "WebView2"
+    webview_dir.mkdir()
+    staged_webview = webview_dir / WEBVIEW2_NAME
+    shutil.copy2(webview2_installer, staged_webview)
     credentials_dir = stage_dir / "GO-CLAW-Config"
     credentials_dir.mkdir()
     shutil.copy2(
@@ -222,6 +252,48 @@ def stage_portable(
         encoding="utf-8",
     )
 
+    payload_files = _regular_files(stage_dir)
+    manifest = {
+        "schemaVersion": 3,
+        "product": "GO CLAW",
+        "version": version,
+        "platform": "windows-x86_64",
+        "containsCredentials": credentials_file is not None,
+        "containsProvisioningConfig": provision_file is not None,
+        "containsEnrollmentTicket": False,
+        "webView2": {
+            "path": f"WebView2/{WEBVIEW2_NAME}",
+            "distribution": "evergreen-bootstrapper",
+            "requiresNetwork": True,
+            "source": WEBVIEW2_SOURCE,
+            "authenticodeSubject": "Microsoft Corporation",
+            "sha256": _sha256(staged_webview),
+        },
+        "files": [
+            {
+                "path": path.relative_to(stage_dir).as_posix(),
+                "size": path.stat().st_size,
+                "sha256": _sha256(path),
+            }
+            for path in payload_files
+        ],
+    }
+    manifest_path = stage_dir / "MANIFEST.json"
+    manifest_path.write_text(
+        json.dumps(manifest, ensure_ascii=False, indent=2) + "\n",
+        encoding="utf-8",
+        newline="\n",
+    )
+    checksum_lines = [
+        f"{_sha256(path)}  {path.relative_to(stage_dir).as_posix()}"
+        for path in _regular_files(stage_dir)
+    ]
+    (stage_dir / "SHA256SUMS.txt").write_text(
+        "\n".join(checksum_lines) + "\n",
+        encoding="ascii",
+        newline="\n",
+    )
+
     unpacked_bytes = _tree_size(stage_dir)
     _zip_tree(stage_dir, zip_path)
     archived_bytes = zip_path.stat().st_size
@@ -246,6 +318,7 @@ def _parser() -> argparse.ArgumentParser:
     parser.add_argument("--dist", type=Path, required=True)
     parser.add_argument("--license", dest="license_file", type=Path)
     parser.add_argument("--readme", dest="readme_file", type=Path)
+    parser.add_argument("--webview2-installer", type=Path, required=True)
     return parser
 
 
@@ -286,6 +359,7 @@ def main(argv: list[str] | None = None) -> int:
             / "GO-CLAW-Config"
             / "credentials.example.json"
         ),
+        webview2_installer=args.webview2_installer,
         credentials_file=(
             credentials_file if credentials_file.is_file() else None
         ),

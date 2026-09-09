@@ -425,6 +425,9 @@ def test_quota_reports_granted_and_remaining(service, tmp_path, monkeypatch):
         module.QUOTA_UNITS_PER_DOLLAR
     )
     assert body["percent"] == 50
+    assert body["displayRemaining"] == (
+        module.GIFT_QUOTA // 2 * 200 // 3
+    )
 
 
 def test_quota_rejects_bad_signature_and_unknown_instance(
@@ -479,3 +482,57 @@ def test_quota_after_admin_topup_uses_adjusted_grant(
         module.QUOTA_UNITS_PER_DOLLAR
     )
     assert body["percent"] == 100
+    assert body["displayRemaining"] == module.GIFT_QUOTA * 4 * 200 // 3
+
+
+def test_display_remaining_uses_integer_floor_and_rejects_invalid(service):
+    module = service
+    assert module._display_remaining(0) == 0
+    assert module._display_remaining(75_000) == 5_000_000
+    assert module._display_remaining(1) == 66
+    assert module._display_remaining(-1) is None
+    assert module._display_remaining(True) is None
+    assert module._display_remaining(
+        module.MAX_DISPLAY_REMAINING * 3 // 200 + 1,
+    ) is None
+
+
+def test_quota_topup_increases_balance_without_faking_full_percent(
+    service,
+    tmp_path,
+    monkeypatch,
+):
+    module = service
+    instance_id = str(uuid.uuid4())
+    user_id = 43
+    module.insert_pending(instance_id, "gc-test-2", "pw", "127.0.0.1")
+    module.finalize_provision(instance_id, user_id, "sk-x", "{}")
+
+    newapi_db = tmp_path / "topup-one-api.db"
+    import sqlite3
+
+    with sqlite3.connect(newapi_db) as conn:
+        conn.execute(
+            "CREATE TABLE users (id INTEGER PRIMARY KEY, quota INTEGER)",
+        )
+        conn.execute(
+            "CREATE TABLE quota_data"
+            " (id INTEGER PRIMARY KEY, user_id INTEGER, quota INTEGER)",
+        )
+        conn.execute(
+            "INSERT INTO users (id, quota) VALUES (?, ?)",
+            (user_id, 150_000),
+        )
+        conn.execute(
+            "INSERT INTO quota_data (user_id, quota) VALUES (?, ?)",
+            (user_id, 75_000),
+        )
+    monkeypatch.setattr(module, "NEWAPI_DB_PATH", str(newapi_db))
+
+    with TestClient(module.app) as client:
+        resp = _quota_get(client, instance_id)
+
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["displayRemaining"] == 10_000_000
+    assert body["percent"] == 67

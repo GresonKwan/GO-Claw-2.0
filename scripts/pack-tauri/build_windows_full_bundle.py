@@ -17,7 +17,7 @@ from pathlib import Path
 OUTPUT_NAME = "GO-CLAW-Windows-x64-Full.zip"
 ROOT_STEM = "GO-CLAW-Windows-x64-Full-{version}"
 EXPECTED_PROVISION_URL = "https://goclaw.host:8443/go-claw/provision"
-WEBVIEW2_NAME = "MicrosoftEdgeWebView2RuntimeInstallerX64.exe"
+WEBVIEW2_NAME = "MicrosoftEdgeWebview2Setup.exe"
 REQUIRED_PORTABLE_PATHS = (
     "GO-CLAW-Portable.exe",
     "binaries",
@@ -27,6 +27,9 @@ REQUIRED_PORTABLE_PATHS = (
     "LICENSE",
     "README-PORTABLE.zh-CN.txt",
     "portable.json",
+    "WebView2/MicrosoftEdgeWebview2Setup.exe",
+    "MANIFEST.json",
+    "SHA256SUMS.txt",
 )
 
 
@@ -184,7 +187,6 @@ def build_full_bundle(
     version: str,
     source_commit: str,
     portable_stage: Path,
-    webview2_installer: Path,
     pubkey_config: Path,
     dist: Path,
     start_here: Path,
@@ -198,7 +200,6 @@ def build_full_bundle(
             "source commit must be 40 lowercase hexadecimal characters",
         )
     portable = _require_directory(portable_stage, "portable stage")
-    webview = _require_regular(webview2_installer, "WebView2 installer")
     pubkey_path = _require_regular(pubkey_config, "updater public key config")
     start_path = _require_regular(start_here, "START-HERE instructions")
     _validate_portable_tree(portable)
@@ -223,9 +224,14 @@ def build_full_bundle(
         root = temp_dir / ROOT_STEM.format(version=version)
         shutil.copytree(portable, root / "Portable")
         shutil.copy2(start_path, root / "START-HERE.zh-CN.txt")
-        webview_dir = root / "WebView2"
-        webview_dir.mkdir()
-        shutil.copy2(webview, webview_dir / WEBVIEW2_NAME)
+        portable_manifest = json.loads(
+            (portable / "MANIFEST.json").read_text(encoding="utf-8-sig")
+        )
+        webview = portable / "WebView2" / WEBVIEW2_NAME
+        if portable_manifest.get("webView2", {}).get("sha256") != _sha256_file(
+            webview
+        ):
+            raise ValueError("portable WebView2 hash does not match manifest")
 
         payload_files = _regular_files(root)
         file_entries = [
@@ -248,7 +254,10 @@ def build_full_bundle(
             "containsProvisioningConfig": True,
             "containsEnrollmentTicket": False,
             "webView2": {
-                "distribution": "evergreen-standalone-x64",
+                "path": f"Portable/WebView2/{WEBVIEW2_NAME}",
+                "distribution": "evergreen-bootstrapper",
+                "requiresNetwork": True,
+                "source": portable_manifest["webView2"]["source"],
                 "authenticodeSubject": "Microsoft Corporation",
                 "sha256": _sha256_file(webview),
             },
@@ -284,7 +293,6 @@ def _parser() -> argparse.ArgumentParser:
     parser.add_argument("--version", required=True)
     parser.add_argument("--source-commit", required=True)
     parser.add_argument("--portable-stage", type=Path, required=True)
-    parser.add_argument("--webview2-installer", type=Path, required=True)
     parser.add_argument("--pubkey-config", type=Path, required=True)
     parser.add_argument("--dist", type=Path, required=True)
     parser.add_argument(

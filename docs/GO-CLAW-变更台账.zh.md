@@ -7,6 +7,46 @@
 
 ---
 
+## 2026-09-09 · v2.1.3 核心代码落地（本地，未发布）
+
+| 改动 | 原因 | commit | 验证 | 关联文档 |
+| --- | --- | --- | --- | --- |
+| 启动器新增 WebView2 HKLM/HKCU 检测、产品根/Manifest/哈希/WinTrust/微软文件身份校验、单次静默安装、300 秒超时、复检及一次浏览器回退；构建把真实 Bootstrapper 放进 portable 根并生成 Manifest/SHA256SUMS | 满足标准联网 Windows 10/11 x64 单 EXE 开箱启动，同时拒绝缺失、篡改、换包和循环安装 | 本地待提交 | 真实微软文件 1,783,000 字节、Authenticode Valid、内部 `MicrosoftEdgeUpdateSetup.exe`；Rust WebView2 4 项、全量 67+22+38 项；本地 Main Build、13,266 条校验和及换盘符启动通过；正式缺运行时 VM 待验收 | `contracts/v2.1.3/README.zh-CN.md`、Windows 产品 U 盘交付标准、实施计划 WV2-01 |
+| A/B 新增 `bootstrap-root`，覆盖 WebView2、根 Manifest 与 SHA256SUMS；旧盘原本缺文件时快照为缺失，失败回滚删除新文件；同步 Python/Rust 分配、schema、Full ZIP 与 CI | 在线增量更新也必须获得启动 prerequisite，并保持 v2.1.2 老盘可回滚 | 本地待提交 | A/B 38 项含 11 个持久化中断点全部通过；组件/装配 46 项、包装合同和最终 Portable 逐文件校验通过 | update-v2 schema、运行时序 §6A、v2.1.3 合同 |
+| 会话 LRU 命中补持久交付物索引恢复；瞬态失败下次只重试索引；图片/视频 ticket 首次失效只续签一次，最终失败保留卡片并明确提示 | 分别修复切回会话后交付物消失的 Stage C 和短期票据失效的 Stage D，不用缓存清空或全盘扫描掩盖 | 本地待提交 | 定向回归、前端全量 169 文件/1261 项、production build 通过；真实媒体仍待已激活设备验收 | `incidents/2026-09-09-v212-deliverables-preview-history.zh.md`、DL-213 |
+| quota 只增安全整数 `displayRemaining`；侧边栏改为剩余算力数字、状态、充值入口、折叠状态点和约 3 秒到账反馈；旧三字段回退百分比 | 随用随充没有稳定百分比分母，让用户直接看到权威余额变化且不改变计费 | 本地待提交 | Python provisioning/router 23 项、前端 quota 19 项及全量测试通过 | QT-213、compute-recharge 合同、实施计划 UX-01 |
+
+本节只表示恢复工作区 `D:\GO-CLAW-v212-build-work\v213-recovered-20260909` 的代码、本地完整 Main Build 与迁移启动测试状态。尚未完成签名 CI、缺少 WebView2 的干净 Windows、真实媒体、v2.1.3 Release 或生产更新切换；没有向 QwenPaw 上游提交。
+
+## 2026-09-09 · New API 8443 公网权限收口
+
+| 改动 | 原因 | commit | 验证 | 关联文档 |
+| --- | --- | --- | --- | --- |
+| 新增可审核的 8443 Nginx allowlist 与合同测试；生产只公开 `/v1`、exact provision/quota/enrollment 和 updates，拒绝 `/api/*`、管理 UI、healthz、`/v1beta/*` 与未知路径；客户 billing/微信回调保持 443，后台改用 SSH 隧道 | 生产通配 `location /` 暴露 New API 控制面并持续遭到注册/登录及路径枚举；单点收口公网边界，不扩大到账户、数据库、客户端或制盘 | 未提交 | 新增 5 项路由合同通过；维护合同 10 顺序/7 图通过（origin 因 H 盘链路不稳暂用 `--skip-origin-check`）；隔离 `127.0.0.1:18443` 12 项 smoke、两次 `nginx -t`、reload、公网 12 项回归、更新清单前后 SHA-256、SSH 隧道启停均通过 | `deploy/nginx/go-claw-newapi-public.conf`、运行时序 §6B、事故文档、v2.1.3 TODO/实施计划 |
+
+生产旧配置 SHA-256 `cc999c01bdd8e993f5a3a21c39a6631c83a108d9e4e54b5f979353fa522ead94`，新配置 SHA-256 `7176a90c54148753b952956b37d41825595a8526d9a2de779df16418beef27d5`；回滚文件为 `/root/go-claw-nginx-backups/newapi-8443.conf.before-allowlist-20260909-133903`。未重启 New API、provisioning 或 billing，未修改数据库、账户、产品盘、Release 或生产更新资产。
+
+## 2026-09-08 · v2.1.3 详细实施设计与额度 UI 冻结（仅文档）
+
+| 改动 | 原因 | commit | 验证 | 关联文档 |
+| --- | --- | --- | --- | --- |
+| 将 v2.1.3 的 WebView2 联网自安装、交付产物预览/历史恢复、额度余额优先及 New API 注册面加固四项 TODO 展开为分阶段实施计划，固定数据不变量、滚动兼容、API/安全合同、运行时序、逐文件修改、定向测试、真实 U 盘矩阵和发布顺序 | 开始版本迭代前必须拆开四个独立故障域，避免未取证先修 DEBUG-01、继续误标 WebView2 分发类型、以 UI 修改改变账务语义，或用客户端版本发布替代服务端安全边界 | 未提交 | 文档交叉核对；程序、构建、产品盘、Release 和生产更新源均未修改 | `superpowers/plans/2026-09-08-go-claw-v2.1.3-implementation-plan.zh.md`、v2.1.3 TODO、Windows 产品 U 盘交付标准 |
+| 固定额度侧边栏首选视觉：剩余算力数字为主、正常/低余额状态文字、充值入口、到账后不占位反馈；接口只增可选整数 `displayRemaining`，保留旧三字段和旧服务端回退 | 随用随充没有固定百分比分母，需要让用户直接确认到账后的剩余算力，同时保证 v2.1.2 客户端/服务端滚动兼容 | 未提交 | 已完成视觉稿和合同设计；正常态文案、500万低余额阈值、约 3 秒到账反馈待用户确认；未改计费或账本 | 同上；`contracts/compute-recharge/README.zh-CN.md` |
+| 对生产 New API 注册攻击做只读调查并加入 SEC-01：8443 仅保留 `/v1`、exact provision/quota/enrollment 和 updates，拒绝 `/api/*`/管理 UI/未知路径；后台改用 SSH 隧道。按用户决定删除 voucher、全局开户/pending 熔断、客户端/数据库/制盘扩展 | 日志确认注册/登录自动化探测；当前直接风险可先由公网 fail-closed 收口，同时避免扩大本版本 provisioning 和交付链改造 | 未提交 | 只读核对 Nginx、容器、状态接口、11 个 access log、New API/provision SQLite 映射；当前 32 个普通用户全部映射，未修改生产服务/账户 | `incidents/2026-09-08-newapi-registration-attack-investigation.zh.md`、`go-claw-auto-provisioning.zh.md`、v2.1.3 TODO/实施计划 |
+| 将 v2.1.3 WebView2 标准从强制离线 Standalone 调整为微软官方联网 Bootstrapper；manifest 明确 `requiresNetwork=true`，断网有界浏览器回退，可选离线 profile 独立声明 | 用户确认网络安装可接受；现有约 1.8 MB 文件本身是合法 Bootstrapper，历史问题是误标类型、未随盘统一部署且启动器未编排，不应继续要求约 127 MB 离线包 | 未提交 | 文档合同交叉核对；尚未修改启动器、CI、构建资产或产品盘 | v2.1.3 实施计划/TODO、Windows 产品 U 盘交付标准 |
+
+本条只是立项与实施设计记录。H 盘已恢复访问，D 盘 worktree 已核对到 GO CLAW `origin`、分支 `codex/v2.1.3-updater-exit` 和 HEAD `fc92d9709fc8e78ddeb767631f68d00da6276039`；当前仍有未提交文档，程序实现、构建、Release 和生产切换均未开始。
+
+## 2026-09-07 · v2.1.3 交付标准与图片预览缺陷排期（仅文档）
+
+| 改动 | 原因 | commit | 验证 | 关联文档 |
+| --- | --- | --- | --- | --- |
+| 建立 Windows 产品 U 盘统一交付标准，并规定每个新版本立项和发布前都要复核；涉及盘结构、依赖、开通、更新保留、签名/Manifest、说明或部署流程时同步维护，无变化也留痕 | 当前产品盘曾因不同复制口径出现 WebView2、Manifest 和说明文件不一致，需要把交付口径固定为版本维护职责 | 未提交 | 文档路径、规则和版本 TODO 交叉核对；未操作 E/G 盘 | `AGENTS.md`、`GO-CLAW-Windows产品U盘交付标准.zh.md`、v2.1.3 TODO |
+| 在 v2.1.3 增加 DEBUG-01：图片交付物预览失败，以及切换数字员工/会话后组件消失；固定按生成、持久化、历史恢复、媒体读取、前端呈现依次寻找首个失败 stage | 用户报告的 v2.1.2 行为违反既有交付物历史恢复合同，需以干净正式样本取证后做单点最小修复 | 未提交 | 仅完成文档审查；代码和测试未执行，问题保持待复现/未定位 | `superpowers/plans/2026-09-07-go-claw-v2.1.3-todo.zh.md`、`contracts/v2.1.2/README.zh-CN.md` |
+| 在 v2.1.3 增加 UX-01：充值后的侧边栏额度展示改为余额优先；记录当前历史剩余率语义、推荐方案、备选方案、兼容字段和具体代码落点 | 随用随充没有固定容量分母，正确但不回到 100% 的历史百分比容易被误认为充值未足额到账 | 未提交 | 仅完成现有公式与前后端链路核对；最终视觉待用户确认，未修改代码或计费 | `superpowers/plans/2026-09-07-go-claw-v2.1.3-todo.zh.md`、`contracts/compute-recharge/README.zh-CN.md` |
+
+本条未修改程序代码、产品盘、构建、CI、Release 或生产更新源，不表示 v2.1.3 已开发或该缺陷已修复。
+
 ## 2026-09-05 · v2.1.2 功能接线与发布候选验收（未发布）
 
 | 改动 | 原因 | commit | 验证 | 关联文档 |
@@ -333,12 +373,16 @@ USB 升级或旧用户无损验收完成。本轮未改生产源、服务器、�
 | `GO-CLAW-运行时序与维护规则.zh.md` | 启动、产品就绪、更新和回滚顺序的唯一人类可读合同 |
 | `go-claw-auto-provisioning.zh.md` | 开通/计费专题（持续更新） |
 | `GO-CLAW-在线更新签名密钥运维.zh.md` | 更新签名密钥的保管、发布前检查、恢复与轮换规则 |
+| `GO-CLAW-Windows产品U盘交付标准.zh.md` | Windows 产品盘根目录、WebView2、Manifest、部署与双击启动验收的规范合同 |
 | `GO-CLAW-v2.1.1-Windows在线更新调试交接.zh.md` | 未解决的 v2.0.1 → v2.1.1 Windows 在线更新事故接手、取证和验收入口 |
+| `superpowers/plans/2026-09-08-go-claw-v2.1.3-implementation-plan.zh.md` | v2.1.3 WebView2、New API/开户安全、交付产物和额度余额 UI 的详细实施合同、时序、逐文件修改、验证及发布计划 |
 | `superpowers/specs/*`、`plans/*` | 设计规格与实施计划（带状态标记） |
 | `contracts/compute-recharge/*` | 算力充值 API、事件、账本与服务条款合同 |
 | `superpowers/specs/2026-09-03-go-claw-v2-1-2-design.md` | v2.1.2 已确认视觉、技术目标与 UP/DL 时序（待实施） |
 | `superpowers/plans/2026-09-03-go-claw-v2-1-2-implementation-plan.md` | v2.1.2 逐文件实施顺序、附件核查与发布验收门禁 |
+| `superpowers/plans/2026-09-07-go-claw-v2.1.3-todo.zh.md` | v2.1.3 WebView2、New API/开户安全、交付产物、额度 UI 的待办、取证顺序和发布约束 |
 | `contracts/v2.1.2/README.zh-CN.md` | 更新状态/签名/事务、交付物 API/安全/持久化与旧版本兼容的目标合同 |
 | `contracts/update-v2/README.zh-CN.md` | 组件更新机器 schema、本地纯构建工具、签名验证与后续接线边界 |
 | `incidents/2026-09-03-chat-attachments-utf8-investigation.zh.md` | 附件 UTF-8 报告的有限证据、未覆盖项与条件修复规则 |
+| `incidents/2026-09-08-newapi-registration-attack-investigation.zh.md` | 生产注册/登录攻击流量、账户/provisioning 映射、边界缺口、修复目标及未知项的只读证据 |
 | 工作区 `GO-CLAW-debug计划.md`、`GO-CLAW-修改计划.md` | 现场排查原始记录（快照，不再更新） |

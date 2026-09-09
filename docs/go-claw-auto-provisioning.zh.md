@@ -137,3 +137,21 @@ G、F 产品盘上均复现出以下同根现象：
   `sha256:c88d734a7e1c3e2499c5819cb88918789100fb61a5c79df21816e5c1acbefe66`。
 - [x] 上述成功仅证明“新盘完整包交付”构建合同，不代表该构建已发布，也不关闭
   v2.0.1 → v2.1.1 在线更新事务事故。
+
+## 7. v2.1.3 安全范围决定
+
+2026-09-08 只读调查确认公网注册/登录探测，同时确认当前 32 个普通用户均能映射到已完成
+provisioning；证据边界见 `incidents/2026-09-08-newapi-registration-attack-investigation.zh.md`。
+
+用户明确决定 v2.1.3 只收口 New API 8443 公网权限。下列 provisioning 扩展不实施：
+
+- 一盘一 activation voucher；
+- SQLite voucher 状态机或 instance 原子占用；
+- 全局每日新开户和 pending 熔断；
+- 客户端 activation 请求字段；
+- Main Build/Release 的 voucher 排除门禁和制盘个性化工具。
+
+因此 schema 1、共享 HMAC、现有 per-IP 限流、新盘开通和老 instance 幂等恢复行为保持不变。
+共享 HMAC 可提取和 IP 轮换风险仍是已知接受项，不能在发布说明中写成已解决。v2.1.3 的唯一
+相关代码落点是计划新增的 `deploy/nginx/go-claw-newapi-public.conf` 及其路由合同测试；完整
+allowlist、SSH 隧道后台和回滚时序见 v2.1.3 详细实施计划的 `SEC-213`、Phase S1。

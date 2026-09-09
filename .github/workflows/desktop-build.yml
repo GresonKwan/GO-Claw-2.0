@@ -168,6 +168,48 @@ jobs:
           Write-Host "GO CLAW seven-model credential preflight passed"
           Write-Host "Full ZIP provisioning staged without displaying secrets"
 
+      - name: Download and validate WebView2 Evergreen Bootstrapper
+        shell: pwsh
+        run: |
+          $officialUrl = "https://go.microsoft.com/fwlink/p/?LinkId=2124703"
+          $vendorDir = "dist/vendor/WebView2"
+          New-Item -ItemType Directory -Force -Path $vendorDir | Out-Null
+          $installer = Join-Path $vendorDir "MicrosoftEdgeWebview2Setup.exe"
+          $download = Invoke-WebRequest `
+            -Uri $officialUrl `
+            -OutFile $installer `
+            -MaximumRedirection 10 `
+            -PassThru
+          $bytes = (Get-Item -LiteralPath $installer).Length
+          if ($bytes -lt 1MB -or $bytes -gt 10MB) {
+            throw "WebView2 Bootstrapper size is outside the expected range: $bytes"
+          }
+          $header = [IO.File]::ReadAllBytes($installer)[0..1]
+          if ($header[0] -ne 0x4d -or $header[1] -ne 0x5a) {
+            throw "WebView2 Bootstrapper is not a PE file"
+          }
+          $versionInfo = (Get-Item -LiteralPath $installer).VersionInfo
+          if ($versionInfo.CompanyName -notlike "*Microsoft Corporation*" -or
+              $versionInfo.OriginalFilename -ne "MicrosoftEdgeUpdateSetup.exe") {
+            throw "WebView2 Bootstrapper file identity is invalid"
+          }
+          $signature = Get-AuthenticodeSignature -LiteralPath $installer
+          if ($signature.Status -ne "Valid") {
+            throw "WebView2 Authenticode signature is not valid: $($signature.Status)"
+          }
+          if ($signature.SignerCertificate.Subject -notlike "*Microsoft Corporation*") {
+            throw "WebView2 signer is not Microsoft Corporation"
+          }
+          $digest = (Get-FileHash -LiteralPath $installer -Algorithm SHA256).Hash.ToLowerInvariant()
+          $finalUrl = $download.BaseResponse.RequestMessage.RequestUri.AbsoluteUri
+          "GO_CLAW_WEBVIEW2_INSTALLER=$installer" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          "WEBVIEW2_AUTHENTICODE_SUBJECT=$($signature.SignerCertificate.Subject)" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          "WEBVIEW2_SOURCE_URL=$officialUrl" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          "WEBVIEW2_FINAL_URL=$finalUrl" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          "WEBVIEW2_BYTES=$bytes" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          "WEBVIEW2_SHA256=$digest" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          Write-Host "Validated WebView2 Evergreen Bootstrapper: $finalUrl ($bytes bytes, SHA-256 $digest)"
+
       - name: Build Tauri Windows package
         shell: pwsh
         env:
@@ -376,28 +418,6 @@ jobs:
             dist/GO-CLAW-Setup-*-Windows-x64.exe.sig
           if-no-files-found: error
 
-      - name: Download and validate offline WebView2 runtime
-        shell: pwsh
-        run: |
-          $vendorDir = "dist/vendor/WebView2"
-          New-Item -ItemType Directory -Force -Path $vendorDir | Out-Null
-          $installer = Join-Path $vendorDir "MicrosoftEdgeWebView2RuntimeInstallerX64.exe"
-          Invoke-WebRequest `
-            -Uri "https://go.microsoft.com/fwlink/p/?LinkId=2124703" `
-            -OutFile $installer `
-            -MaximumRedirection 10
-          $signature = Get-AuthenticodeSignature -LiteralPath $installer
-          if ($signature.Status -ne "Valid") {
-            throw "WebView2 Authenticode signature is not valid: $($signature.Status)"
-          }
-          if ($signature.SignerCertificate.Subject -notlike "*Microsoft Corporation*") {
-            throw "WebView2 signer is not Microsoft Corporation"
-          }
-          "WEBVIEW2_AUTHENTICODE_SUBJECT=$($signature.SignerCertificate.Subject)" | Out-File `
-            -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
-          $digest = (Get-FileHash -LiteralPath $installer -Algorithm SHA256).Hash.ToLowerInvariant()
-          Write-Host "Validated Microsoft WebView2 runtime SHA-256: $digest"
-
       - name: Assemble canonical GO CLAW Full ZIP
         shell: pwsh
         run: |
@@ -412,7 +432,6 @@ jobs:
             --version "${{ steps.version.outputs.version }}" `
             --source-commit $sourceCommit `
             --portable-stage $portableStages[0].FullName `
-            --webview2-installer "dist/vendor/WebView2/MicrosoftEdgeWebView2RuntimeInstallerX64.exe" `
             --pubkey-config "console/src-tauri/tauri.conf.json" `
             --dist "dist"
           if ($LASTEXITCODE -ne 0) { throw "Full ZIP assembly failed" }

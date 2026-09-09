@@ -1,9 +1,40 @@
 # GO CLAW 项目事实与发布基线
 
-> 状态：当前有效。最后现场复核：2026-09-05（Asia/Shanghai）。
+> 状态：当前有效。最后现场复核：2026-09-09（安全边界）；发布事实的分项日期见正文（Asia/Shanghai）。
 >
 > 本文只记录“现在是什么”和“发布前必须成立什么”。历史变更见
 > `GO-CLAW-变更台账.zh.md`，操作步骤见各专题文档，尚未实施的内容不得写成现状。
+
+2026-09-09 本地 v2.1.3 开发态补充：因 H 盘链路不稳定，实施工作固定在独立恢复仓库
+`D:\GO-CLAW-v212-build-work\v213-recovered-20260909`、分支 `codex/v2.1.3`，起点
+`fc92d9709fc8e78ddeb767631f68d00da6276039`；`origin` 仍为 `GresonKwan/GO-Claw-2.0`。
+已实现 WebView2 联网 Bootstrapper 编排、交付产物历史恢复/票据单次续签、额度余额优先及 A/B
+`bootstrap-root`。前端生产构建、169 文件/1261 项测试、Rust 67 + 22 + 38 项和关键 Python 合同已通过。
+微软固定官方地址的真实 Bootstrapper 为 1,783,000 字节，SHA-256
+`17debf797a6c737959bc588236e897936ffac1af5f7e515e674ab32f9edfe719`，Authenticode 有效，
+内部原始文件名为 `MicrosoftEdgeUpdateSetup.exe`；产品规范落盘名是
+`WebView2/MicrosoftEdgeWebview2Setup.exe`。两者不得混淆。本地完整 Main Build 已生成最终代码对应的
+Portable ZIP（637,870,229 字节，SHA-256 `3324d5b782d4d2dfc430c20b96767f11a22b47eef226a8d7731869968d0d6e52`）；
+13,265 个 Manifest 载荷、13,266 条 SHA256SUMS、微软签名、无静态凭据和无出厂可变目录检查通过。
+中文目录、P→R 换盘符、单实例、优雅退出和 workspace 重绑定通过。该本地产物未注入 Tauri 发布私钥，
+不具备发布资格；当前仍未完成缺少 WebView2 的干净机和真实媒体验收、未触发本版本签名 CI、未创建
+v2.1.3 Release，也未修改生产更新 manifest。
+
+2026-09-09 已实施 8443 公网权限收口：生产 New API、provisioning、billing 仍只绑定 loopback；
+`/etc/nginx/conf.d/newapi-8443.conf` 现在只把 `/v1` 模型协议转发给 New API，精确放行
+provision/quota/billing enrollment，并只读提供 updates。`/api/*`、管理 UI、healthz、`/v1beta/*`
+和未知路径不进入上游；exact `/api/user/register` 保持 403。客户充值 API 与微信回调继续只在 443。
+
+旧配置 SHA-256 为 `cc999c01bdd8e993f5a3a21c39a6631c83a108d9e4e54b5f979353fa522ead94`，
+新配置 SHA-256 为 `7176a90c54148753b952956b37d41825595a8526d9a2de779df16418beef27d5`；备份位于
+`/root/go-claw-nginx-backups/newapi-8443.conf.before-allowlist-20260909-133903`。隔离端口、`nginx -t`、
+reload、公网 allow/deny、更新清单前后摘要和 SSH 隧道开关验证均通过。New API 管理界面现只通过
+`127.0.0.1:3000` 的 SSH 隧道访问。
+
+事故只读证据仍为：注册/登录存在自动化探测；数据库 33 个用户中 1 个管理员、32 个普通 `gc-`
+用户，且 32 个普通用户全部映射到 32 条 `done` provisioning，另有 2 条 pending。本次未修改账户、
+数据库、provisioning、billing、客户端、产品盘或更新源。共享 `PROVISION_HMAC_SECRET` 与单 IP 限流
+风险继续保留；用户已明确 v2.1.3 不扩展 voucher/全局开户熔断。完整证据见事故文档。
 
 2026-09-05 开发态补充：`codex/v2.1.2` 已把产品唯一版本升到 2.1.2，并完成组件 A/B 引擎、
 Bridge、双橙点更新 UI、技能 Banner、交付产物、附件 AT-03 修复和 draft Release 工作流的代码接线。
@@ -99,7 +130,7 @@ pub_date 为 `2026-08-31T16:09:38+08:00`、不同 URL；其故障不能直接归
 
 | 项目 | 已验证现状 | 验证方式 |
 | --- | --- | --- |
-| 当前 P0 修复工作树 | `H:\2026\0811 GO Claw 2.0-hotfix-media-agents` | `git rev-parse --show-toplevel` |
+| 当前 v2.1.3 实施工作树 | `D:\GO-CLAW-v212-build-work\v213-recovered-20260909`，分支 `codex/v2.1.3` | `git rev-parse --show-toplevel`、`git branch --show-current` |
 | GitHub 仓库 | `GresonKwan/GO-Claw-2.0` | `gh repo view` |
 | 唯一可写远端 | `origin` → `GresonKwan/GO-Claw-2.0` | `git remote -v` 与维护合同 |
 | 产品基线 | QwenPaw v2.0.1，导入提交 `24813b3` | 变更台账和 Git 历史 |
@@ -141,6 +172,10 @@ Nginx 的已验证配置文件是：
 
 - `/etc/nginx/conf.d/goclaw.conf`：80/443 的 `goclaw.host` 控制面；
 - `/etc/nginx/conf.d/newapi-8443.conf`：8443 的 New API、provisioning 和额度代理。
+
+2026-09-09 当前边界为：`/v1`、exact provision/quota/enrollment 和 updates allowlist 已部署；
+exact `/api/user/register` 返回 403，`/api/*`、管理 UI、healthz、`/v1beta/*` 与未知路径默认 404。
+配置不再 include 会把 customer billing/webhook 重复暴露到 8443 的宽泛 snippet；443 billing 路由未改。
 
 ## 4. New API 运行基线
 
@@ -210,6 +245,10 @@ Nginx 的已验证配置文件是：
 客户端和服务端仍使用 schema 1：Full ZIP 内的 `provision.json` 携带 provisioning URL 和
 共享 HMAC，客户端首次启动生成 `data/instance.id`，按实例换取低额度 New API 子令牌，再将
 schema-1 `credentials.json` 原子写入产品盘并导入文字、媒体 provider。
+
+共享 HMAC 是可分发材料，最多提供请求完整性和粗粒度来源校验，不能证明“每块盘只允许开一个账户”；
+当前持久化的单 IP 每日新实例限流也可被轮换来源绕过。用户已明确 v2.1.3 只收口 8443 公网权限，
+不新增 activation voucher、全局开户/pending 熔断、客户端字段或制盘个性化；上述局限保持为已知风险。
 
 正式 Main Build 合同为：
 
@@ -312,8 +351,9 @@ key 写入 Full ZIP。客户盘首次启动后由 provisioning 服务签发独�
 - Windows-only Main Build run `33059759882` 已对提交
   `f6732aa67e012a5f5b03048276ba05df1051ded9` 成功完成；客户 artifact
   `GO-CLAW-Windows-x64-Full-2.1.0` 内只有一个
-  `GO-CLAW-Windows-x64-Full.zip`。CI 已通过便携 Tauri 内容就绪、离线 WebView2、
-  Full ZIP 结构、SHA-256 和签名合同验证。
+  `GO-CLAW-Windows-x64-Full.zip`。CI 当时名义上通过便携 Tauri 内容就绪、WebView2、
+  Full ZIP 结构、SHA-256 和签名合同验证；2026-09-07 后续取证确认随包 1,783,000 字节文件
+  实际为联网 Bootstrapper，manifest 误标为 Standalone，因此这条历史 CI 结果不能作为离线安装证据。
 - GitHub Release [`v2.1.0`](https://github.com/GresonKwan/GO-Claw-2.0/releases/tag/v2.1.0)
   已于 2026-08-28 发布并设为 latest，固定到上述提交。公开 Release 只包含在线更新所需的
   `GO-CLAW-Update-2.1.0-setup.exe`、`.sig`、`latest.json` 和 `SHA256SUMS.txt`；
@@ -421,6 +461,8 @@ v2.0.1 对 staging manifest 做一次升级验收；客户不得成为第一位�
     下载、替换、自动重启和版本一致性验收；小型 CI probe 不能替代此项。
 13. 两个捆绑媒体插件在 v2.1.1 host 上必须同时 `loaded=true`、`enabled=true`，内容生产员工
     必须暴露五个媒体工具；全新盘验证不能复用已有 `credentials.json` 或 `instance.id`。
+14. New API 8443 只开放 `/v1`、exact provision/quota/enrollment 和更新路径，`/api/*`、管理 UI 与未知路径
+    不进入上游；注册开关、loopback 绑定、普通用户/provisioning 映射由脱敏只读审计验证。
 
 ## 10. 每次发布前的复核命令
 

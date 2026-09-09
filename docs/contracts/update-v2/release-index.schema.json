@@ -57,7 +57,8 @@
               "python-runtime",
               "node-runtime",
               "bundled-plugins",
-              "product-docs"
+              "product-docs",
+              "bootstrap-root"
             ]
           },
           "contentDigest": {

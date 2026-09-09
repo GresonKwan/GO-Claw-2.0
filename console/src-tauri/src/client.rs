@@ -16,6 +16,7 @@ use crate::{
     },
     external_link,
     portable::{self, ClientMode, PortableRuntime},
+    webview2_runtime,
 };
 
 const PORTABLE_QUIT_ARG: &str = "--portable-quit";
@@ -356,6 +357,29 @@ pub(crate) fn begin_client_launch(app: &tauri::AppHandle) -> Result<(), String> 
     };
 
     let data_dir = portable.map(|state| state.webview_dir);
+    if let Err(error) =
+        webview2_runtime::ensure_runtime(ClientMode::Auto, app.state::<PortableRuntime>().state())
+    {
+        log::error!("[webview2] prerequisite failed: {error}");
+        portable::show_startup_error(
+            app,
+            format!(
+                "WebView2 自动安装未完成，将改用系统浏览器。\n\n阶段：{}\n错误：{}\n应用日志：{}",
+                error.stage,
+                error.code,
+                app.state::<PortableRuntime>()
+                    .state()
+                    .map(|state| state.log_dir.display().to_string())
+                    .unwrap_or_else(|| "不可用".to_string())
+            ),
+        );
+        enter_browser_fallback(
+            app,
+            launch_id,
+            BrowserFallbackReason::WebviewRuntimeUnavailable,
+        );
+        return Ok(());
+    }
     if let Err(error) = try_build_webview(app, data_dir) {
         log::warn!("[desktop-client] WebView construction failed: {error}");
         enter_browser_fallback(app, launch_id, BrowserFallbackReason::WebviewBuildFailed);

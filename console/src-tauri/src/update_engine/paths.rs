@@ -122,6 +122,15 @@ pub fn assignment(name: &str, component: &str, mount: &str) -> Result<()> {
         "product-docs" => {
             mount == "root-docs" && ["LICENSE", "README-PORTABLE.zh-CN.txt"].contains(&name)
         }
+        "bootstrap-root" => {
+            mount == "bootstrap"
+                && [
+                    "MANIFEST.json",
+                    "SHA256SUMS.txt",
+                    "WebView2/MicrosoftEdgeWebview2Setup.exe",
+                ]
+                .contains(&name)
+        }
         "python-runtime" | "node-runtime" => {
             mount == "slot" && parts.len() > 2 && parts[0] == "binaries" && parts[1] == component
         }

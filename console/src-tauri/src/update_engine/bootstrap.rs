@@ -197,9 +197,12 @@ fn install_verified(
         }
         milestone(store, t, "slot-ready", 94., runtime)?;
         for file in manifest.files.iter().filter(|f| f.mount != "slot") {
+            let destination = paths::join(root, &file.relative_path)?;
+            std::fs::create_dir_all(destination.parent().ok_or("UNSAFE_PATH")?)
+                .map_err(|_| "INSTALL_WRITE_FAILED")?;
             recovery::copy_atomic(
                 &paths::join(&slot, &file.relative_path)?,
-                &paths::join(root, &file.relative_path)?,
+                &destination,
                 &file.sha256,
                 file.size_bytes,
             )?;

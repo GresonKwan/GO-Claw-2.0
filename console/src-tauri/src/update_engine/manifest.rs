@@ -10,6 +10,7 @@ pub const COMPONENTS: &[&str] = &[
     "node-runtime",
     "bundled-plugins",
     "product-docs",
+    "bootstrap-root",
 ];
 pub const MAX_INDEX: usize = 500 * 1024;
 pub const MAX_MANIFEST: usize = 32 * 1024 * 1024;
@@ -32,6 +33,13 @@ pub const REQUIRED_PROGRAMS: &[(&str, &str, &str)] = &[
     ("binaries/node-runtime/node.exe", "node-runtime", "slot"),
     ("LICENSE", "product-docs", "root-docs"),
     ("README-PORTABLE.zh-CN.txt", "product-docs", "root-docs"),
+    ("MANIFEST.json", "bootstrap-root", "bootstrap"),
+    ("SHA256SUMS.txt", "bootstrap-root", "bootstrap"),
+    (
+        "WebView2/MicrosoftEdgeWebview2Setup.exe",
+        "bootstrap-root",
+        "bootstrap",
+    ),
     (
         "binaries/qwenpaw-backend/_internal/qwenpaw/bundled_plugins/qwen-image/plugin.json",
         "bundled-plugins",
@@ -219,7 +227,7 @@ impl Index {
             &self.channel,
             &self.min_updater_version,
         )?;
-        if self.component_digests.is_empty() || self.component_digests.len() > 7 {
+        if self.component_digests.is_empty() || self.component_digests.len() > 8 {
             return Err("INVALID_COMPONENTS".into());
         }
         let mut ids = HashSet::new();

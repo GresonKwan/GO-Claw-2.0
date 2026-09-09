@@ -1,11 +1,11 @@
-GO CLAW Portable 2.0.1（Windows 10/11 x64）
+GO CLAW Portable 2.1.3（Windows 10/11 x64）
 ================================================
 
 快速启动
 --------
 1. 将 ZIP 完整解压到 NTFS 或 exFAT 格式的 U 盘目录。
 2. 双击 GO-CLAW-Portable.exe。
-3. 首次启动需要初始化，通常等待 10–120 秒；准备完成后会自动打开系统默认浏览器。
+3. 首次启动需要初始化，通常等待 10–120 秒。若系统缺少 WebView2，联网时会自动校验并安装盘内微软官方引导程序，然后打开原生客户端；断网时只回退一次系统浏览器。
 4. 若本包附带 GO-CLAW-Config\provision.json（自动开通配置），首次启动时请保持联网：
    软件会自动为你的这份拷贝开通专属 API 额度并写好配置，无需手动填写 Key。
    首次启动时未联网不影响使用，联网后重启软件会自动补开通。
@@ -43,6 +43,6 @@ Windows SmartScreen 可能提示未识别的应用；请确认下载来源并核
 启动问题请查看 logs\qwenpaw-desktop.log 和 data\desktop.log。
 在 PowerShell 中校验 ZIP：
 
-  Get-FileHash .\GO-CLAW-Portable-2.0.1-Windows-x64.zip -Algorithm SHA256
+  Get-FileHash .\GO-CLAW-Portable-2.1.3-Windows-x64.zip -Algorithm SHA256
 
 将输出与同目录 .zip.sha256 文件中的值对比。

@@ -124,6 +124,12 @@ def _write_provision_config(tmp_path: Path) -> Path:
     return path
 
 
+def _write_webview2(tmp_path: Path) -> Path:
+    path = tmp_path / "MicrosoftEdgeWebview2Setup.exe"
+    path.write_bytes(b"MZ-webview2-bootstrapper")
+    return path
+
+
 def test_stage_portable_layout_manifest_zip_and_checksum(tmp_path):
     exe = tmp_path / "target" / "release" / "qwenpaw-desktop.exe"
     binaries = tmp_path / "binaries"
@@ -133,7 +139,10 @@ def test_stage_portable_layout_manifest_zip_and_checksum(tmp_path):
     license_file = tmp_path / "LICENSE"
     readme_file = tmp_path / "README.txt"
     license_file.write_text("Apache-2.0\n", encoding="utf-8")
-    readme_file.write_text("portable\n", encoding="utf-8")
+    readme_file.write_text(
+        "GO CLAW Portable 2.0.1（Windows 10/11 x64）\n",
+        encoding="utf-8",
+    )
     credentials_example_file = _write_credentials_example(tmp_path)
 
     output = stage_portable(
@@ -144,6 +153,7 @@ def test_stage_portable_layout_manifest_zip_and_checksum(tmp_path):
         license_file=license_file,
         readme_file=readme_file,
         credentials_example_file=credentials_example_file,
+        webview2_installer=_write_webview2(tmp_path),
     )
 
     root = output.stage_dir
@@ -170,6 +180,18 @@ def test_stage_portable_layout_manifest_zip_and_checksum(tmp_path):
     assert not (root / "GO-CLAW-Config/credentials.json").exists()
     assert prefix + "GO-CLAW-Config/credentials.example.json" in names
     assert prefix + "GO-CLAW-Config/credentials.json" not in names
+    assert prefix + "WebView2/MicrosoftEdgeWebview2Setup.exe" in names
+    assert prefix + "MANIFEST.json" in names
+    assert prefix + "SHA256SUMS.txt" in names
+    manifest = json.loads((root / "MANIFEST.json").read_text("utf-8"))
+    assert manifest["webView2"]["distribution"] == "evergreen-bootstrapper"
+    assert manifest["webView2"]["requiresNetwork"] is True
+    assert manifest["webView2"]["source"].startswith(
+        "https://go.microsoft.com/"
+    )
+    assert "Portable 2.0.1" in (root / "README-PORTABLE.zh-CN.txt").read_text(
+        "utf-8"
+    )
 
 
 def test_stage_rejects_missing_runtime_entry(tmp_path):
@@ -180,7 +202,7 @@ def test_stage_rejects_missing_runtime_entry(tmp_path):
     license_file = tmp_path / "LICENSE"
     readme_file = tmp_path / "README.txt"
     license_file.write_text("license", encoding="utf-8")
-    readme_file.write_text("readme", encoding="utf-8")
+    readme_file.write_text("GO CLAW Portable 2.0.1（Windows）", encoding="utf-8")
     credentials_example_file = _write_credentials_example(tmp_path)
 
     with pytest.raises(FileNotFoundError, match="qwenpaw-backend.exe"):
@@ -192,6 +214,7 @@ def test_stage_rejects_missing_runtime_entry(tmp_path):
             license_file=license_file,
             readme_file=readme_file,
             credentials_example_file=credentials_example_file,
+            webview2_installer=_write_webview2(tmp_path),
         )
 
 
@@ -203,7 +226,7 @@ def test_stage_includes_explicit_batch_credentials(tmp_path):
     license_file = tmp_path / "LICENSE"
     readme_file = tmp_path / "README.txt"
     license_file.write_text("license", encoding="utf-8")
-    readme_file.write_text("readme", encoding="utf-8")
+    readme_file.write_text("GO CLAW Portable 2.0.1（Windows）", encoding="utf-8")
     example = _write_credentials_example(tmp_path)
     credentials = _write_batch_credentials(tmp_path)
 
@@ -215,6 +238,7 @@ def test_stage_includes_explicit_batch_credentials(tmp_path):
         license_file=license_file,
         readme_file=readme_file,
         credentials_example_file=example,
+        webview2_installer=_write_webview2(tmp_path),
         credentials_file=credentials,
     )
 
@@ -232,7 +256,7 @@ def test_stage_includes_explicit_provision_config(tmp_path):
     license_file = tmp_path / "LICENSE"
     readme_file = tmp_path / "README.txt"
     license_file.write_text("license", encoding="utf-8")
-    readme_file.write_text("readme", encoding="utf-8")
+    readme_file.write_text("GO CLAW Portable 2.0.1（Windows）", encoding="utf-8")
     example = _write_credentials_example(tmp_path)
     provision = _write_provision_config(tmp_path)
 
@@ -244,6 +268,7 @@ def test_stage_includes_explicit_provision_config(tmp_path):
         license_file=license_file,
         readme_file=readme_file,
         credentials_example_file=example,
+        webview2_installer=_write_webview2(tmp_path),
         provision_file=provision,
     )
 
@@ -262,7 +287,7 @@ def test_stage_rejects_credentials_and_provision_together(tmp_path):
     license_file = tmp_path / "LICENSE"
     readme_file = tmp_path / "README.txt"
     license_file.write_text("license", encoding="utf-8")
-    readme_file.write_text("readme", encoding="utf-8")
+    readme_file.write_text("GO CLAW Portable 2.0.1（Windows）", encoding="utf-8")
 
     with pytest.raises(ValueError, match="credentials.*provision"):
         stage_portable(
@@ -273,6 +298,7 @@ def test_stage_rejects_credentials_and_provision_together(tmp_path):
             license_file=license_file,
             readme_file=readme_file,
             credentials_example_file=_write_credentials_example(tmp_path),
+            webview2_installer=_write_webview2(tmp_path),
             credentials_file=_write_batch_credentials(tmp_path),
             provision_file=_write_provision_config(tmp_path),
         )
@@ -316,7 +342,7 @@ def test_stage_rejects_truncated_dashscope_credentials(tmp_path):
     license_file = tmp_path / "LICENSE"
     readme_file = tmp_path / "README.txt"
     license_file.write_text("license", encoding="utf-8")
-    readme_file.write_text("readme", encoding="utf-8")
+    readme_file.write_text("GO CLAW Portable 2.0.1（Windows）", encoding="utf-8")
     example = _write_credentials_example(tmp_path)
     credentials = _write_batch_credentials(
         tmp_path,
@@ -332,6 +358,7 @@ def test_stage_rejects_truncated_dashscope_credentials(tmp_path):
             license_file=license_file,
             readme_file=readme_file,
             credentials_example_file=example,
+            webview2_installer=_write_webview2(tmp_path),
             credentials_file=credentials,
         )
 
@@ -371,7 +398,7 @@ def test_windows_workflow_materializes_provisioning_from_secrets():
     assert "GO-CLAW-Windows-x64-Full.zip" in workflow
     assert "dist/GO-CLAW-Windows-x64-Full.zip" in workflow
     assert "build_windows_full_bundle.py" in workflow
-    assert "MicrosoftEdgeWebView2RuntimeInstallerX64.exe" in workflow
+    assert "MicrosoftEdgeWebview2Setup.exe" in workflow
     assert "Get-AuthenticodeSignature" in workflow
     assert "windows_release_contract.py" in workflow
     assert "python-dotenv" in workflow
@@ -391,7 +418,7 @@ def test_stage_refuses_repository_root_as_dist(tmp_path):
     license_file = tmp_path / "LICENSE"
     readme_file = tmp_path / "README.txt"
     license_file.write_text("license", encoding="utf-8")
-    readme_file.write_text("readme", encoding="utf-8")
+    readme_file.write_text("GO CLAW Portable 2.0.1（Windows）", encoding="utf-8")
     credentials_example_file = _write_credentials_example(tmp_path)
 
     with pytest.raises(ValueError, match="repository root"):
@@ -403,6 +430,7 @@ def test_stage_refuses_repository_root_as_dist(tmp_path):
             license_file=license_file,
             readme_file=readme_file,
             credentials_example_file=credentials_example_file,
+            webview2_installer=_write_webview2(tmp_path),
             repository_root=tmp_path,
         )
 

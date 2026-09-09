@@ -88,5 +88,13 @@ Do not infer production state from a plan.
   canonical maintenance documents.
 - Update the change ledger for behavior, configuration, security, packaging,
   or runtime-order changes. Keep unresolved incidents explicitly unresolved.
+- At the start of every new version and again before release, review
+  `docs/GO-CLAW-Windows产品U盘交付标准.zh.md`. If the version changes the
+  product-drive layout, runtime prerequisites, provisioning/configuration,
+  updater preservation rules, signing/manifest contents, documentation, or
+  deployment flow, update that standard in the same change. If no update is
+  needed, record "reviewed, no change" in the version plan or release
+  checklist. This is a documentation review obligation, not a new runtime or
+  performance gate.
 - A CI probe, successful compilation, or successful Full ZIP build does not
   replace clean-device acceptance for an online-update transaction.

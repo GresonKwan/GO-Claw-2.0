@@ -32,28 +32,55 @@ function MediaCard({
 }) {
   const { t } = useTranslation();
   const [thumbnail, setThumbnail] = useState("");
+  const [renewal, setRenewal] = useState(0);
+  const [failed, setFailed] = useState(false);
+  useEffect(() => {
+    setRenewal(0);
+    setFailed(false);
+  }, [item.id]);
   useEffect(() => {
     let active = true;
     if (item.previewKind !== "image") return () => undefined;
+    setThumbnail("");
     deliverablesApi
       .mediaTicket(item.id)
       .then(({ ticket }) => {
         if (active)
           setThumbnail(deliverablesApi.mediaUrl(item.id, ticket, "thumbnail"));
       })
-      .catch(() => undefined);
+      .catch(() => {
+        if (!active) return;
+        if (renewal < 1) {
+          setRenewal((value) => Math.min(1, value + 1));
+        } else {
+          setFailed(true);
+        }
+      });
     return () => {
       active = false;
     };
-  }, [item.id, item.previewKind]);
+  }, [item.id, item.previewKind, renewal]);
 
   return (
     <article className={styles.mediaCard} tabIndex={0} aria-label={item.name}>
       <div className={styles.mediaVisual}>
         {thumbnail ? (
-          <img src={thumbnail} alt="" loading="lazy" />
+          <img
+            src={thumbnail}
+            alt=""
+            loading="lazy"
+            onError={() => {
+              setThumbnail("");
+              if (renewal < 1) setRenewal(renewal + 1);
+              else setFailed(true);
+            }}
+          />
         ) : (
-          <span className={styles.mediaPlaceholder}>
+          <span
+            className={styles.mediaPlaceholder}
+            role={failed ? "status" : undefined}
+            aria-label={failed ? t("deliverables.previewFailed") : undefined}
+          >
             <PlayCircleOutlined />
           </span>
         )}

@@ -3,7 +3,7 @@
 
 Proxies the per-instance quota query to the operator's provisioning
 service. The HMAC secret and instance ID never leave this process; the
-console only receives three numbers. Non-portable or unprovisioned
+console only receives quota numbers. Non-portable or unprovisioned
 installs get 404 so the frontend hides the quota bar entirely.
 """
 
@@ -33,6 +33,15 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 _REQUEST_TIMEOUT_SECONDS = 15
+_MAX_SAFE_INTEGER = 9_007_199_254_740_991
+
+
+def _valid_display_remaining(value: object) -> bool:
+    return (
+        not isinstance(value, bool)
+        and isinstance(value, int)
+        and 0 <= value <= _MAX_SAFE_INTEGER
+    )
 
 
 def _quota_url(provision_url: str) -> str:
@@ -101,10 +110,12 @@ async def get_console_quota() -> JSONResponse:
             content={"error": "quota_unavailable"},
         )
     data = resp.json()
-    return JSONResponse(
-        content={
-            "granted": data.get("granted"),
-            "remaining": data.get("remaining"),
-            "percent": data.get("percent"),
-        },
-    )
+    content = {
+        "granted": data.get("granted"),
+        "remaining": data.get("remaining"),
+        "percent": data.get("percent"),
+    }
+    display_remaining = data.get("displayRemaining")
+    if _valid_display_remaining(display_remaining):
+        content["displayRemaining"] = display_remaining
+    return JSONResponse(content=content)

@@ -63,7 +63,8 @@
               "python-runtime",
               "node-runtime",
               "bundled-plugins",
-              "product-docs"
+              "product-docs",
+              "bootstrap-root"
             ]
           },
           "archiveUrl": {
@@ -135,7 +136,8 @@
               "python-runtime",
               "node-runtime",
               "bundled-plugins",
-              "product-docs"
+              "product-docs",
+              "bootstrap-root"
             ]
           },
           "mount": {

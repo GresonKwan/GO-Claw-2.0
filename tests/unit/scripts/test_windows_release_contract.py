@@ -30,6 +30,7 @@ def _sign(data: bytes, private: Ed25519PrivateKey, key_id: bytes) -> str:
 
 def _write_full_zip(path: Path, pubkey_text: str) -> None:
     root = "GO-CLAW-Windows-x64-Full-2.1.0"
+    webview = b"MZ" + b"w" * (1024 * 1024)
     files = {
         "START-HERE.zh-CN.txt": b"start",
         "Portable/GO-CLAW-Portable.exe": b"portable",
@@ -48,8 +49,43 @@ def _write_full_zip(path: Path, pubkey_text: str) -> None:
         "Portable/LICENSE": b"license",
         "Portable/README-PORTABLE.zh-CN.txt": b"readme",
         "Portable/portable.json": b"{}",
-        "WebView2/MicrosoftEdgeWebView2RuntimeInstallerX64.exe": b"webview",
+        "Portable/WebView2/MicrosoftEdgeWebview2Setup.exe": webview,
     }
+    portable_files = {
+        name.removeprefix("Portable/"): data
+        for name, data in files.items()
+        if name.startswith("Portable/")
+    }
+    portable_manifest = {
+        "schemaVersion": 3,
+        "product": "GO CLAW",
+        "version": "2.1.0",
+        "platform": "windows-x86_64",
+        "webView2": {
+            "path": "WebView2/MicrosoftEdgeWebview2Setup.exe",
+            "distribution": "evergreen-bootstrapper",
+            "requiresNetwork": True,
+            "source": "https://go.microsoft.com/fwlink/p/?LinkId=2124703",
+            "authenticodeSubject": "Microsoft Corporation",
+            "sha256": hashlib.sha256(webview).hexdigest(),
+        },
+        "files": [
+            {
+                "path": name,
+                "size": len(data),
+                "sha256": hashlib.sha256(data).hexdigest(),
+            }
+            for name, data in sorted(portable_files.items())
+        ],
+    }
+    files["Portable/MANIFEST.json"] = (
+        json.dumps(portable_manifest) + "\n"
+    ).encode()
+    portable_files["MANIFEST.json"] = files["Portable/MANIFEST.json"]
+    files["Portable/SHA256SUMS.txt"] = "".join(
+        f"{hashlib.sha256(data).hexdigest()}  {name}\n"
+        for name, data in sorted(portable_files.items())
+    ).encode()
     manifest_files = [
         {
             "path": name,
@@ -69,8 +105,12 @@ def _write_full_zip(path: Path, pubkey_text: str) -> None:
         "containsProvisioningConfig": True,
         "containsEnrollmentTicket": False,
         "webView2": {
+            "path": "Portable/WebView2/MicrosoftEdgeWebview2Setup.exe",
+            "distribution": "evergreen-bootstrapper",
+            "requiresNetwork": True,
+            "source": "https://go.microsoft.com/fwlink/p/?LinkId=2124703",
             "authenticodeSubject": "Microsoft Corporation",
-            "sha256": hashlib.sha256(b"webview").hexdigest(),
+            "sha256": hashlib.sha256(webview).hexdigest(),
         },
         "updaterPublicKeySha256": hashlib.sha256(
             (pubkey_text + "\n").encode(),

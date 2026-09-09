@@ -135,6 +135,7 @@ jobs:
             --version "${{ steps.version.outputs.version }}" `
             --exe (Join-Path $env:BASE_PORTABLE_ROOT "GO-CLAW-Portable.exe") `
             --binaries (Join-Path $env:BASE_PORTABLE_ROOT "binaries") `
+            --webview2-installer (Join-Path $env:BASE_PORTABLE_ROOT "WebView2/MicrosoftEdgeWebview2Setup.exe") `
             --dist "dist"
           if ($LASTEXITCODE -ne 0) {
             throw "Portable restaging failed"

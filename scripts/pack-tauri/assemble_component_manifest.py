@@ -21,6 +21,9 @@ REQUIRED_PROGRAMS = {
     "binaries/node-runtime/node.exe",
     "LICENSE",
     "README-PORTABLE.zh-CN.txt",
+    "WebView2/MicrosoftEdgeWebview2Setup.exe",
+    "MANIFEST.json",
+    "SHA256SUMS.txt",
 }
 
 

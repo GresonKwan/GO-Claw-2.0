@@ -22,6 +22,11 @@ from qwenpaw.app.go_claw_updates import (  # noqa: E402
 )
 
 EXPECTED_PROVISION_URL = "https://goclaw.host:8443/go-claw/provision"
+WEBVIEW2_PATH = "Portable/WebView2/MicrosoftEdgeWebview2Setup.exe"
+WEBVIEW2_PORTABLE_PATH = "WebView2/MicrosoftEdgeWebview2Setup.exe"
+WEBVIEW2_SOURCE = "https://go.microsoft.com/fwlink/p/?LinkId=2124703"
+WEBVIEW2_MIN_BYTES = 1024 * 1024
+WEBVIEW2_MAX_BYTES = 10 * 1024 * 1024
 FORBIDDEN_UPDATE_PARTS = {
     "go-claw-config",
     "credentials.json",
@@ -120,7 +125,9 @@ def _verify_full_zip(full_zip: Path, pubkey: str) -> dict[str, object]:
         "Portable/LICENSE",
         "Portable/README-PORTABLE.zh-CN.txt",
         "Portable/portable.json",
-        "WebView2/MicrosoftEdgeWebView2RuntimeInstallerX64.exe",
+        WEBVIEW2_PATH,
+        "Portable/MANIFEST.json",
+        "Portable/SHA256SUMS.txt",
         "MANIFEST.json",
         "SHA256SUMS.txt",
     }
@@ -177,11 +184,70 @@ def _verify_full_zip(full_zip: Path, pubkey: str) -> dict[str, object]:
         raise ValueError("Full ZIP manifest updater public key hash mismatch")
     if manifest.get("provisioningConfigSha256") != _sha256(provision_data):
         raise ValueError("Full ZIP manifest provisioning config hash mismatch")
-    webview_path = "WebView2/MicrosoftEdgeWebView2RuntimeInstallerX64.exe"
-    if manifest.get("webView2", {}).get("sha256") != _sha256(
-        relative_data[webview_path],
+    webview_data = relative_data[WEBVIEW2_PATH]
+    if (
+        not WEBVIEW2_MIN_BYTES <= len(webview_data) <= WEBVIEW2_MAX_BYTES
+        or not webview_data.startswith(b"MZ")
+    ):
+        raise ValueError("Full ZIP WebView2 Bootstrapper identity is invalid")
+    webview_contract = manifest.get("webView2", {})
+    if (
+        webview_contract.get("path") != WEBVIEW2_PATH
+        or webview_contract.get("distribution") != "evergreen-bootstrapper"
+        or webview_contract.get("requiresNetwork") is not True
+        or webview_contract.get("source") != WEBVIEW2_SOURCE
+        or "Microsoft Corporation"
+        not in str(webview_contract.get("authenticodeSubject", ""))
+        or webview_contract.get("sha256") != _sha256(webview_data)
     ):
         raise ValueError("Full ZIP WebView2 hash mismatch")
+
+    try:
+        portable_manifest = json.loads(relative_data["Portable/MANIFEST.json"])
+    except json.JSONDecodeError as exc:
+        raise ValueError("Portable manifest is invalid JSON") from exc
+    portable_webview = portable_manifest.get("webView2", {})
+    if (
+        portable_manifest.get("schemaVersion") != 3
+        or portable_manifest.get("product") != "GO CLAW"
+        or portable_manifest.get("version") != manifest.get("version")
+        or portable_manifest.get("platform") != "windows-x86_64"
+        or portable_webview.get("path") != WEBVIEW2_PORTABLE_PATH
+        or portable_webview.get("distribution") != "evergreen-bootstrapper"
+        or portable_webview.get("requiresNetwork") is not True
+        or portable_webview.get("source") != WEBVIEW2_SOURCE
+        or portable_webview.get("sha256") != _sha256(webview_data)
+    ):
+        raise ValueError("Portable WebView2 manifest contract mismatch")
+    portable_entries = portable_manifest.get("files")
+    if not isinstance(portable_entries, list) or not any(
+        isinstance(entry, dict)
+        and entry.get("path") == WEBVIEW2_PORTABLE_PATH
+        and entry.get("size") == len(webview_data)
+        and entry.get("sha256") == _sha256(webview_data)
+        for entry in portable_entries
+    ):
+        raise ValueError("Portable manifest omits WebView2 Bootstrapper")
+
+    portable_data = {
+        relative.removeprefix("Portable/"): data
+        for relative, data in relative_data.items()
+        if relative.startswith("Portable/")
+    }
+    portable_checksums: dict[str, str] = {}
+    for line in portable_data["SHA256SUMS.txt"].decode("ascii").splitlines():
+        try:
+            digest, relative = line.split("  ", 1)
+        except ValueError as exc:
+            raise ValueError("Portable checksum line is invalid") from exc
+        if relative in portable_checksums:
+            raise ValueError("Portable checksum paths are duplicated")
+        portable_checksums[relative] = digest
+    if set(portable_checksums) != set(portable_data) - {"SHA256SUMS.txt"}:
+        raise ValueError("Portable checksum path set is incomplete")
+    for relative, digest in portable_checksums.items():
+        if digest != _sha256(portable_data[relative]):
+            raise ValueError(f"Portable checksum mismatch: {relative}")
 
     expected_checksum_paths = set(relative_data) - {"SHA256SUMS.txt"}
     parsed_checksums: dict[str, str] = {}

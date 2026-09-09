@@ -120,6 +120,8 @@ interface ExtendedSession extends IAgentScopeRuntimeWebUISession {
   updatedAt?: string | null;
   /** Whether the backend is still generating a response for this session. */
   generating?: boolean;
+  /** True after the persistent deliverables index was queried successfully. */
+  deliverablesHydrated?: boolean;
   /** Whether the chat is pinned to the top. */
   pinned?: boolean;
 }
@@ -1071,6 +1073,7 @@ class SessionApi implements IAgentScopeRuntimeWebUISessionAPI {
         if (listEntry?.name) cached.name = listEntry.name;
         this.updateWindowVariables(cached);
         hydrateTurnUsageFromMessages(cached.messages ?? []);
+        await this.hydrateDeliverables(cached, backendId, signal);
         return cached;
       }
     }
@@ -1079,25 +1082,6 @@ class SessionApi implements IAgentScopeRuntimeWebUISessionAPI {
     if (signal?.aborted) throw new DOMException("Aborted", "AbortError");
     const generating = isGenerating(chatHistory);
     const messages = convertMessages(chatHistory.messages || []);
-    if (!generating) {
-      const ids = messages
-        .flatMap((message) => message.cards || [])
-        .filter((card) => card.code === CARD_RESPONSE)
-        .map((card) => responseId((card.data || {}) as Record<string, unknown>))
-        .filter((id): id is string => Boolean(id));
-      if (ids.length > 0) {
-        try {
-          const history = await deliverablesApi.query(
-            backendId,
-            ids.slice(-50),
-            signal,
-          );
-          attachDeliverables(messages, history.turns);
-        } catch {
-          // Older backends do not expose deliverables; chat history still loads.
-        }
-      }
-    }
     this.patchLastUserMessage(messages, generating, backendId);
 
     const session: ExtendedSession = {
@@ -1110,8 +1094,13 @@ class SessionApi implements IAgentScopeRuntimeWebUISessionAPI {
       meta: listEntry?.meta || {},
       realId: listEntry?.realId,
       generating,
+      deliverablesHydrated: generating,
     };
     this.updateWindowVariables(session);
+
+    if (!generating) {
+      await this.hydrateDeliverables(session, backendId, signal);
+    }
 
     // Cache non-generating sessions
     if (!generating) {
@@ -1124,6 +1113,42 @@ class SessionApi implements IAgentScopeRuntimeWebUISessionAPI {
 
     hydrateTurnUsageFromMessages(session.messages ?? []);
     return session;
+  }
+
+  /**
+   * Merge persisted deliverables into a converted history exactly once after a
+   * successful query.  A transient failure deliberately leaves the flag false
+   * so switching away and back can retry without refetching the chat payload.
+   */
+  private async hydrateDeliverables(
+    session: ExtendedSession,
+    backendId: string,
+    signal?: AbortSignal,
+  ): Promise<void> {
+    if (session.deliverablesHydrated) return;
+    const messages = session.messages ?? [];
+    const ids = messages
+      .flatMap((message) => message.cards || [])
+      .filter((card) => card.code === CARD_RESPONSE)
+      .map((card) => responseId((card.data || {}) as Record<string, unknown>))
+      .filter((id): id is string => Boolean(id));
+    if (ids.length === 0) {
+      session.deliverablesHydrated = true;
+      return;
+    }
+    try {
+      const history = await deliverablesApi.query(
+        backendId,
+        ids.slice(-50),
+        signal,
+      );
+      attachDeliverables(messages, history.turns);
+      session.deliverablesHydrated = true;
+    } catch (error) {
+      if (signal?.aborted) throw error;
+      // Chat history remains usable. A later session switch retries only this
+      // lightweight index query instead of invalidating the whole LRU cache.
+    }
   }
 
   private async _doGetSession(
@@ -1155,7 +1180,7 @@ class SessionApi implements IAgentScopeRuntimeWebUISessionAPI {
             fromList,
             signal,
           );
-        } catch (error) {
+        } catch {
           // If fetching with realId fails, return the local session without messages
           // This handles cases where the backend has an inconsistency
           this.updateWindowVariables(fromList);
@@ -1201,12 +1226,12 @@ class SessionApi implements IAgentScopeRuntimeWebUISessionAPI {
         this.findSession(sessionId),
         signal,
       );
-    } catch (error: any) {
+    } catch (error: unknown) {
       // If the backend session doesn't exist (e.g. invalid UUID or expired session)
       // return an empty session to prevent repeated 404 API calls.
       // Note: the request layer throws Error(message) without attaching .status,
       // so only message-based detection is reliable here.
-      if (error.message?.includes("Chat not found")) {
+      if (error instanceof Error && error.message.includes("Chat not found")) {
         const emptySession = this.createEmptySession(sessionId);
         emptySession.id = sessionId;
         return emptySession;
@@ -1264,7 +1289,8 @@ class SessionApi implements IAgentScopeRuntimeWebUISessionAPI {
     // session list. Use destructuring instead of mutating the input object
     // — the library may pass its own internal session reference, and
     // mutating session.messages would corrupt its React state.
-    const { messages: _msgs, ...metadata } = session;
+    const metadata = { ...session };
+    delete metadata.messages;
     const index = this.sessionList.findIndex((s) => s.id === metadata.id);
 
     if (index > -1) {

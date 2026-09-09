@@ -54,7 +54,12 @@ def test_quota_passthrough(portable_env, monkeypatch):
 
         @staticmethod
         def json() -> dict:
-            return {"granted": 2.0, "remaining": 1.5, "percent": 75}
+            return {
+                "granted": 2.0,
+                "remaining": 1.5,
+                "percent": 75,
+                "displayRemaining": 10_000_000,
+            }
 
     class _Client:
         def __init__(self, *_a: Any, **_kw: Any) -> None:
@@ -75,7 +80,52 @@ def test_quota_passthrough(portable_env, monkeypatch):
     client = TestClient(_make_app())
     resp = client.get("/api/console/quota")
     assert resp.status_code == 200
-    assert resp.json() == {"granted": 2.0, "remaining": 1.5, "percent": 75}
+    assert resp.json() == {
+        "granted": 2.0,
+        "remaining": 1.5,
+        "percent": 75,
+        "displayRemaining": 10_000_000,
+    }
+
+
+@pytest.mark.parametrize("display_value", [None, -1, True, 9_007_199_254_740_992])
+def test_quota_omits_invalid_optional_display_balance(
+    portable_env,
+    monkeypatch,
+    display_value,
+):
+    class _Resp:
+        status_code = 200
+
+        @staticmethod
+        def json() -> dict:
+            return {
+                "granted": 2.0,
+                "remaining": 1.5,
+                "percent": 75,
+                "displayRemaining": display_value,
+            }
+
+    class _Client:
+        def __init__(self, *_a: Any, **_kw: Any) -> None:
+            pass
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *_exc: Any) -> bool:
+            return False
+
+        async def get(self, *_a: Any, **_kw: Any) -> _Resp:
+            return _Resp()
+
+    monkeypatch.setattr("httpx.AsyncClient", _Client)
+    client = TestClient(_make_app())
+    assert client.get("/api/console/quota").json() == {
+        "granted": 2.0,
+        "remaining": 1.5,
+        "percent": 75,
+    }
 
 
 def test_quota_503_on_upstream_failure(portable_env, monkeypatch):

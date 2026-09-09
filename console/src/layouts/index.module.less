@@ -407,14 +407,42 @@
 
 // ─── Quota bar (GO CLAW customer build) ──────────────────────────────────────
 .quotaBar {
+  position: relative;
+  display: flex;
+  height: 58px;
   flex-shrink: 0;
-  padding: 8px 8px 4px;
+  align-items: center;
+  gap: 4px;
+  padding: 6px 8px;
+}
+
+.quotaBarMain {
+  display: flex;
+  min-width: 0;
+  flex: 1;
+  flex-direction: column;
+  gap: 3px;
+  border: 0;
+  border-radius: 8px;
+  padding: 4px 6px;
+  background: transparent;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+
+  &:hover,
+  &:focus-visible {
+    background: rgba(0, 0, 0, 0.045);
+    outline: none;
+  }
 }
 
 .quotaBarRow {
   display: flex;
+  min-height: 18px;
   align-items: center;
-  gap: 8px;
+  justify-content: space-between;
+  gap: 6px;
 }
 
 .quotaBarLabel {
@@ -423,22 +451,69 @@
   flex-shrink: 0;
 }
 
-.quotaBarProgress {
-  flex: 1;
-  margin: 0;
-  line-height: 1;
-}
-
 .quotaBarValue {
+  overflow: hidden;
   font-size: 13px;
-  color: rgba(0, 0, 0, 0.65);
-  min-width: 34px;
+  color: rgba(0, 0, 0, 0.88);
+  font-weight: 650;
+  line-height: 18px;
   text-align: right;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .quotaBarValueLow {
-  color: #ff4d4f;
-  font-weight: 600;
+  color: #d4380d;
+}
+
+.quotaStatus {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  color: rgba(0, 0, 0, 0.45);
+  font-size: 12px;
+}
+
+.quotaStatusDot {
+  width: 6px;
+  height: 6px;
+  flex-shrink: 0;
+  border-radius: 50%;
+  background: #52c41a;
+}
+
+.quotaLow .quotaStatusDot {
+  background: #fa8c16;
+}
+
+.quotaRechargeButton {
+  height: 28px;
+  flex-shrink: 0;
+  border: 0;
+  border-radius: 7px;
+  padding: 0 7px;
+  background: transparent;
+  color: #d95216;
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+
+  &:hover,
+  &:focus-visible {
+    background: rgba(255, 74, 24, 0.09);
+    outline: none;
+  }
+}
+
+.quotaCreditFeedback {
+  position: absolute;
+  right: 9px;
+  bottom: 0;
+  z-index: 1;
+  color: #389e0d;
+  font-size: 11px;
+  line-height: 16px;
+  pointer-events: none;
 }
 
 // ─── Auth actions (account + logout) ──────────────────────────────────────────
@@ -497,9 +572,30 @@
 
 .quotaRing {
   display: flex;
+  position: relative;
+  width: 40px;
+  margin: 0 auto;
   align-items: center;
   justify-content: center;
   min-height: 40px;
+  border: 0;
+  border-radius: 9px;
+  background: transparent;
+  color: #ff7f16;
+  cursor: pointer;
+
+  &:hover,
+  &:focus-visible {
+    background: rgba(255, 74, 24, 0.08);
+    outline: none;
+  }
+
+  .quotaStatusDot {
+    position: absolute;
+    top: 8px;
+    right: 8px;
+    box-shadow: 0 0 0 2px #f9f8f4;
+  }
 }
 
 .dockActionRow {

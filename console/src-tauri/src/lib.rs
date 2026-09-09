@@ -9,6 +9,7 @@ mod portable;
 mod tray;
 mod update_engine;
 mod updates;
+mod webview2_runtime;
 
 use tauri::{Manager, RunEvent, WebviewWindow, WindowEvent};
 

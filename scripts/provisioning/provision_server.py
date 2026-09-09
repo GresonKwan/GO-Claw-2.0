@@ -712,6 +712,14 @@ def provision(body: ProvisionRequest, request: Request) -> JSONResponse:
 # ---------------------------------------------------------------------------
 
 QUOTA_UNITS_PER_DOLLAR = 500000  # NewAPI quota units -> USD
+# Product-facing compute balance: RMB 1 = 5,000,000 compute units while
+# NewAPI records USD 1 = 500,000 internal quota units and RMB 1 = USD 0.15.
+# Therefore one NewAPI unit maps to exactly 200/3 display units.  Keep the
+# calculation integer-only so the customer balance never drifts through float
+# rounding.  Values beyond JavaScript's safe-integer range are omitted.
+DISPLAY_UNITS_NUMERATOR = 200
+DISPLAY_UNITS_DENOMINATOR = 3
+MAX_DISPLAY_REMAINING = 9_007_199_254_740_991
 QUOTA_RATE_LIMIT_PER_INSTANCE_PER_HOUR = int(
     os.environ.get("QUOTA_RATE_LIMIT_PER_INSTANCE_PER_HOUR", "240"),
 )
@@ -761,6 +769,23 @@ def _read_user_consumption_db(user_id: int) -> int:
     return int(row[0] or 0)
 
 
+def _display_remaining(remaining_units: object) -> int | None:
+    """Convert NewAPI quota units to a safe product-facing integer balance."""
+    if (
+        isinstance(remaining_units, bool)
+        or not isinstance(remaining_units, int)
+        or remaining_units < 0
+    ):
+        return None
+    display_remaining = (
+        remaining_units * DISPLAY_UNITS_NUMERATOR
+        // DISPLAY_UNITS_DENOMINATOR
+    )
+    if display_remaining > MAX_DISPLAY_REMAINING:
+        return None
+    return display_remaining
+
+
 @app.get("/api/quota")
 def quota(instance_id: str, ts: int, sign: str) -> JSONResponse:
     """Return the provisioned instance's quota usage (granted/remaining)."""
@@ -803,10 +828,12 @@ def quota(instance_id: str, ts: int, sign: str) -> JSONResponse:
         if granted <= 0
         else min(100, max(0, round(remaining / granted * 100)))
     )
-    return JSONResponse(
-        content={
-            "granted": round(granted, 4),
-            "remaining": round(remaining, 4),
-            "percent": percent,
-        },
-    )
+    content = {
+        "granted": round(granted, 4),
+        "remaining": round(remaining, 4),
+        "percent": percent,
+    }
+    display_remaining = _display_remaining(remaining_units)
+    if display_remaining is not None:
+        content["displayRemaining"] = display_remaining
+    return JSONResponse(content=content)

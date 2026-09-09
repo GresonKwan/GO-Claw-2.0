@@ -26,6 +26,7 @@ COMPONENTS = (
     "node-runtime",
     "bundled-plugins",
     "product-docs",
+    "bootstrap-root",
 )
 MUTABLE_ROOTS = frozenset(
     {
@@ -41,6 +42,8 @@ MUTABLE_ROOTS = frozenset(
     }
 )
 ROOT_DOCS = frozenset({"LICENSE", "README-PORTABLE.zh-CN.txt"})
+ROOT_BOOTSTRAP = frozenset({"MANIFEST.json", "SHA256SUMS.txt"})
+WEBVIEW2_BOOTSTRAPPER = "WebView2/MicrosoftEdgeWebview2Setup.exe"
 _DEVICE = re.compile(
     r"^(con|prn|aux|nul|com[1-9¹²³]|lpt[1-9¹²³]|conin\$|conout\$)$", re.I
 )
@@ -108,6 +111,10 @@ def validate_assignment(relative: str, component: str, mount: str) -> None:
         valid = mount == "bootstrap" and relative == "GO-CLAW-Portable.exe"
     elif component == "product-docs":
         valid = mount == "root-docs" and relative in ROOT_DOCS
+    elif component == "bootstrap-root":
+        valid = mount == "bootstrap" and (
+            relative in ROOT_BOOTSTRAP or relative == WEBVIEW2_BOOTSTRAPPER
+        )
     else:
         valid = mount == "slot" and parts[0] == "binaries" and len(parts) > 1
         if component == "node-runtime":
@@ -226,7 +233,10 @@ def program_paths(root: Path) -> set[str]:
                 (Path(parent) / name).relative_to(root).as_posix()
                 for name in files
             )
-    for name in ROOT_DOCS | {"GO-CLAW-Portable.exe"}:
+    webview2 = root / WEBVIEW2_BOOTSTRAPPER
+    if webview2.exists():
+        actual.add(WEBVIEW2_BOOTSTRAPPER)
+    for name in ROOT_DOCS | ROOT_BOOTSTRAP | {"GO-CLAW-Portable.exe"}:
         if (root / name).exists():
             actual.add(name)
     return actual
@@ -266,6 +276,8 @@ def build_assignments(root: Path) -> list[dict]:
         parts = relative.split("/")
         if relative == "GO-CLAW-Portable.exe":
             component, mount = "desktop-shell", "bootstrap"
+        elif relative in ROOT_BOOTSTRAP or relative == WEBVIEW2_BOOTSTRAPPER:
+            component, mount = "bootstrap-root", "bootstrap"
         elif relative in ROOT_DOCS:
             component, mount = "product-docs", "root-docs"
         elif relative == "binaries/go-claw-update-engine.exe":

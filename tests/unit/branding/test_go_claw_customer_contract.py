@@ -292,7 +292,7 @@ def test_portable_readme_explains_drive_letter_rebinding() -> None:
     assert "双击 GO-CLAW-Portable.exe" in readme
     assert "U 盘盘符从 E、F 或 G 变化时，无需修改配置" in readme
     assert (
-        "Get-FileHash .\\GO-CLAW-Portable-2.0.1-Windows-x64.zip "
+        "Get-FileHash .\\GO-CLAW-Portable-2.1.3-Windows-x64.zip "
         "-Algorithm SHA256"
     ) in readme
 
@@ -546,7 +546,7 @@ def test_main_build_does_not_gate_on_runner_browser_observation() -> None:
 def test_main_build_uses_v2_1_2_release_version() -> None:
     version_file = _read_customer_text("src/qwenpaw/__version__.py")
 
-    assert '__version__ = "2.1.2"' in version_file
+    assert '__version__ = "2.1.3"' in version_file
 
 
 def test_zh_locale_does_not_contain_legacy_smart_agent_term() -> None:

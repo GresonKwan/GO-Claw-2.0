@@ -30,6 +30,7 @@ sequenceDiagram
     title GO CLAW portable process startup
     participant User
     participant Portable
+    participant Prerequisite as WebView2 prerequisite
     participant Client
     participant Backend
     participant WebUI
@@ -41,6 +42,17 @@ sequenceDiagram
     Portable->>Portable: Verify signed active slot
     Portable->>Portable: Keep shared data root
     Portable->>Client: Begin client readiness
+    alt Explicit browser mode
+        Portable->>Client: Reserve one browser fallback
+    else Auto and WebView2 installed
+        Portable->>Prerequisite: Fixed registry pv check
+        Prerequisite-->>Portable: Runtime available
+    else Auto and WebView2 missing
+        Portable->>Prerequisite: Verify root path manifest hash and WinTrust
+        Portable->>Prerequisite: Run silent online Bootstrapper once
+        Prerequisite-->>Portable: Registry postcheck or bounded failure
+    end
+    Portable->>Client: Construct WebView or retain browser fallback
     Portable->>Backend: Spawn absolute backend
     Backend-->>Portable: Publish port and health
     Portable->>WebUI: Load console route
@@ -51,7 +63,8 @@ sequenceDiagram
 ```
 
 不可变条件：`PortableState::prepare()` 必须早于客户端和后端启动；未完成更新锁存在时不得
-运行任何可能读取混合版本的后端。
+运行任何可能读取混合版本的后端。Auto 模式在构造 WebView 前完成 WebView2 前置检查；失败只记录
+一次浏览器回退，后端仍由原启动链创建一次。Bootstrapper 超时不强杀其仍拥有的系统安装事务。
 
 2026-09-05 开发接线：PortableState 保留独立 root/program_root；无 active-slot 指针继续 legacy，
 有指针必须验证固定公钥签名、清单摘要和版本，解析失败不退回旧 binaries。prepare 再次确认槽位
@@ -255,7 +268,8 @@ legacy 来源尚无 lastKnownGood，因此在候选进程完成健康检查并�
 候选由持锁引擎从指定槽位直接启动，普通壳仍受安装锁阻断。健康后才发布 active/lastKnownGood，避免
 提前把未经验证的首个 A 槽写成已知可用。中途失电统一完整恢复旧壳、原指针和版本 metadata。
 
-备份只含根 exe、两份文档、active-slot、version.txt、last-update.json；不复制或恢复 data/secrets/
+备份只含根 exe、两份文档、WebView2 Bootstrapper、产品根 Manifest/SHA256SUMS、active-slot、
+version.txt、last-update.json；不复制或恢复 data/secrets/
 聊天/账本。替换旧的非活动槽时移入本交易的证据目录，不递归删除。备份先全部验证，再逐项原子恢复；
 失败保留锁并记 BLOCKED。恢复固定根文件后，受控启动来源程序再解锁：已有 A/B 来源使用绑定回执；
 legacy 来源没有新回执，使用受控进程映像/监听 PID 和公开版本 API，并确认探测进程退出。
@@ -266,6 +280,37 @@ Windows probe 先校验进程映像和 TCP 监听 PID，再发送随机挑战；
 PID、版本及员工/插件/实际媒体工具/额度。候选加入 kill-on-close Job；只对引擎自己的探测子进程兜底退出，
 用户原进程仅请求正常退出，超时阻断。充值只报告本地 profile configured/not_enrolled/unavailable，
 不是服务器可用证明，也不增加核心健康路径的远端开户、审计或充值请求。
+
+## 6B. New API 公网与运维访问时序
+
+8443 是产品运行所需的最小公网面，不再承载 New API 管理 UI。唯一允许转发到
+`127.0.0.1:3000` 的公网路径是 `/v1` 和 `/v1/`；provision、quota、billing enrollment
+精确路径转发到 `127.0.0.1:9100`；更新路径只读访问静态目录。`/api/*`、healthz、管理 UI
+和未知路径默认拒绝。用户充值 API 与微信回调继续只由 443 server 提供，不能在 8443 重复暴露。
+
+```mermaid
+sequenceDiagram
+    title GO CLAW 8443 public allowlist and SSH-only administration
+    participant Client as GO CLAW client
+    participant Edge as Nginx :8443
+    participant NewAPI as New API :3000
+    participant Provision as Provision :9100
+    participant Operator as Operator workstation
+    Client->>Edge: /v1/* model request
+    Edge->>NewAPI: Forward allowlisted protocol traffic
+    Client->>Edge: exact provision/quota/enrollment
+    Edge->>Provision: Forward exact product endpoint
+    Client->>Edge: /api/*, UI, healthz or unknown
+    Edge-->>Client: 403/404 without upstream
+    Operator->>NewAPI: SSH tunnel to server 127.0.0.1:3000
+    NewAPI-->>Operator: Admin UI/API over local tunnel
+```
+
+运维访问使用 `ssh -N -L 127.0.0.1:13000:127.0.0.1:3000 -i "<SSH私钥路径>"
+<运维用户>@<服务器>`，浏览器只访问 `http://127.0.0.1:13000`。关闭 SSH 进程后本地端口必须
+立即失效。生产配置模板为 `deploy/nginx/go-claw-newapi-public.conf`；修改时必须同时运行
+`tests/unit/scripts/test_newapi_public_surface.py`，并按“备份、`nginx -t`、reload、allow/deny
+smoke、失败回滚”的顺序操作。该边界变更不得修改 New API、provisioning 或 billing 数据库。
 
 ## 7. 调试与热修复规则
 

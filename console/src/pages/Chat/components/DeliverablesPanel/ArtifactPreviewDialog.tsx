@@ -18,12 +18,17 @@ export default function ArtifactPreviewDialog({
   const { t } = useTranslation();
   const [url, setUrl] = useState("");
   const [renewal, setRenewal] = useState(0);
+  const [failed, setFailed] = useState(false);
 
-  useEffect(() => setRenewal(0), [item?.id, open]);
+  useEffect(() => {
+    setRenewal(0);
+    setFailed(false);
+  }, [item?.id, open]);
 
   useEffect(() => {
     let active = true;
     setUrl("");
+    setFailed(false);
     if (!open || !item) return () => undefined;
     deliverablesApi
       .mediaTicket(item.id)
@@ -31,7 +36,14 @@ export default function ArtifactPreviewDialog({
         if (active)
           setUrl(deliverablesApi.mediaUrl(item.id, ticket, "content"));
       })
-      .catch(() => undefined);
+      .catch(() => {
+        if (!active) return;
+        if (renewal < 1) {
+          setRenewal((value) => Math.min(1, value + 1));
+        } else {
+          setFailed(true);
+        }
+      });
     return () => {
       active = false;
     };
@@ -47,11 +59,19 @@ export default function ArtifactPreviewDialog({
       width="min(92vw, 1080px)"
       centered
     >
-      {!url && <div role="status">{t("deliverables.loading")}</div>}
+      {!url && !failed && <div role="status">{t("deliverables.loading")}</div>}
+      {failed && <div role="status">{t("deliverables.previewFailed")}</div>}
       {url && item?.previewKind === "image" && (
         <img
           src={url}
           alt={item.name}
+          onError={() => {
+            if (renewal < 1) setRenewal(renewal + 1);
+            else {
+              setUrl("");
+              setFailed(true);
+            }
+          }}
           style={{
             display: "block",
             maxWidth: "100%",
@@ -66,7 +86,13 @@ export default function ArtifactPreviewDialog({
           aria-label={item.name}
           controls
           autoPlay
-          onError={() => setRenewal((value) => (value < 1 ? value + 1 : value))}
+          onError={() => {
+            if (renewal < 1) setRenewal(renewal + 1);
+            else {
+              setUrl("");
+              setFailed(true);
+            }
+          }}
           style={{ display: "block", width: "100%", maxHeight: "76vh" }}
         />
       )}

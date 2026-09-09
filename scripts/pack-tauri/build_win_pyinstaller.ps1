@@ -294,10 +294,16 @@ $BUILD_PYTHON = if ($env:GO_CLAW_BUILD_PYTHON) {
 } else {
     (Get-Command python -ErrorAction Stop).Source
 }
+$WEBVIEW2_INSTALLER = $env:GO_CLAW_WEBVIEW2_INSTALLER
+if ([string]::IsNullOrWhiteSpace($WEBVIEW2_INSTALLER) -or
+    -not (Test-Path -LiteralPath $WEBVIEW2_INSTALLER -PathType Leaf)) {
+    throw "GO_CLAW_WEBVIEW2_INSTALLER must name the validated Evergreen Bootstrapper"
+}
 & $BUILD_PYTHON $PORTABLE_STAGER `
     --version $VERSION `
     --exe $PORTABLE_EXE `
     --binaries $PORTABLE_BINARIES `
+    --webview2-installer $WEBVIEW2_INSTALLER `
     --dist $DIST
 if ($LASTEXITCODE -ne 0) {
     throw "Portable staging failed"

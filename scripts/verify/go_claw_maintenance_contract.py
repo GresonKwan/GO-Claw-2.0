@@ -22,6 +22,7 @@ SEQUENCE_TITLES = (
     "title GO CLAW Windows update rollback success",
     "title GO CLAW Windows update rollback guard",
     "title GO CLAW component transaction and recovery",
+    "title GO CLAW 8443 public allowlist and SSH-only administration",
 )
 
 

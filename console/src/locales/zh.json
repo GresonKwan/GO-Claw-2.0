@@ -162,6 +162,15 @@
     "amount": "金额",
     "computeUnits": "算力"
   },
+  "quotaDisplay": {
+    "balance": "剩余算力",
+    "sufficient": "算力充足",
+    "low": "算力较低",
+    "recharge": "充值",
+    "credited": "已到账",
+    "unavailable": "暂时无法获取",
+    "legacy": "兼容显示"
+  },
   "sidebar": {
     "newVersion": "发现新版本 v{{version}}，点击前往升级",
     "updateModal": {
@@ -3194,6 +3203,7 @@
   "deliverables": {
     "title": "交付产物",
     "loading": "正在加载预览…",
+    "previewFailed": "预览加载失败，可在文件夹中打开原文件",
     "open": "打开",
     "reveal": "在文件夹中显示",
     "previewNamed": "预览 {{name}}",
