@@ -180,6 +180,19 @@ def test_default_build_layout_has_exact_disjoint_components(tmp_path):
         path = tmp_path / name
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_bytes(b"fixture")
+    # These files are mandatory in a newly manufactured Full/U-disk bundle,
+    # but must stay out of the v2 component manifest.  Shipping them as an
+    # eighth component makes the released v2.1.2 engine fail discovery with
+    # INVALID_COMPONENTS before it can update itself.
+    for name in (
+        "MANIFEST.json",
+        "SHA256SUMS.txt",
+        "START-HERE.zh-CN.txt",
+        "WebView2/MicrosoftEdgeWebview2Setup.exe",
+    ):
+        path = tmp_path / name
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_bytes(b"factory delivery collateral")
     (tmp_path / "data").mkdir()
     (tmp_path / "data/chats.json").write_bytes(b"never parse this")
     rows = build_assignments(tmp_path)

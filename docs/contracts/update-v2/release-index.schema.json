@@ -57,8 +57,7 @@
               "python-runtime",
               "node-runtime",
               "bundled-plugins",
-              "product-docs",
-              "bootstrap-root"
+              "product-docs"
             ]
           },
           "contentDigest": {
@@ -74,7 +73,7 @@
         "additionalProperties": true
       },
       "minItems": 1,
-      "maxItems": 8
+      "maxItems": 7
     },
     "fullBytes": {
       "type": "integer",

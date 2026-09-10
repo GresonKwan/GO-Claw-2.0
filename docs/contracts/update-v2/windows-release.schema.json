@@ -63,8 +63,7 @@
               "python-runtime",
               "node-runtime",
               "bundled-plugins",
-              "product-docs",
-              "bootstrap-root"
+              "product-docs"
             ]
           },
           "archiveUrl": {
@@ -99,7 +98,7 @@
         "additionalProperties": true
       },
       "minItems": 1,
-      "maxItems": 8
+      "maxItems": 7
     },
     "files": {
       "type": "array",
@@ -136,8 +135,7 @@
               "python-runtime",
               "node-runtime",
               "bundled-plugins",
-              "product-docs",
-              "bootstrap-root"
+              "product-docs"
             ]
           },
           "mount": {

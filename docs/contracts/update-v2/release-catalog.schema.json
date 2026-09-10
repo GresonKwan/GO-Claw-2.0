@@ -40,7 +40,7 @@
               "platform": { "const": "windows-x86_64" },
               "channel": { "enum": ["stable", "staging"] },
               "minUpdaterVersion": { "type": "string", "minLength": 1, "maxLength": 256 },
-              "componentDigests": { "type": "array", "minItems": 1, "maxItems": 8 },
+              "componentDigests": { "type": "array", "minItems": 1, "maxItems": 7 },
               "fullBytes": { "type": "integer", "minimum": 0, "maximum": 9007199254740991 },
               "releaseManifest": { "type": "object" },
               "legacyBridge": { "type": "object" }
