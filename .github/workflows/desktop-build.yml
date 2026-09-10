@@ -310,7 +310,9 @@ jobs:
           $stage = Get-ChildItem -LiteralPath "dist" -Directory -Filter "GO-CLAW-Portable-*-Windows-x64" |
             Select-Object -First 1
           if (-not $stage) { throw "portable staging directory not found" }
-          $baseUrl = "https://github.com/GresonKwan/GO-Claw-2.0/releases/download/v$version"
+          # GitHub Release remains the public archive, but production clients
+          # must not depend on GitHub reachability to complete an update.
+          $baseUrl = "https://goclaw.host:8443/updates"
           $indexUrl = "$baseUrl/release-index-v2.json"
           $manifestUrl = "$baseUrl/windows-release-v2.json"
           $work = "dist/v2-work"
@@ -326,7 +328,7 @@ jobs:
             --root $stage.FullName `
             --output $work `
             --base-url $baseUrl `
-            --trusted-host github.com
+            --trusted-host goclaw.host
           if ($LASTEXITCODE -ne 0) { throw "component packaging failed" }
           foreach ($archive in Get-ChildItem $work -File -Filter "*.zip") {
             npm --prefix console exec -- tauri signer sign $archive.FullName
@@ -340,7 +342,7 @@ jobs:
             --version $version `
             --commit $commit `
             --channel staging `
-            --trusted-host github.com `
+            --trusted-host goclaw.host `
             --output "$work/windows-release-v2.json"
           if ($LASTEXITCODE -ne 0) { throw "component manifest assembly failed" }
           npm --prefix console exec -- tauri signer sign "$work/windows-release-v2.json"
@@ -387,14 +389,14 @@ jobs:
             --pubkey-file "$work/updater.pub" `
             --legacy-latest "dist/latest.json" `
             --output "$work/release-index-v2.json" `
-            --trusted-host github.com
+            --trusted-host goclaw.host
           if ($LASTEXITCODE -ne 0) { throw "release index assembly failed" }
           npm --prefix console exec -- tauri signer sign "$work/release-index-v2.json"
           if ($LASTEXITCODE -ne 0) { throw "release index signing failed" }
           python scripts/pack-tauri/build_release_catalog_v2.py `
             --release "$work/release-index-v2.json" $indexUrl `
             --pubkey-file "$work/updater.pub" `
-            --trusted-host github.com `
+            --trusted-host goclaw.host `
             --output "$work/release-catalog-v2.json"
           if ($LASTEXITCODE -ne 0) { throw "release catalog assembly failed" }
           npm --prefix console exec -- tauri signer sign "$work/release-catalog-v2.json"

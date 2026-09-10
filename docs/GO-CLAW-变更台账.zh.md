@@ -11,6 +11,7 @@
 
 | 改动 | 原因 | commit | 验证 | 关联文档 |
 | --- | --- | --- | --- | --- |
+| Windows 组件更新 URL 改为 `https://goclaw.host:8443/updates`，GitHub Release 只作公开归档 | E 盘官方签名升级在组件下载阶段复现 `NETWORK_FAILED`；本机到 `github.com:443` 连续超时，而自有更新域名和签名索引可达。避免中国网络把 GitHub 变成运行时单点依赖 | 待提交 | 官方 v2.1.2 已成功验签发现 7 组件；修复后须重新 Main Build、官方签名 E 盘 A/B 升级、Range/摘要和生产原子切换验收 | v2.1.3 实施计划、Windows 产品 U 盘交付标准 |
 | 启动器新增 WebView2 HKLM/HKCU 检测、产品根/Manifest/哈希/WinTrust/微软文件身份校验、单次静默安装、300 秒超时、复检及一次浏览器回退；构建把真实 Bootstrapper 放进 portable 根并生成 Manifest/SHA256SUMS | 满足标准联网 Windows 10/11 x64 单 EXE 开箱启动，同时拒绝缺失、篡改、换包和循环安装 | `02c4c6b` | 真实微软文件 1,783,000 字节、Authenticode Valid、内部 `MicrosoftEdgeUpdateSetup.exe`；Rust WebView2 4 项、全量 67+22+38 项；本地 Main Build、13,266 条校验和及换盘符启动通过；正式缺运行时 VM 待验收 | `contracts/v2.1.3/README.zh-CN.md`、Windows 产品 U 盘交付标准、实施计划 WV2-01 |
 | A/B 新增 `bootstrap-root`，覆盖 WebView2、根 Manifest 与 SHA256SUMS；旧盘原本缺文件时快照为缺失，失败回滚删除新文件；同步 Python/Rust 分配、schema、Full ZIP 与 CI | 在线增量更新也必须获得启动 prerequisite，并保持 v2.1.2 老盘可回滚 | `02c4c6b` | A/B 38 项含 11 个持久化中断点全部通过；组件/装配 46 项、包装合同和最终 Portable 逐文件校验通过 | update-v2 schema、运行时序 §6A、v2.1.3 合同 |
 | 会话 LRU 命中补持久交付物索引恢复；瞬态失败下次只重试索引；图片/视频 ticket 首次失效只续签一次，最终失败保留卡片并明确提示 | 分别修复切回会话后交付物消失的 Stage C 和短期票据失效的 Stage D，不用缓存清空或全盘扫描掩盖 | `02c4c6b` | 定向回归、前端全量 169 文件/1261 项、production build 通过；真实媒体仍待已激活设备验收 | `incidents/2026-09-09-v212-deliverables-preview-history.zh.md`、DL-213 |

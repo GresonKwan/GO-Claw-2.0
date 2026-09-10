@@ -38,6 +38,20 @@ def test_signed_windows_build_stages_exact_public_assets():
     assert transaction < signing
 
 
+def test_signed_windows_update_uses_go_claw_origin_at_runtime():
+    workflow = (ROOT / ".github/workflows/desktop-build.yml").read_text(
+        encoding="utf-8",
+    )
+    component_step = workflow.split(
+        "Build signed component update and legacy A/B Bridge",
+        1,
+    )[1].split("Upload Tauri Windows artifact", 1)[0]
+    assert '$baseUrl = "https://goclaw.host:8443/updates"' in component_step
+    assert component_step.count("--trusted-host goclaw.host") == 4
+    assert "releases/download" not in component_step
+    assert "--trusted-host github.com" not in component_step
+
+
 def test_publish_requires_exact_credential_free_windows_assets():
     workflow = (ROOT / ".github/workflows/desktop-publish.yml").read_text(
         encoding="utf-8",
