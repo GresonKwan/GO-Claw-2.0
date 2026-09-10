@@ -146,6 +146,7 @@ def stage_portable(
     readme_file: Path,
     credentials_example_file: Path,
     webview2_installer: Path,
+    start_here_file: Path | None = None,
     credentials_file: Path | None = None,
     provision_file: Path | None = None,
     repository_root: Path | None = None,
@@ -160,6 +161,10 @@ def stage_portable(
     exe = _require_file(exe, "Tauri executable")
     license_file = _require_file(license_file, "license file")
     readme_file = _require_file(readme_file, "portable readme")
+    start_here_file = _require_file(
+        start_here_file or Path(__file__).with_name("START-HERE.zh-CN.txt"),
+        "START-HERE instructions",
+    )
     credentials_example_file = _require_file(
         credentials_example_file,
         "credential example",
@@ -192,6 +197,7 @@ def stage_portable(
     shutil.copytree(binaries, stage_dir / "binaries")
     shutil.copy2(license_file, stage_dir / "LICENSE")
     shutil.copy2(readme_file, stage_dir / "README-PORTABLE.zh-CN.txt")
+    shutil.copy2(start_here_file, stage_dir / "START-HERE.zh-CN.txt")
     staged_readme = stage_dir / "README-PORTABLE.zh-CN.txt"
     readme_text = staged_readme.read_text(encoding="utf-8-sig")
     readme_text, replacements = re.subn(

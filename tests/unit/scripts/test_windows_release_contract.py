@@ -48,6 +48,7 @@ def _write_full_zip(path: Path, pubkey_text: str) -> None:
         ).encode(),
         "Portable/LICENSE": b"license",
         "Portable/README-PORTABLE.zh-CN.txt": b"readme",
+        "Portable/START-HERE.zh-CN.txt": b"start portable",
         "Portable/portable.json": b"{}",
         "Portable/WebView2/MicrosoftEdgeWebview2Setup.exe": webview,
     }

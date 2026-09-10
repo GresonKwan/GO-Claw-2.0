@@ -124,6 +124,7 @@ def _verify_full_zip(full_zip: Path, pubkey: str) -> dict[str, object]:
         "Portable/GO-CLAW-Config/update-pubkey.txt",
         "Portable/LICENSE",
         "Portable/README-PORTABLE.zh-CN.txt",
+        "Portable/START-HERE.zh-CN.txt",
         "Portable/portable.json",
         WEBVIEW2_PATH,
         "Portable/MANIFEST.json",

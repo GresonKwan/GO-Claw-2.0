@@ -181,6 +181,7 @@ def test_stage_portable_layout_manifest_zip_and_checksum(tmp_path):
     assert prefix + "GO-CLAW-Config/credentials.example.json" in names
     assert prefix + "GO-CLAW-Config/credentials.json" not in names
     assert prefix + "WebView2/MicrosoftEdgeWebview2Setup.exe" in names
+    assert prefix + "START-HERE.zh-CN.txt" in names
     assert prefix + "MANIFEST.json" in names
     assert prefix + "SHA256SUMS.txt" in names
     manifest = json.loads((root / "MANIFEST.json").read_text("utf-8"))
@@ -189,6 +190,9 @@ def test_stage_portable_layout_manifest_zip_and_checksum(tmp_path):
     assert manifest["webView2"]["source"].startswith(
         "https://go.microsoft.com/",
     )
+    assert "START-HERE.zh-CN.txt" in {
+        entry["path"] for entry in manifest["files"]
+    }
     assert "Portable 2.0.1" in (root / "README-PORTABLE.zh-CN.txt").read_text(
         "utf-8",
     )

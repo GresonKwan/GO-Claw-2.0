@@ -40,6 +40,10 @@ def _fixture(tmp_path: Path) -> dict[str, Path | str]:
         '{"schemaVersion":1,"clientMode":"auto"}\n',
         encoding="utf-8",
     )
+    (portable / "START-HERE.zh-CN.txt").write_text(
+        "双击 GO-CLAW-Portable.exe。\n",
+        encoding="utf-8",
+    )
     webview = portable / "WebView2/MicrosoftEdgeWebview2Setup.exe"
     webview.parent.mkdir()
     webview.write_bytes(b"MZ-webview")
@@ -115,6 +119,7 @@ def test_builds_exact_root_contract_manifest_and_sorted_checksums(
             f"{root}/Portable/GO-CLAW-Config/update-pubkey.txt",
             f"{root}/Portable/LICENSE",
             f"{root}/Portable/README-PORTABLE.zh-CN.txt",
+            f"{root}/Portable/START-HERE.zh-CN.txt",
             f"{root}/Portable/portable.json",
             f"{root}/Portable/WebView2/MicrosoftEdgeWebview2Setup.exe",
             f"{root}/Portable/MANIFEST.json",

@@ -26,6 +26,7 @@ REQUIRED_PORTABLE_PATHS = (
     "GO-CLAW-Config/update-pubkey.txt",
     "LICENSE",
     "README-PORTABLE.zh-CN.txt",
+    "START-HERE.zh-CN.txt",
     "portable.json",
     "WebView2/MicrosoftEdgeWebview2Setup.exe",
     "MANIFEST.json",
