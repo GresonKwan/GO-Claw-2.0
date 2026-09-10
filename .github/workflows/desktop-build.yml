@@ -341,7 +341,7 @@ jobs:
             --pubkey-config "console/src-tauri/tauri.conf.json" `
             --version $version `
             --commit $commit `
-            --channel staging `
+            --channel stable `
             --trusted-host goclaw.host `
             --output "$work/windows-release-v2.json"
           if ($LASTEXITCODE -ne 0) { throw "component manifest assembly failed" }

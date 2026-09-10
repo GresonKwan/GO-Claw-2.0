@@ -52,6 +52,18 @@ def test_signed_windows_update_uses_go_claw_origin_at_runtime():
     assert "--trusted-host github.com" not in component_step
 
 
+def test_signed_windows_update_uses_stable_channel():
+    workflow = (ROOT / ".github/workflows/desktop-build.yml").read_text(
+        encoding="utf-8",
+    )
+    component_step = workflow.split(
+        "Build signed component update and legacy A/B Bridge",
+        1,
+    )[1].split("Upload Tauri Windows artifact", 1)[0]
+    assert "--channel stable" in component_step
+    assert "--channel staging" not in component_step
+
+
 def test_publish_requires_exact_credential_free_windows_assets():
     workflow = (ROOT / ".github/workflows/desktop-publish.yml").read_text(
         encoding="utf-8",
