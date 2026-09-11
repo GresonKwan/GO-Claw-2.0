@@ -3,6 +3,8 @@
 > 状态：规范性文档。创建日期：2026-09-07（Asia/Shanghai）。
 >
 > v2.1.2 只能满足现有 WebView2 或浏览器回退场景；“缺少 WebView2 时自动联网安装并继续打开原生客户端”从 v2.1.3 起实施。已发布 v2.1.2 资产不得原地覆盖。
+>
+> v2.1.3 发布前复核：2026-09-11。目录、WebView2、凭据边界和首次运行禁止项不变；新增生产组件源与 stable channel 约束。
 
 ## 1. 支持边界
 
@@ -43,6 +45,9 @@
 - `GO-CLAW-Config/provision.json`：新盘自动开通配置；共享 HMAC 的可提取局限按 provisioning 专题文档记录；
 - `GO-CLAW-Config/update-pubkey.txt`：必须与客户端内置公钥及 CI Variable 一致；
 - `credentials.example.json` 只作格式说明。正式产品盘不得包含静态 `credentials.json`。
+- v2.1.3 及以后，产品内更新入口优先使用 `https://goclaw.host:8443/updates`；生产 v2 index 与
+  manifest 必须同为 `channel=stable`，所有组件 URL 必须保持该受信同源。GitHub Release 只作公开归档
+  或人工恢复来源，不得成为标准产品盘在线更新的唯一运行时依赖。
 
 ### 3.2 WebView2
 

@@ -1,9 +1,39 @@
 # GO CLAW 项目事实与发布基线
 
-> 状态：当前有效。最后现场复核：2026-09-09（安全边界）；发布事实的分项日期见正文（Asia/Shanghai）。
+> 状态：当前有效。最后现场复核：2026-09-11（v2.1.3 发布与生产更新）；发布事实的分项日期见正文（Asia/Shanghai）。
 >
 > 本文只记录“现在是什么”和“发布前必须成立什么”。历史变更见
 > `GO-CLAW-变更台账.zh.md`，操作步骤见各专题文档，尚未实施的内容不得写成现状。
+
+2026-09-11 正式发布事实：GitHub Release
+[`v2.1.3`](https://github.com/GresonKwan/GO-Claw-2.0/releases/tag/v2.1.3) 已公开、非 prerelease、
+为 latest，共 26 个无凭据公开资产，运行时代码固定在 `bbb4df181cb0ebd474e84af67a52fe13543ce0ab`。
+生产组件清单的发布元数据单点修正提交为
+`7c67cbb1d91e032336f4afe4dff69e823c6ca90a`：Windows 组件只从
+`https://goclaw.host:8443/updates` 下载，`channel=stable`。签名 Windows Main Build
+[`34527929848`](https://github.com/GresonKwan/GO-Claw-2.0/actions/runs/34527929848) 全部成功；公开
+Release 仍作归档，不成为中国网络环境下的运行时单点依赖。
+
+生产服务器当前软链接为
+`/srv/go-claw-updates/updates -> /srv/go-claw-updates/releases/2.1.3-7c67cbb-stable`；回滚目标
+`/srv/go-claw-updates/releases/2.1.3-3b8798a` 与更早的
+`/srv/go-claw-updates/releases/2.1.2-89146a9` 均保留。最终 artifact 为 618,733,848 字节，
+GitHub digest 与服务器 SHA-256 均为
+`f048d99d39a7748c886d96316bc6bd2f0555fbdd48023759e0e397f36f12a291`；23 个在线资产摘要无失败，
+11 份 Ed25519/Tauri 签名通过真实密码学验证。公网 index、manifest、latest 与签名均为 HTTP 200，
+组件 Range 为 HTTP 206；v2.1.2 引擎对最终生产 index 的签名 discover 返回 v2.1.3/stable/7 组件。
+
+E 盘先对同运行时代码的正式 Full 完成逐文件校验、实际启动、五员工、三档模型、额度、真实 PNG/MP4
+和交付产物跨重启恢复；随后从正式 v2.1.2 样本执行官方 A/B 增量事务
+`68666d73-37ca-4bd4-9525-13a5da0cd1e7`，六个变化组件下载、Node runtime 复用，最终
+`COMMITTED/100%`、Bridge 返回 0。升级后 active/lastKnownGood 均为 A/2.1.3，实例、credentials、
+provision 三个关键文件摘要不变，原历史会话 28 条消息可读，额度、五员工、三档模型及两个媒体插件正常；
+退出后产品进程和隐藏更新引擎均归零。最终 stable 修正只改变 CI 发布元数据和测试，不改变上述运行时代码。
+
+F、G 两块产品盘已按交付标准重新格式化为 exFAT 并部署同一正式 v2.1.3 Full：各 14,021 个产品文件、
+1,411,254,019 字节，14,020 条 SHA256SUMS 全部通过，根 EXE SHA-256 均为
+`3fdae6ca0d7146328366dcaaa5b52ad81c1abfd73c396c09defee8b77934a4cc`。两盘没有 data、secrets、
+logs、cache、updates 或静态 credentials，未启动，保持出厂洁净；物理盘序列尾号分别为 F/9080、G/4631。
 
 2026-09-09 本地 v2.1.3 开发态补充：因 H 盘链路不稳定，实施工作固定在独立恢复仓库
 `D:\GO-CLAW-v212-build-work\v213-recovered-20260909`、分支 `codex/v2.1.3`，起点

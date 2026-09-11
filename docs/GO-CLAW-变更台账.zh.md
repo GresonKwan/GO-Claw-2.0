@@ -7,17 +7,20 @@
 
 ---
 
-## 2026-09-09 · v2.1.3 核心代码落地（本地，未发布）
+## 2026-09-09～11 · v2.1.3 核心代码、验收与正式发布
 
 | 改动 | 原因 | commit | 验证 | 关联文档 |
 | --- | --- | --- | --- | --- |
-| Windows 组件更新 URL 改为 `https://goclaw.host:8443/updates`，GitHub Release 只作公开归档 | E 盘官方签名升级在组件下载阶段复现 `NETWORK_FAILED`；本机到 `github.com:443` 连续超时，而自有更新域名和签名索引可达。避免中国网络把 GitHub 变成运行时单点依赖 | 待提交 | 官方 v2.1.2 已成功验签发现 7 组件；修复后须重新 Main Build、官方签名 E 盘 A/B 升级、Range/摘要和生产原子切换验收 | v2.1.3 实施计划、Windows 产品 U 盘交付标准 |
+| Windows 组件更新 URL 改为 `https://goclaw.host:8443/updates`，GitHub Release 只作公开归档；生产清单从误标的 staging 单点修正为 stable | E 盘首次组件下载复现 `NETWORK_FAILED`，本机到 `github.com:443` 连续超时；正式上线前复核又发现 workflow 的 channel 仍硬编码为 staging。避免 GitHub 运行时单点依赖并保证生产元数据准确 | `3b8798a`、`7c67cbb` | Main Build `34518609103` 与 stable 修正 Build `34527929848` 成功；E 盘 v2.1.2 官方 A/B `COMMITTED/100%`、旧身份/聊天/额度保留；最终 index/manifest/签名 200、Range 206、11 份签名验证、生产原子切换通过 | v2.1.3 实施计划、Windows 产品 U 盘交付标准、项目事实基线 |
 | 启动器新增 WebView2 HKLM/HKCU 检测、产品根/Manifest/哈希/WinTrust/微软文件身份校验、单次静默安装、300 秒超时、复检及一次浏览器回退；构建把真实 Bootstrapper 放进 portable 根并生成 Manifest/SHA256SUMS | 满足标准联网 Windows 10/11 x64 单 EXE 开箱启动，同时拒绝缺失、篡改、换包和循环安装 | `02c4c6b` | 真实微软文件 1,783,000 字节、Authenticode Valid、内部 `MicrosoftEdgeUpdateSetup.exe`；Rust WebView2 4 项、全量 67+22+38 项；本地 Main Build、13,266 条校验和及换盘符启动通过；正式缺运行时 VM 待验收 | `contracts/v2.1.3/README.zh-CN.md`、Windows 产品 U 盘交付标准、实施计划 WV2-01 |
 | A/B 新增 `bootstrap-root`，覆盖 WebView2、根 Manifest 与 SHA256SUMS；旧盘原本缺文件时快照为缺失，失败回滚删除新文件；同步 Python/Rust 分配、schema、Full ZIP 与 CI | 在线增量更新也必须获得启动 prerequisite，并保持 v2.1.2 老盘可回滚 | `02c4c6b` | A/B 38 项含 11 个持久化中断点全部通过；组件/装配 46 项、包装合同和最终 Portable 逐文件校验通过 | update-v2 schema、运行时序 §6A、v2.1.3 合同 |
-| 会话 LRU 命中补持久交付物索引恢复；瞬态失败下次只重试索引；图片/视频 ticket 首次失效只续签一次，最终失败保留卡片并明确提示 | 分别修复切回会话后交付物消失的 Stage C 和短期票据失效的 Stage D，不用缓存清空或全盘扫描掩盖 | `02c4c6b` | 定向回归、前端全量 169 文件/1261 项、production build 通过；真实媒体仍待已激活设备验收 | `incidents/2026-09-09-v212-deliverables-preview-history.zh.md`、DL-213 |
+| 会话 LRU 命中补持久交付物索引恢复；瞬态失败下次只重试索引；图片/视频 ticket 首次失效只续签一次，最终失败保留卡片并明确提示 | 分别修复切回会话后交付物消失的 Stage C 和短期票据失效的 Stage D，不用缓存清空或全盘扫描掩盖 | `02c4c6b` | 定向回归、前端全量 169 文件/1261 项、production build 通过；E 盘已激活正式 Full 实际生成有效 PNG/MP4，交付产物跨重启仍可预览 | `incidents/2026-09-09-v212-deliverables-preview-history.zh.md`、DL-213 |
 | quota 只增安全整数 `displayRemaining`；侧边栏改为剩余算力数字、状态、充值入口、折叠状态点和约 3 秒到账反馈；旧三字段回退百分比 | 随用随充没有稳定百分比分母，让用户直接看到权威余额变化且不改变计费 | `02c4c6b` | Python provisioning/router 23 项、前端 quota 19 项及全量测试通过 | QT-213、compute-recharge 合同、实施计划 UX-01 |
 
-本节只表示恢复工作区 `D:\GO-CLAW-v212-build-work\v213-recovered-20260909` 的代码、本地完整 Main Build 与迁移启动测试状态。尚未完成签名 CI、缺少 WebView2 的干净 Windows、真实媒体、v2.1.3 Release 或生产更新切换；没有向 QwenPaw 上游提交。
+本节已完成恢复工作区代码、签名 CI、正式 Full 与官方 A/B 实机验收、真实图片/视频、F/G 出厂部署、
+GitHub v2.1.3 Release 和生产 stable 更新源切换。公开 Release 不含 provisioning Full；没有向 QwenPaw
+上游提交。标准联网 WebView2 Bootstrapper 的文件身份、微软签名和启动编排已验证；完全移除 WebView2
+的干净 Windows VM 场景仍按交付标准保留为环境覆盖项，不推翻本次已完成发布。
 
 ## 2026-09-09 · New API 8443 公网权限收口
 
